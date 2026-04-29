@@ -192,6 +192,16 @@ resources:
         done
         [ -f "cpython/lib/pip-packages/typing_extensions.py" ] && cp "cpython/lib/pip-packages/typing_extensions.py" {{runtime_resources}}/usr/local/lib/python3.14/
     fi
+    # Copy extension Python packages
+    if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
+        IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
+        for ext_dir in "${EXT_DIRS[@]}"; do
+            if [ -d "$ext_dir/lib" ]; then
+                echo "Copying extension packages from $ext_dir/lib"
+                cp -r "$ext_dir/lib/"* {{runtime_resources}}/usr/local/lib/python3.14/ 2>/dev/null || true
+            fi
+        done
+    fi
     echo "Resources populated at {{runtime_resources}}/usr/local/lib/python3.14/"
 
 # Build Java project (AOT compile WASM + package)

@@ -144,6 +144,17 @@ do_wizer() {
         done
     fi
 
+    # Copy extension Python packages (PYTHON4J_EXTENSIONS is a comma-separated list of extension dirs)
+    if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
+        IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
+        for ext_dir in "${EXT_DIRS[@]}"; do
+            if [ -d "$ext_dir/lib" ]; then
+                echo "Copying extension packages from $ext_dir/lib"
+                cp -r "$ext_dir/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
+            fi
+        done
+    fi
+
     wizer \
         --init-func wizer_initialize \
         --allow-wasi \

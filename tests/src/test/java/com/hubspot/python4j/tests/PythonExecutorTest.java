@@ -14,7 +14,9 @@ class PythonExecutorTest {
 
   @BeforeAll
   static void setUp() {
-    factory = PythonExecutorFactory.builder().build();
+    factory = PythonExecutorFactory.builder()
+        .addHostFunctions(SharedTestSetup.defaultHostFunctions())
+        .build();
   }
 
   @Test
