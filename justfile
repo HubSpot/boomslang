@@ -22,7 +22,7 @@ build-pydantic-core-wasi:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "=== Building pydantic-core-wasi ==="
-    cd pydantic-core-wasi
+    cd cpython/pydantic-core-wasi
     DOCKER_BUILDKIT=1 docker build -t python4j-pydantic-core-wasi .
     CID=$(docker create python4j-pydantic-core-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
@@ -34,7 +34,7 @@ build-numpy-wasi:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "=== Building numpy-wasi ==="
-    cd numpy-wasi
+    cd cpython/numpy-wasi
     DOCKER_BUILDKIT=1 docker build -t python4j-numpy-wasi .
     CID=$(docker create python4j-numpy-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
@@ -46,7 +46,7 @@ build-pandas-wasi:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "=== Building pandas-wasi ==="
-    cd pandas-wasi
+    cd cpython/pandas-wasi
     DOCKER_BUILDKIT=1 docker build -t python4j-pandas-wasi .
     CID=$(docker create python4j-pandas-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
@@ -58,7 +58,7 @@ build-matplotlib-wasi:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "=== Building matplotlib-wasi ==="
-    cd matplotlib-wasi
+    cd cpython/matplotlib-wasi
     DOCKER_BUILDKIT=1 docker build -t python4j-matplotlib-wasi .
     CID=$(docker create python4j-matplotlib-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
@@ -71,7 +71,7 @@ build-cpython-wasi:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "=== Building cpython-wasi ==="
-    cd cpython-wasi
+    cd cpython/cpython-wasi
 
     # Populate vendor/ from upstream artifact builds
     mkdir -p vendor
@@ -91,17 +91,17 @@ build-cpython-wasi:
     docker rm "$CID" > /dev/null
 
     # Extract to the location the Rust host build expects
-    mkdir -p ../cpython/build/cpython-wasi
-    tar xzf artifact.tgz -C ../cpython/build/cpython-wasi/
+    mkdir -p ../build/cpython-wasi
+    tar xzf artifact.tgz -C ../build/cpython-wasi/
     echo "cpython-wasi artifact extracted to cpython/build/cpython-wasi/"
-    ls ../cpython/build/cpython-wasi/
+    ls ../build/cpython-wasi/
 
 # ============================================================
 # Build the builder Docker image (for CI use)
 # ============================================================
 
 builder-image:
-    docker build -t python4j-builder builder/
+    docker build -t python4j-builder cpython/builder/
 
 # ============================================================
 # Local Rust + Java build (after Docker artifacts are ready)
@@ -135,7 +135,7 @@ wasm:
     # Ensure builder image exists
     if ! docker image inspect python4j-builder > /dev/null 2>&1; then
         echo "Building builder image..."
-        docker build -t python4j-builder builder/
+        docker build -t python4j-builder cpython/builder/
     fi
 
     # Prepare build context
@@ -237,6 +237,6 @@ clean:
     rm -rf {{runtime_resources}}/bin {{runtime_resources}}/usr
     rm -rf cpython/build
     rm -rf python-host/target
-    rm -f pydantic-core-wasi/artifact.tgz numpy-wasi/artifact.tgz pandas-wasi/artifact.tgz matplotlib-wasi/artifact.tgz cpython-wasi/artifact.tgz
-    rm -rf cpython-wasi/vendor
+    rm -f cpython/pydantic-core-wasi/artifact.tgz cpython/numpy-wasi/artifact.tgz cpython/pandas-wasi/artifact.tgz cpython/matplotlib-wasi/artifact.tgz cpython/cpython-wasi/artifact.tgz
+    rm -rf cpython/cpython-wasi/vendor
     mvn clean || true

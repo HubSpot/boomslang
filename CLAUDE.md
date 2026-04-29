@@ -4,13 +4,15 @@ Execute Python 3.14 from Java via WebAssembly (Chicory).
 
 ## Build Pipeline
 
-The full build is a multi-stage pipeline:
+The full build is a multi-stage pipeline. All WASM build components live under `cpython/`:
 
 ```
-pydantic-core-wasi ─┐
-numpy-wasi ─────────┤
-pandas-wasi ────────┼→ cpython-wasi → python-host (Rust) → Java AOT
-matplotlib-wasi ────┘
+cpython/
+  pydantic-core-wasi ─┐
+  numpy-wasi ─────────┤
+  pandas-wasi ────────┼→ cpython-wasi → python-host (Rust) → Java AOT
+  matplotlib-wasi ────┘
+  builder/             (Docker image with WASI SDK + Wizer + Binaryen)
 ```
 
 ### Full build from scratch
@@ -24,7 +26,7 @@ This runs all Docker builds (~1hr total on first run), then Rust + Java.
 ### Individual stages
 
 ```bash
-# Docker builds (produce WASM artifacts)
+# Docker builds (produce WASM artifacts, all under cpython/)
 just build-pydantic-core-wasi   # ~15 min (Rust compilation)
 just build-numpy-wasi           # ~10 min
 just build-pandas-wasi          # ~10 min
@@ -33,10 +35,19 @@ just build-cpython-wasi         # ~20 min (needs all four above)
 
 # Local builds (after Docker stages are done)
 just pip-packages               # Download pydantic etc.
-just wasm                       # Build Rust host + Wizer pre-init
+just wasm                       # Build Rust host + Wizer pre-init (Docker)
+just wasm-local                 # Build Rust host locally (needs WASI SDK)
 just resources                  # Populate Java resources
 just build                      # Maven build with AOT
 just test                       # Run tests
+```
+
+### Extensions
+
+Build with extensions enabled:
+```bash
+PYTHON4J_EXTENSIONS="extensions/demo" just wasm-local
+PYTHON4J_EXTENSIONS="extensions/demo" just resources
 ```
 
 ### Rust changes
@@ -57,16 +68,14 @@ mvn test -pl tests
 
 - `core/` — Java runtime (PythonExecutorFactory, PythonInstance, CopyOnWriteMemory)
 - `python-host/` — Rust WASM host (PyO3 wrapper around CPython)
-- `cpython/` — Final WASM build configuration
-- `cpython-wasi/` — CPython → WASM build pipeline (Docker)
-- `pydantic-core-wasi/` — pydantic-core static lib build
-- `numpy-wasi/` — NumPy C extensions build
-- `pandas-wasi/` — Pandas C extensions build
-- `matplotlib-wasi/` — Matplotlib C extensions build
-- `builder/` — Docker builder image with WASI SDK + Wizer + Binaryen
+- `cpython/` — All native WASM build infrastructure:
+  - `cpython-wasi/` — CPython → WASM build pipeline (Docker)
+  - `pydantic-core-wasi/` — pydantic-core static lib build
+  - `numpy-wasi/` — NumPy C extensions build
+  - `pandas-wasi/` — Pandas C extensions build
+  - `matplotlib-wasi/` — Matplotlib C extensions build
+  - `builder/` — Docker builder image (WASI SDK + Wizer + Binaryen + Rust)
+- `py4j-hostgen/` — Extension code generator (Rust CLI + library)
+- `extensions/` — Extension crates (demo included)
 - `tests/` — Integration tests
 - `benchmarks/` — JMH benchmarks
-
-## Do NOT use `mcp__devex-mcp-server__build_java` for this project
-
-The Chicory AOT compiler plugin requires the WASM binary to exist. Use `just` or Maven directly.

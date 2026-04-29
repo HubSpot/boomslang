@@ -22,18 +22,17 @@ __pycache__/
 
 # WASM build artifacts
 cpython/build/
-python-host/target/
 core/src/main/resources/python/bin/*.wasm
 core/src/main/resources/python/usr/
 
 # Docker build artifacts (produced by `just build-*`)
-cpython-wasi/vendor/
-cpython-wasi/artifact.tgz
-pydantic-core-wasi/artifact.tgz
-pydantic-core-wasi/target/
-numpy-wasi/artifact.tgz
-pandas-wasi/artifact.tgz
-matplotlib-wasi/artifact.tgz
+cpython/cpython-wasi/vendor/
+cpython/cpython-wasi/artifact.tgz
+cpython/pydantic-core-wasi/artifact.tgz
+cpython/pydantic-core-wasi/target/
+cpython/numpy-wasi/artifact.tgz
+cpython/pandas-wasi/artifact.tgz
+cpython/matplotlib-wasi/artifact.tgz
 
 # Pip packages (downloaded at build time)
 cpython/lib/pip-packages/
