@@ -2,6 +2,7 @@
 name = "python4j_host"
 version = "0.1.0"
 edition = "2024"
+description = "Stock python4j WASM host with host-bridge extension."
 
 [lib]
 crate-type = ["cdylib"]
@@ -11,6 +12,5 @@ opt-level = "s"
 lto = "thin"
 
 [dependencies]
-pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
-libmimalloc-sys = { version = "0.1", features = ["v3"] }
+python4j-host-core = { path = "../python-host-core" }
 python4j-ext-host-bridge = { path = "../extensions/host-bridge" }

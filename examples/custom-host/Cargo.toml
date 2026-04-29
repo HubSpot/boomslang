@@ -1,0 +1,24 @@
+[package]
+name = "my-custom-python"
+version = "0.1.0"
+edition = "2024"
+description = "Example: building a custom python4j WASM host with your own extensions."
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+
+[dependencies]
+python4j-host-core = { path = "../../python-host-core" }
+python4j-ext-host-bridge = { path = "../../extensions/host-bridge" }
+
+# Add your own extensions here:
+# my-extension = { path = "../my-extension" }
+
+[build-dependencies]
+# No build.rs needed — python4j-host-core's build.rs handles everything.
+# Set CPYTHON_WASI_DIR to point at a local cpython-wasi build, or let it
+# download from GitHub Releases automatically.

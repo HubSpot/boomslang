@@ -1,0 +1,14 @@
+[package]
+name = "python4j-host-core"
+version = "0.1.0"
+edition = "2024"
+description = "Core library for building python4j WASM hosts. Provides CPython 3.14 + PyO3 exports."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
+libmimalloc-sys = { version = "0.1", features = ["v3"] }
+
+[build-dependencies]

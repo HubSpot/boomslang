@@ -301,12 +301,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "python4j_host"
+name = "python4j-host-core"
 version = "0.1.0"
 dependencies = [
  "libmimalloc-sys",
  "pyo3",
+]
+
+[[package]]
+name = "python4j_host"
+version = "0.1.0"
+dependencies = [
  "python4j-ext-host-bridge",
+ "python4j-host-core",
 ]
 
 [[package]]

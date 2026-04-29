@@ -98,6 +98,7 @@ do_build() {
     export CFLAGS_wasm32_wasip1="--sysroot=$WASI_SDK_PATH/share/wasi-sysroot -I$BUILD_DIR/cpython-wasi/include/python3.14 -Dmi_align_up_ptr=_mi_align_up_ptr"
     export PYO3_CROSS_PYTHON_VERSION=3.14
     export PYTHON_PATH="$BUILD_DIR/cpython-wasi/lib/wasm32-wasi"
+    export CPYTHON_WASI_DIR="$BUILD_DIR/cpython-wasi"
 
     cd "$SCRIPT_DIR"
 
