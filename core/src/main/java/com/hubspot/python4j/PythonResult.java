@@ -1,10 +1,6 @@
 package com.hubspot.python4j;
 
-public record PythonResult(
-    String stdout,
-    String stderr,
-    int exitCode,
-    long executionTimeMs) {
+public record PythonResult(String stdout, String stderr, int exitCode, long executionTimeMs) {
 
   public static Builder builder() {
     return new Builder();

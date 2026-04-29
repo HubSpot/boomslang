@@ -154,6 +154,18 @@
           <artifactId>chicory-compiler-maven-plugin</artifactId>
           <version>${dep.chicory.version}</version>
         </plugin>
+        <plugin>
+          <groupId>com.diffplug.spotless</groupId>
+          <artifactId>spotless-maven-plugin</artifactId>
+          <version>2.44.5</version>
+          <configuration>
+            <java>
+              <googleJavaFormat>
+                <version>1.27.0</version>
+              </googleJavaFormat>
+            </java>
+          </configuration>
+        </plugin>
       </plugins>
     </pluginManagement>
   </build>

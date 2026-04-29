@@ -18,24 +18,26 @@ class HostFunctionExtensionTest {
 
   @BeforeAll
   static void setUp() {
-    HostFunction[] demoFunctions = DemoHostFunctions.builder()
-        .withGreet(name -> "Hello, " + name + "!")
-        .withLog((level, message) -> {
-          LOG_MESSAGES.add("[" + level + "] " + message);
-        })
-        .build();
+    HostFunction[] demoFunctions =
+        DemoHostFunctions.builder()
+            .withGreet(name -> "Hello, " + name + "!")
+            .withLog(
+                (level, message) -> {
+                  LOG_MESSAGES.add("[" + level + "] " + message);
+                })
+            .build();
 
-    factory = PythonExecutorFactory.builder()
-        .addHostFunctions(demoFunctions)
-        .build();
+    factory = PythonExecutorFactory.builder().addHostFunctions(demoFunctions).build();
   }
 
   @Test
   void itCallsGreetHostFunction() {
-    PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
-      return instance.execute("from demo import greet; print(greet('World'))");
-    });
+    PythonResult result =
+        factory.runOnWasmThread(
+            () -> {
+              PythonInstance instance = factory.createInstance();
+              return instance.execute("from demo import greet; print(greet('World'))");
+            });
 
     assertThat(result.stderr()).as("stderr").isEmpty();
     assertThat(result.exitCode()).isEqualTo(0);
@@ -46,10 +48,12 @@ class HostFunctionExtensionTest {
   void itCallsLogHostFunction() {
     LOG_MESSAGES.clear();
 
-    PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
-      return instance.execute("from demo import log; log(2, 'test message')");
-    });
+    PythonResult result =
+        factory.runOnWasmThread(
+            () -> {
+              PythonInstance instance = factory.createInstance();
+              return instance.execute("from demo import log; log(2, 'test message')");
+            });
 
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(LOG_MESSAGES).contains("[2] test message");

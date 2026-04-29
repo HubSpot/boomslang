@@ -68,10 +68,10 @@ public class DemoHostFunctions {
             String result = greet.handle(name);
             byte[] resultBytes = result.getBytes(StandardCharsets.UTF_8);
             if (resultBytes.length > resultMaxLen) {
-              return new long[] { -2 };
+              return new long[] {-2};
             }
             memory.write(resultPtr, resultBytes);
-            return new long[] { resultBytes.length };
+            return new long[] {resultBytes.length};
           });
     }
 
@@ -91,6 +91,5 @@ public class DemoHostFunctions {
             return null;
           });
     }
-
   }
 }
