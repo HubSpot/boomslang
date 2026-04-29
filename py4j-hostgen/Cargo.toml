@@ -6,5 +6,13 @@ edition = "2021"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
-clap = { version = "4", features = ["derive"] }
 heck = "0.5"
+clap = { version = "4", features = ["derive"], optional = true }
+
+[features]
+default = ["cli"]
+cli = ["clap"]
+
+[[bin]]
+name = "py4j-hostgen"
+required-features = ["cli"]

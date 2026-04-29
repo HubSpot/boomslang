@@ -13,3 +13,8 @@ lto = "thin"
 [dependencies]
 pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
 libmimalloc-sys = { version = "0.1", features = ["v3"] }
+python4j-ext-demo = { path = "../extensions/demo", optional = true }
+
+[features]
+default = []
+demo = ["python4j-ext-demo"]

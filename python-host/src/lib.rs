@@ -8,7 +8,6 @@ use pyo3::prelude::*;
 mod api;
 mod export;
 mod stubs;
-mod ext_demo;
 
 unsafe extern "C" {
     fn PyInit__pydantic_core() -> *mut pyo3::ffi::PyObject;
@@ -337,13 +336,15 @@ pub extern "C" fn wizer_initialize() {
         }
     }
 
-    ext_demo::register();
+    #[cfg(feature = "demo")]
+    python4j_ext_demo::register();
 
     Python::initialize();
     Python::attach(|py| {
         install_stream_handlers(py).expect("Failed to install stream handlers");
         prewarm_modules(py);
-        ext_demo::prewarm(py);
+        #[cfg(feature = "demo")]
+        python4j_ext_demo::prewarm(py);
     });
 }
 

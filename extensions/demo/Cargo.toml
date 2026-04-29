@@ -1,0 +1,13 @@
+[package]
+name = "python4j-ext-demo"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
+
+[build-dependencies]
+py4j-hostgen = { path = "../../py4j-hostgen" }

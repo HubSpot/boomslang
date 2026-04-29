@@ -100,7 +100,26 @@ do_build() {
     export PYTHON_PATH="$BUILD_DIR/cpython-wasi/lib/wasm32-wasi"
 
     cd "$SCRIPT_DIR"
-    cargo build --target wasm32-wasip1 --release
+
+    # Build cargo features from PYTHON4J_EXTENSIONS (paths are relative to PROJECT_DIR)
+    CARGO_FEATURES=""
+    if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
+        IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
+        for ext_dir in "${EXT_DIRS[@]}"; do
+            local abs_ext_dir="$PROJECT_DIR/$ext_dir"
+            if [ -f "$abs_ext_dir/extension.toml" ]; then
+                ext_name=$(grep '^name' "$abs_ext_dir/extension.toml" | head -1 | sed 's/.*= *"\(.*\)"/\1/')
+                CARGO_FEATURES="$CARGO_FEATURES $ext_name"
+                echo "Enabling extension: $ext_name"
+            fi
+        done
+    fi
+
+    if [ -n "$CARGO_FEATURES" ]; then
+        cargo build --target wasm32-wasip1 --release --features "$CARGO_FEATURES"
+    else
+        cargo build --target wasm32-wasip1 --release
+    fi
 
     mkdir -p "$BUILD_DIR/output"
     cp "$SCRIPT_DIR/target/wasm32-wasip1/release/python4j_host.wasm" \
