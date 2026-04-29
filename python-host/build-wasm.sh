@@ -102,6 +102,7 @@ do_build() {
     cd "$SCRIPT_DIR"
 
     # Build cargo features from PYTHON4J_EXTENSIONS (paths are relative to PROJECT_DIR)
+    # Only enable features for optional extensions (non-optional ones are always compiled)
     CARGO_FEATURES=""
     if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
         IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
@@ -109,8 +110,12 @@ do_build() {
             local abs_ext_dir="$PROJECT_DIR/$ext_dir"
             if [ -f "$abs_ext_dir/extension.toml" ]; then
                 ext_name=$(grep '^name' "$abs_ext_dir/extension.toml" | head -1 | sed 's/.*= *"\(.*\)"/\1/')
-                CARGO_FEATURES="$CARGO_FEATURES $ext_name"
-                echo "Enabling extension: $ext_name"
+                if grep "$ext_name" "$SCRIPT_DIR/Cargo.toml" 2>/dev/null | grep -q "optional"; then
+                    CARGO_FEATURES="$CARGO_FEATURES $ext_name"
+                    echo "Enabling optional extension: $ext_name"
+                else
+                    echo "Extension $ext_name is always-on (not optional)"
+                fi
             fi
         done
     fi

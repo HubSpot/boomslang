@@ -27,7 +27,11 @@ class HostFunctionExtensionTest {
                 })
             .build();
 
-    factory = PythonExecutorFactory.builder().addHostFunctions(demoFunctions).build();
+    factory =
+        PythonExecutorFactory.builder()
+            .addHostFunctions(SharedTestSetup.defaultBridge())
+            .addHostFunctions(demoFunctions)
+            .build();
   }
 
   @Test

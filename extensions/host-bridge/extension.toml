@@ -1,0 +1,19 @@
+[extension]
+name = "python4j_host"
+wasm_module = "python4j"
+prewarm = ["_python4j_host", "python4j_host"]
+
+[[functions]]
+name = "call"
+params = [
+    { name = "name", type = "string" },
+    { name = "args", type = "string" },
+]
+returns = "string"
+
+[[functions]]
+name = "log"
+params = [
+    { name = "level", type = "int" },
+    { name = "message", type = "string" },
+]
