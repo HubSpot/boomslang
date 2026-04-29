@@ -1,0 +1,49 @@
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.iml
+.idea/
+*.factorypath
+.classpath
+.project
+.settings/
+
+# Rust
+python-host/target/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# WASM build artifacts
+cpython/build/
+python-host/target/
+core/src/main/resources/python/bin/*.wasm
+core/src/main/resources/python/usr/
+
+# Docker build artifacts (produced by `just build-*`)
+cpython-wasi/vendor/
+cpython-wasi/artifact.tgz
+pydantic-core-wasi/artifact.tgz
+pydantic-core-wasi/target/
+numpy-wasi/artifact.tgz
+pandas-wasi/artifact.tgz
+matplotlib-wasi/artifact.tgz
+
+# Pip packages (downloaded at build time)
+cpython/lib/pip-packages/
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+\#*\#
+.vscode/
+
+# Logs
+*.log

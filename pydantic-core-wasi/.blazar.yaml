@@ -1,0 +1,155 @@
+provides:
+  - pydantic-core-wasi
+
+buildpack:
+  name: Blazar-Buildpack-Rust
+
+env:
+  RUST_VERSION: "1.85"
+  RUN_TESTS: "false"
+  TARGET_ARCHS: "wasm32-wasip1"
+  PLATFORM_ARCHS: "amd64"
+  CARGO_INSTALL: "false"
+  SKIP_RPM: "true"
+
+before:
+  - description: "Clone pydantic-core source and set up cross-compilation"
+    commands:
+      - |
+        set -ex
+        PYDANTIC_CORE_TAG="v2.41.5"
+
+        # Clone pydantic-core source
+        git clone --depth 1 --branch "${PYDANTIC_CORE_TAG}" \
+            https://github.com/pydantic/pydantic-core /tmp/pydantic-core-src
+
+        # Copy Cargo.toml and source into the module directory
+        cp /tmp/pydantic-core-src/Cargo.toml .
+        cp /tmp/pydantic-core-src/Cargo.lock .
+        cp /tmp/pydantic-core-src/build.rs .
+        cp -r /tmp/pydantic-core-src/src .
+        cp -r /tmp/pydantic-core-src/python .
+
+        # Patch crate-type to staticlib only (WASI doesn't support cdylib)
+        sed -i '/crate-type/s/.*/crate-type = ["staticlib"]/' Cargo.toml
+
+        # Add dummy binary so cargo install succeeds (buildpack requires it)
+        mkdir -p src/bin
+        echo 'fn main() {}' > src/bin/dummy.rs
+        printf '\n[[bin]]\nname = "pydantic-core-dummy"\npath = "src/bin/dummy.rs"\n' >> Cargo.toml
+
+        echo "Patched crate-type: $(grep crate-type Cargo.toml)"
+
+  - description: "Install WASI SDK and CPython headers for PyO3 cross-compilation"
+    commands:
+      - |
+        set -ex
+
+        # Download WASI SDK 20.0
+        curl -sL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sdk-20.0-linux.tar.gz \
+            | tar xz -C /opt
+        ln -sf /opt/wasi-sdk-20.0 /opt/wasi-sdk
+
+        # Download CPython 3.14 headers and libpython from our cpython-wasi artifact
+        # Try current branch first, fall back to main
+        ARTIFACT_NAME="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-cpython-wasi_amd64"
+        MAIN_ARTIFACT="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython-wasi_amd64"
+
+        mkdir -p /tmp/cpython-wasi
+        if download-artifact -n "$ARTIFACT_NAME" -o /tmp/cpython-wasi.tgz 2>/dev/null; then
+            echo "Downloaded cpython-wasi from branch"
+            tar xzf /tmp/cpython-wasi.tgz -C /tmp/cpython-wasi
+        elif download-artifact -n "$MAIN_ARTIFACT" -o /tmp/cpython-wasi.tgz 2>/dev/null; then
+            echo "Downloaded cpython-wasi from main"
+            tar xzf /tmp/cpython-wasi.tgz -C /tmp/cpython-wasi
+        else
+            echo "No cpython-wasi artifact available, using bundled headers + sysconfigdata"
+            curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.0.tar.gz | tar xz -C /tmp
+            mkdir -p /tmp/cpython-wasi/include/python3.14
+            cp -r /tmp/cpython-3.14.0/Include/* /tmp/cpython-wasi/include/python3.14/
+            cp /tmp/cpython-3.14.0/PC/pyconfig.h /tmp/cpython-wasi/include/python3.14/ 2>/dev/null || true
+
+            # Use the real sysconfigdata checked into the repo
+            mkdir -p /tmp/cpython-wasi/lib/wasm32-wasi
+            cp "$(pwd)/_sysconfigdata__wasi_wasm32-wasi.py" /tmp/cpython-wasi/lib/wasm32-wasi/
+
+            # Create empty libpython3.14.a stub (PyO3 needs it to exist for linking,
+            # actual linking happens in the cpython-wasi module)
+            ar rcs /tmp/cpython-wasi/lib/wasm32-wasi/libpython3.14.a
+
+            # Generate pyconfig.h from the real sysconfigdata if not available from CPython source
+            if [ ! -f /tmp/cpython-wasi/include/python3.14/pyconfig.h ]; then
+                PYH=/tmp/cpython-wasi/include/python3.14/pyconfig.h
+                echo "#ifndef Py_PYCONFIG_H" > $PYH
+                echo "#define Py_PYCONFIG_H" >> $PYH
+                echo "#define SIZEOF_VOID_P 4" >> $PYH
+                echo "#define SIZEOF_SHORT 2" >> $PYH
+                echo "#define SIZEOF_INT 4" >> $PYH
+                echo "#define SIZEOF_LONG 4" >> $PYH
+                echo "#define SIZEOF_LONG_LONG 8" >> $PYH
+                echo "#define SIZEOF_FLOAT 4" >> $PYH
+                echo "#define SIZEOF_DOUBLE 8" >> $PYH
+                echo "#define SIZEOF_SIZE_T 4" >> $PYH
+                echo "#define SIZEOF_OFF_T 8" >> $PYH
+                echo "#define SIZEOF_WCHAR_T 4" >> $PYH
+                echo "#define SIZEOF_PID_T 4" >> $PYH
+                echo "#define HAVE_STDINT_H 1" >> $PYH
+                echo "#define HAVE_STDLIB_H 1" >> $PYH
+                echo "#define HAVE_STRING_H 1" >> $PYH
+                echo "#define HAVE_UNISTD_H 1" >> $PYH
+                echo "#define HAVE_WCHAR_H 1" >> $PYH
+                echo '#define PY_FORMAT_LONG_LONG "ll"' >> $PYH
+                echo "#define Py_GIL_DISABLED 0" >> $PYH
+                echo "#define DOUBLE_IS_IEEE_754_BINARY64_LE 1" >> $PYH
+                echo "#define ALIGNOF_MAX_ALIGN_T 8" >> $PYH
+                echo "#endif" >> $PYH
+            fi
+            rm -rf /tmp/cpython-3.14.0
+        fi
+
+        # Set PyO3 cross-compilation environment
+        export CC_wasm32_wasip1="/opt/wasi-sdk/bin/clang"
+        export CFLAGS_wasm32_wasip1="--sysroot=/opt/wasi-sdk/share/wasi-sysroot -I/tmp/cpython-wasi/include/python3.14"
+        export PYO3_CROSS_PYTHON_VERSION=3.14
+        export PYO3_CROSS_LIB_DIR="/tmp/cpython-wasi/lib/wasm32-wasi"
+
+        # Copy sysconfigdata to where PyO3 expects it
+        if [ -d /tmp/cpython-wasi/usr/local/lib/python3.14 ]; then
+            cp /tmp/cpython-wasi/usr/local/lib/python3.14/_sysconfigdata__wasi_wasm32-wasi.py \
+                /tmp/cpython-wasi/lib/wasm32-wasi/ 2>/dev/null || true
+        fi
+
+  - description: "Build pydantic-core staticlib for wasm32-wasip1"
+    commands:
+      - |
+        set -ex
+        export CC_wasm32_wasip1="/opt/wasi-sdk/bin/clang"
+        export CFLAGS_wasm32_wasip1="--sysroot=/opt/wasi-sdk/share/wasi-sysroot -I/tmp/cpython-wasi/include/python3.14"
+        export PYO3_CROSS_PYTHON_VERSION=3.14
+        export PYO3_CROSS_LIB_DIR="/tmp/cpython-wasi/lib/wasm32-wasi"
+        cargo build --target wasm32-wasip1 --release --lib
+        ls -lh target/wasm32-wasip1/release/lib_pydantic_core.a
+
+after:
+  onSuccess:
+    - description: "Package pydantic-core artifacts"
+      commands:
+        - |
+          set -ex
+          mkdir -p /tmp/artifact-staging/lib
+          mkdir -p /tmp/artifact-staging/python
+          mkdir -p /tmp/artifact-staging/wheels
+
+          # Copy static library
+          cp target/wasm32-wasip1/release/lib_pydantic_core.a /tmp/artifact-staging/lib/
+
+          # Copy Python stubs
+          cp -r python/pydantic_core /tmp/artifact-staging/python/
+
+          # Copy checked-in Python dependency wheels (PyPI is not accessible from Blazar)
+          cp wheels/*.whl /tmp/artifact-staging/wheels/
+
+          # Create artifact tarball in the module working directory
+          cd /tmp/artifact-staging && tar czf /usr/share/hubspot/build/workspace/webassembly-language-runtimes/pydantic-core-wasi/artifact.tgz .
+          touch /usr/share/hubspot/build/workspace/webassembly-language-runtimes/pydantic-core-wasi/.blazar_notify_deploy_service_and_upload_artifact_if_exists
+          echo "Artifact created: $(ls -lh /usr/share/hubspot/build/workspace/webassembly-language-runtimes/pydantic-core-wasi/artifact.tgz)"

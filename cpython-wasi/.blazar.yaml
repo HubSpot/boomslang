@@ -1,0 +1,103 @@
+provides:
+  - cpython-wasi
+
+depends:
+  - pydantic-core-wasi
+  - numpy-wasi
+  - pandas-wasi
+  - matplotlib-wasi
+
+buildpack:
+  name: Buildpack-Docker
+
+# Request a Large build pod (32 vCPU / 64 GB). The default Small pod (8 vCPU
+# / 16 GB) experienced SEVERE CPU throttling (440% of CPU time) during the
+# cpython compile + pandas archive merge — our last build took ~24 min and
+# still timed out at the deps-download step. Large pods provision slower
+# but the CPU headroom is worth it for this module's workload.
+buildResources:
+  cpus: 32
+  memoryMb: 65536
+
+before:
+  - description: "Download pydantic-core-wasi artifact"
+    commands:
+      - |
+        set -ex
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-pydantic-core-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-pydantic-core-wasi_amd64"
+        mkdir -p vendor
+        if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/pydantic-core-wasi.tgz 2>/dev/null; then
+            echo "Downloaded pydantic-core from same build"
+        elif download-artifact -n "$COORDS" -o vendor/pydantic-core-wasi.tgz 2>/dev/null; then
+            echo "Downloaded pydantic-core from branch"
+        elif download-artifact -n "$MAIN_COORDS" -o vendor/pydantic-core-wasi.tgz 2>/dev/null; then
+            echo "Downloaded pydantic-core from main"
+        else
+            echo "ERROR: Could not download pydantic-core-wasi artifact"
+            exit 1
+        fi
+        ls -lh vendor/pydantic-core-wasi.tgz
+
+  - description: "Download numpy-wasi artifact"
+    commands:
+      - |
+        set -ex
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-numpy-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-numpy-wasi_amd64"
+        mkdir -p vendor
+        if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/numpy-wasi.tgz 2>/dev/null; then
+            echo "Downloaded numpy-wasi from same build"
+        elif download-artifact -n "$COORDS" -o vendor/numpy-wasi.tgz 2>/dev/null; then
+            echo "Downloaded numpy-wasi from branch"
+        elif download-artifact -n "$MAIN_COORDS" -o vendor/numpy-wasi.tgz 2>/dev/null; then
+            echo "Downloaded numpy-wasi from main"
+        else
+            echo "ERROR: Could not download numpy-wasi artifact"
+            exit 1
+        fi
+        ls -lh vendor/numpy-wasi.tgz
+
+  - description: "Download pandas-wasi artifact"
+    commands:
+      - |
+        set -ex
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-pandas-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-pandas-wasi_amd64"
+        mkdir -p vendor
+        if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/pandas-wasi.tgz 2>/dev/null; then
+            echo "Downloaded pandas-wasi from same build"
+        elif download-artifact -n "$COORDS" -o vendor/pandas-wasi.tgz 2>/dev/null; then
+            echo "Downloaded pandas-wasi from branch"
+        elif download-artifact -n "$MAIN_COORDS" -o vendor/pandas-wasi.tgz 2>/dev/null; then
+            echo "Downloaded pandas-wasi from main"
+        else
+            echo "ERROR: Could not download pandas-wasi artifact"
+            exit 1
+        fi
+        ls -lh vendor/pandas-wasi.tgz
+
+  - description: "Download matplotlib-wasi artifact"
+    commands:
+      - |
+        set -ex
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-matplotlib-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-matplotlib-wasi_amd64"
+        mkdir -p vendor
+        if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/matplotlib-wasi.tgz 2>/dev/null; then
+            echo "Downloaded matplotlib-wasi from same build"
+        elif download-artifact -n "$COORDS" -o vendor/matplotlib-wasi.tgz 2>/dev/null; then
+            echo "Downloaded matplotlib-wasi from branch"
+        elif download-artifact -n "$MAIN_COORDS" -o vendor/matplotlib-wasi.tgz 2>/dev/null; then
+            echo "Downloaded matplotlib-wasi from main"
+        else
+            echo "ERROR: Could not download matplotlib-wasi artifact"
+            exit 1
+        fi
+        ls -lh vendor/matplotlib-wasi.tgz
+
+after:
+  onSuccess:
+    - description: "Extract and publish artifact tarball"
+      commands:
+        - CID=$(docker create "$PLATFORM_IMAGE" /bin/true) && docker cp "$CID:/artifact.tgz" artifact.tgz && docker rm "$CID" && touch .blazar_notify_deploy_service_and_upload_artifact_if_exists

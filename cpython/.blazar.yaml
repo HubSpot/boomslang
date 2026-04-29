@@ -1,0 +1,61 @@
+provides:
+  - name: cpython
+
+depends:
+  - name: cpython-wasi
+
+buildpack:
+  name: Buildpack-Docker
+
+buildResources:
+  cpus: 32
+  memoryMb: 65536
+
+before:
+  - description: "Download upstream cpython-wasi artifact (branch-match → main)"
+    commands:
+      - |
+        set -ex
+        WLR_BRANCH="${GIT_BRANCH:-main}"
+        WLR_BRANCH_COORDS="git.hubteam.com-HubSpot-python4j-${WLR_BRANCH}-cpython-wasi_amd64"
+        WLR_MAIN_COORDS="git.hubteam.com-HubSpot-python4j-main-cpython-wasi_amd64"
+
+        mkdir -p vendor
+        if [ "$WLR_BRANCH" != "main" ] && download-artifact -n "$WLR_BRANCH_COORDS" -o vendor/cpython-wasi.tgz 2>/dev/null; then
+          echo "Downloaded cpython-wasi from branch: $WLR_BRANCH"
+        elif download-artifact -n "$WLR_MAIN_COORDS" -o vendor/cpython-wasi.tgz 2>/dev/null; then
+          echo "Downloaded cpython-wasi from main"
+        else
+          echo "ERROR: Could not download cpython-wasi"
+          exit 1
+        fi
+        ls -lh vendor/cpython-wasi.tgz
+
+  - description: "Prepare build context"
+    commands:
+      - |
+        set -ex
+        # Copy Rust host into Docker build context
+        cp -r ../python-host vendor/python-host
+
+        # Download pip packages
+        pip_packages="pydantic==2.12.5 typing-inspection>=0.4.2"
+        pip_tmp="/tmp/pip-packages"
+        rm -rf "$pip_tmp" && mkdir -p "$pip_tmp"
+        python3 -m pip download $pip_packages --no-deps -d "$pip_tmp" --quiet
+        for whl in "$pip_tmp"/*.whl; do
+          [ -f "$whl" ] || continue
+          python3 -m zipfile -e "$whl" "$pip_tmp/extracted"
+        done
+
+        mkdir -p vendor/pip-packages
+        for pkg in pydantic typing_inspection; do
+          [ -d "$pip_tmp/extracted/$pkg" ] && cp -r "$pip_tmp/extracted/$pkg" vendor/pip-packages/
+        done
+        ls -la vendor/pip-packages/
+
+after:
+  onSuccess:
+    - description: "Extract and publish artifact"
+      commands:
+        - CID=$(docker create "$PLATFORM_IMAGE" /bin/true) && docker cp "$CID:/artifact.tgz" artifact.tgz && docker rm "$CID" && touch .blazar_notify_deploy_service_and_upload_artifact_if_exists

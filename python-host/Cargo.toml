@@ -1,0 +1,15 @@
+[package]
+name = "python4j_host"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+
+[dependencies]
+pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
+libmimalloc-sys = { version = "0.1", features = ["v3"] }

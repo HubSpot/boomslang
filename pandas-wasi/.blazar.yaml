@@ -1,0 +1,52 @@
+provides:
+  - pandas-wasi
+
+# Depend on numpy-wasi — we consume its patched headers (include/numpy/)
+# at build time. No cycle: cpython-wasi depends on both, and we depend on
+# numpy-wasi; the DAG is cpython-wasi -> {pandas-wasi, numpy-wasi} and
+# pandas-wasi -> numpy-wasi. This dep also doubles as the scheduling hint
+# Blazar needs so the auto-generated _manifest sub-module waits for _amd64
+# (without any `depends:` at all, Blazar schedules them in parallel and the
+# manifest step fails with "no such manifest: ...amd64-N").
+depends:
+  - numpy-wasi
+
+buildpack:
+  name: Buildpack-Docker
+
+# Request a Large build pod (32 vCPU / 64 GB). The ninja compile of pandas's
+# 45 C extensions is CPU-bound and the default Small pod (8 vCPU / 16 GB)
+# runs into heavy CPU throttling. Large provisions slower but the total
+# wall-clock improvement is substantial.
+buildResources:
+  cpus: 32
+  memoryMb: 65536
+
+env:
+  PLATFORM_ARCHS: "amd64"
+
+before:
+  - description: "Download numpy-wasi artifact for patched numpy headers"
+    commands:
+      - |
+        set -ex
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-numpy-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-numpy-wasi_amd64"
+        mkdir -p vendor
+        if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/numpy-wasi.tgz 2>/dev/null; then
+            echo "Downloaded numpy-wasi from same build"
+        elif download-artifact -n "$COORDS" -o vendor/numpy-wasi.tgz 2>/dev/null; then
+            echo "Downloaded numpy-wasi from branch"
+        elif download-artifact -n "$MAIN_COORDS" -o vendor/numpy-wasi.tgz 2>/dev/null; then
+            echo "Downloaded numpy-wasi from main"
+        else
+            echo "ERROR: Could not download numpy-wasi artifact"
+            exit 1
+        fi
+        ls -lh vendor/numpy-wasi.tgz
+
+after:
+  onSuccess:
+    - description: "Extract and publish artifact tarball"
+      commands:
+        - CID=$(docker create "$PLATFORM_IMAGE" /bin/true) && docker cp "$CID:/artifact.tgz" artifact.tgz && docker rm "$CID" && touch .blazar_notify_deploy_service_and_upload_artifact_if_exists

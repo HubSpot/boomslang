@@ -1,0 +1,11 @@
+# Build outputs
+build/
+
+# Downloaded dependencies
+*.tar.xz
+*.zip
+lib/pip-packages/
+
+# Vendor directory (CI build context)
+vendor/
+lib/lib_pydantic_core.a

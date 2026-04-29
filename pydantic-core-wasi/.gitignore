@@ -1,0 +1,8 @@
+artifact.tgz
+src/
+python/
+build.rs
+Cargo.lock
+build-output/
+target/
+.pydantic-core-src/
