@@ -34,11 +34,6 @@ class HostBridgeTest {
                     .withLogHandler(
                         (level, message) -> LOG_MESSAGES.add("[" + level + "] " + message))
                     .build())
-            .addHostFunctions(
-                DemoHostFunctions.builder()
-                    .withGreet(name -> "Hello, " + name + "!")
-                    .withLog((level, message) -> {})
-                    .build())
             .build();
   }
 

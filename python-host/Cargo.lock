@@ -293,14 +293,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "python4j-ext-demo"
-version = "0.1.0"
-dependencies = [
- "py4j-hostgen",
- "pyo3",
-]
-
-[[package]]
 name = "python4j-ext-host-bridge"
 version = "0.1.0"
 dependencies = [
@@ -314,7 +306,6 @@ version = "0.1.0"
 dependencies = [
  "libmimalloc-sys",
  "pyo3",
- "python4j-ext-demo",
  "python4j-ext-host-bridge",
 ]
 

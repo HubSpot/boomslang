@@ -337,16 +337,12 @@ pub extern "C" fn wizer_initialize() {
     }
 
     python4j_ext_host_bridge::register();
-    #[cfg(feature = "demo")]
-    python4j_ext_demo::register();
 
     Python::initialize();
     Python::attach(|py| {
         install_stream_handlers(py).expect("Failed to install stream handlers");
         prewarm_modules(py);
         python4j_ext_host_bridge::prewarm(py);
-        #[cfg(feature = "demo")]
-        python4j_ext_demo::prewarm(py);
     });
 }
 
