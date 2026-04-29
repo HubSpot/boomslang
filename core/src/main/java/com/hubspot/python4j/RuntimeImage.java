@@ -1,6 +1,7 @@
 package com.hubspot.python4j;
 
 import com.dylibso.chicory.runtime.ExportFunction;
+import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.Machine;
 import com.dylibso.chicory.runtime.Store;
@@ -38,7 +39,8 @@ public class RuntimeImage {
   public static RuntimeImage create(
       WasmModule module,
       Function<Instance, Machine> machineFactory,
-      Path extractedPythonPath) {
+      Path extractedPythonPath,
+      HostFunction... hostFunctions) {
     LOG.debug("Creating RuntimeImage with golden memory snapshot");
     long startTime = System.currentTimeMillis();
 
@@ -51,6 +53,9 @@ public class RuntimeImage {
     WasiPreview1 wasi = WasiPreview1.builder().withOptions(wasiOptions).build();
 
     Store store = new Store().addFunction(wasi.toHostFunctions());
+    for (HostFunction hf : hostFunctions) {
+      store.addFunction(hf);
+    }
 
     Instance.Builder instanceBuilder =
         Instance.builder(module).withImportValues(store.toImportValues());

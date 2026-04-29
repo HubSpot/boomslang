@@ -1,6 +1,7 @@
 package com.hubspot.python4j;
 
 import com.dylibso.chicory.runtime.ExportFunction;
+import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.Store;
 import com.dylibso.chicory.wasi.WasiOptions;
@@ -50,11 +51,12 @@ public class PythonInstance implements AutoCloseable {
   private final ExportFunction getHeapPagesFunc;
   private final int goldenMemoryPages;
 
-  public PythonInstance(RuntimeImage image) {
-    this(image, null);
+  public PythonInstance(RuntimeImage image, HostFunction[] hostFunctions) {
+    this(image, hostFunctions, null);
   }
 
-  public PythonInstance(RuntimeImage image, @Nullable Path externalWorkDir) {
+  public PythonInstance(
+      RuntimeImage image, HostFunction[] hostFunctions, @Nullable Path externalWorkDir) {
     this.instanceId = UUID.randomUUID().toString().substring(0, 8);
     this.libDir = image.getExtractedPythonPath().resolve("lib-" + instanceId);
 
@@ -80,6 +82,9 @@ public class PythonInstance implements AutoCloseable {
     WasiPreview1 wasi = WasiPreview1.builder().withOptions(wasiOptionsBuilder.build()).build();
 
     Store store = new Store().addFunction(wasi.toHostFunctions());
+    for (HostFunction hf : hostFunctions) {
+      store.addFunction(hf);
+    }
 
     byte[] goldenMemory = image.getGoldenMemory();
     int goldenMemoryPages = image.getGoldenMemoryPages();

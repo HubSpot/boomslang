@@ -1,5 +1,6 @@
 package com.hubspot.python4j;
 
+import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.Machine;
 import com.dylibso.chicory.wasm.Parser;
@@ -55,6 +56,7 @@ public class PythonExecutorFactory {
   private final ExecutorService executorService;
   private final boolean aotAvailable;
   private final RuntimeImage runtimeImage;
+  private final HostFunction[] hostFunctions;
 
   public PythonExecutorFactory() {
     this(builder());
@@ -66,17 +68,20 @@ public class PythonExecutorFactory {
     this.extractedPythonPath = extractPythonResources();
     this.module = loadWasmModule();
     this.executorService = createWasmExecutorService();
+    this.hostFunctions = builder.hostFunctions.toArray(new HostFunction[0]);
 
     installCustomLibraries(builder.libraries);
 
     Function<Instance, Machine> machineFactory = aotAvailable ? loadAotFactory() : null;
 
-    this.runtimeImage = RuntimeImage.create(module, machineFactory, extractedPythonPath);
+    this.runtimeImage =
+        RuntimeImage.create(module, machineFactory, extractedPythonPath, hostFunctions);
 
     LOG.info(
-        "PythonExecutorFactory initialized with Jimfs at: {}, custom libraries: {}",
+        "PythonExecutorFactory initialized with Jimfs at: {}, custom libraries: {}, host functions: {}",
         extractedPythonPath,
-        builder.libraries.size());
+        builder.libraries.size(),
+        hostFunctions.length);
   }
 
   public static Builder builder() {
@@ -84,11 +89,11 @@ public class PythonExecutorFactory {
   }
 
   public PythonInstance createInstance(Path workDir) {
-    return new PythonInstance(runtimeImage, workDir);
+    return new PythonInstance(runtimeImage, hostFunctions, workDir);
   }
 
   public PythonInstance createInstance() {
-    return new PythonInstance(runtimeImage);
+    return new PythonInstance(runtimeImage, hostFunctions);
   }
 
   public <T> T runOnWasmThread(Callable<T> task) {
@@ -324,8 +329,14 @@ public class PythonExecutorFactory {
   public static class Builder {
 
     private final List<PythonLibrary> libraries = new ArrayList<>();
+    private final List<HostFunction> hostFunctions = new ArrayList<>();
 
     private Builder() {}
+
+    public Builder addHostFunctions(HostFunction... functions) {
+      Collections.addAll(this.hostFunctions, functions);
+      return this;
+    }
 
     public Builder withLibrary(PythonLibrary library) {
       this.libraries.add(library);
