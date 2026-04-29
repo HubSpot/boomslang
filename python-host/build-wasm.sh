@@ -163,13 +163,14 @@ do_wizer() {
         done
     fi
 
-    # Copy extension Python packages (PYTHON4J_EXTENSIONS is a comma-separated list of extension dirs)
+    # Copy extension Python packages (PYTHON4J_EXTENSIONS paths are relative to PROJECT_DIR)
     if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
         IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
         for ext_dir in "${EXT_DIRS[@]}"; do
-            if [ -d "$ext_dir/lib" ]; then
-                echo "Copying extension packages from $ext_dir/lib"
-                cp -r "$ext_dir/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
+            local abs_ext_dir="$PROJECT_DIR/$ext_dir"
+            if [ -d "$abs_ext_dir/lib" ]; then
+                echo "Copying extension packages from $abs_ext_dir/lib"
+                cp -r "$abs_ext_dir/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
             fi
         done
     fi
