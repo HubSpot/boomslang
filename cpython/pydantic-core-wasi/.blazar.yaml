@@ -5,7 +5,7 @@ buildpack:
   name: Blazar-Buildpack-Rust
 
 env:
-  RUST_VERSION: "1.85"
+  RUST_VERSION: "1.95"
   RUN_TESTS: "false"
   TARGET_ARCHS: "wasm32-wasip1"
   PLATFORM_ARCHS: "amd64"
@@ -150,6 +150,7 @@ after:
           cp wheels/*.whl /tmp/artifact-staging/wheels/
 
           # Create artifact tarball in the module working directory
-          cd /tmp/artifact-staging && tar czf /usr/share/hubspot/build/workspace/webassembly-language-runtimes/pydantic-core-wasi/artifact.tgz .
-          touch /usr/share/hubspot/build/workspace/webassembly-language-runtimes/pydantic-core-wasi/.blazar_notify_deploy_service_and_upload_artifact_if_exists
-          echo "Artifact created: $(ls -lh /usr/share/hubspot/build/workspace/webassembly-language-runtimes/pydantic-core-wasi/artifact.tgz)"
+          WORKSPACE="/usr/share/hubspot/build/workspace/${GIT_REPO}/pydantic-core-wasi"
+          cd /tmp/artifact-staging && tar czf "${WORKSPACE}/artifact.tgz" .
+          touch "${WORKSPACE}/.blazar_notify_deploy_service_and_upload_artifact_if_exists"
+          echo "Artifact created: $(ls -lh ${WORKSPACE}/artifact.tgz)"

@@ -16,14 +16,14 @@ before:
     commands:
       - |
         set -ex
-        WLR_BRANCH="${GIT_BRANCH:-main}"
-        WLR_BRANCH_COORDS="git.hubteam.com-HubSpot-python4j-${WLR_BRANCH}-cpython-wasi_amd64"
-        WLR_MAIN_COORDS="git.hubteam.com-HubSpot-python4j-main-cpython-wasi_amd64"
+        BRANCH="${GIT_BRANCH:-main}"
+        BRANCH_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${BRANCH}-cpython-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython-wasi_amd64"
 
         mkdir -p vendor
-        if [ "$WLR_BRANCH" != "main" ] && download-artifact -n "$WLR_BRANCH_COORDS" -o vendor/cpython-wasi.tgz 2>/dev/null; then
-          echo "Downloaded cpython-wasi from branch: $WLR_BRANCH"
-        elif download-artifact -n "$WLR_MAIN_COORDS" -o vendor/cpython-wasi.tgz 2>/dev/null; then
+        if [ "$BRANCH" != "main" ] && download-artifact -n "$BRANCH_COORDS" -o vendor/cpython-wasi.tgz 2>/dev/null; then
+          echo "Downloaded cpython-wasi from branch: $BRANCH"
+        elif download-artifact -n "$MAIN_COORDS" -o vendor/cpython-wasi.tgz 2>/dev/null; then
           echo "Downloaded cpython-wasi from main"
         else
           echo "ERROR: Could not download cpython-wasi"
@@ -35,8 +35,11 @@ before:
     commands:
       - |
         set -ex
-        # Copy Rust host into Docker build context
+        # Copy Rust host + all dependency crates into Docker build context
         cp -r ../python-host vendor/python-host
+        cp -r ../python-host-core vendor/python-host-core
+        cp -r ../extensions vendor/extensions
+        cp -r ../boomslang-hostgen vendor/boomslang-hostgen
 
         # Download pip packages
         pip_packages="pydantic==2.12.5 typing-inspection>=0.4.2"
