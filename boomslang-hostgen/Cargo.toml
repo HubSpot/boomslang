@@ -1,7 +1,12 @@
 [package]
 name = "boomslang-hostgen"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
+license = "Apache-2.0"
+description = "Code generator for boomslang host function extensions (Python-in-Java via WASM)"
+repository = "https://github.com/HubSpot/boomslang"
+keywords = ["python", "wasm", "chicory", "codegen"]
+categories = ["development-tools::build-utils"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

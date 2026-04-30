@@ -1,8 +1,11 @@
 [package]
 name = "boomslang_host"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 description = "Stock boomslang WASM host with host-bridge extension."
+license = "Apache-2.0"
+repository = "https://github.com/HubSpot/boomslang"
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
@@ -12,5 +15,5 @@ opt-level = "s"
 lto = "thin"
 
 [dependencies]
-boomslang-host-core = { path = "../python-host-core" }
-boomslang-ext-host-bridge = { path = "../extensions/host-bridge" }
+boomslang-host-core = { version = "0.0.1", path = "../python-host-core" }
+boomslang-ext-host-bridge = { version = "0.0.1", path = "../extensions/host-bridge" }

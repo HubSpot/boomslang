@@ -1,7 +1,12 @@
 [package]
 name = "boomslang-ext-host-bridge"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
+license = "Apache-2.0"
+description = "Built-in host bridge extension for boomslang — generic Java↔Python function calls"
+repository = "https://github.com/HubSpot/boomslang"
+keywords = ["python", "wasm", "chicory"]
+categories = ["wasm"]
 
 [lib]
 crate-type = ["rlib"]
@@ -10,4 +15,4 @@ crate-type = ["rlib"]
 pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
 
 [build-dependencies]
-boomslang-hostgen = { path = "../../boomslang-hostgen" }
+boomslang-hostgen = { version = "0.0.1", path = "../../boomslang-hostgen", default-features = false }

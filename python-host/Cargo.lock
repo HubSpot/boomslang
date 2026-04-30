@@ -59,6 +59,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
+name = "boomslang-ext-host-bridge"
+version = "0.1.0"
+dependencies = [
+ "boomslang-hostgen",
+ "pyo3",
+]
+
+[[package]]
+name = "boomslang-host-core"
+version = "0.1.0"
+dependencies = [
+ "libmimalloc-sys",
+ "pyo3",
+]
+
+[[package]]
+name = "boomslang-hostgen"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "heck",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "boomslang_host"
+version = "0.1.0"
+dependencies = [
+ "boomslang-ext-host-bridge",
+ "boomslang-host-core",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -222,16 +256,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "py4j-hostgen"
-version = "0.1.0"
-dependencies = [
- "clap",
- "heck",
- "serde",
- "toml",
-]
-
-[[package]]
 name = "pyo3"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -290,30 +314,6 @@ dependencies = [
  "pyo3-build-config",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "python4j-ext-host-bridge"
-version = "0.1.0"
-dependencies = [
- "py4j-hostgen",
- "pyo3",
-]
-
-[[package]]
-name = "python4j-host-core"
-version = "0.1.0"
-dependencies = [
- "libmimalloc-sys",
- "pyo3",
-]
-
-[[package]]
-name = "python4j_host"
-version = "0.1.0"
-dependencies = [
- "python4j-ext-host-bridge",
- "python4j-host-core",
 ]
 
 [[package]]
