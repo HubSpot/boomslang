@@ -4,8 +4,11 @@ provides:
 buildpack:
   name: Blazar-Buildpack-Rust
 
+enableBuildTargets:
+  - amd64
+
 env:
-  RUST_VERSION: "1.95"
+  RUST_VERSION: "1.85"
   RUN_TESTS: "false"
   TARGET_ARCHS: "wasm32-wasip1"
   PLATFORM_ARCHS: "amd64"

@@ -13,6 +13,9 @@ depends:
 buildpack:
   name: Buildpack-Docker
 
+enableBuildTargets:
+  - amd64
+
 # Request a Large build pod (32 vCPU / 64 GB). The ninja compile includes
 # freetype + Agg (C++) + ft2font + _path. Large pods avoid CPU throttling.
 buildResources:

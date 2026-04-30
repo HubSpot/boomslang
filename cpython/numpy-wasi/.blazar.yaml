@@ -16,6 +16,9 @@ depends:
 buildpack:
   name: Buildpack-Docker
 
+enableBuildTargets:
+  - amd64
+
 env:
   PLATFORM_ARCHS: "amd64"
 

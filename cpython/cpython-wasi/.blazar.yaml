@@ -10,6 +10,9 @@ depends:
 buildpack:
   name: Buildpack-Docker
 
+enableBuildTargets:
+  - amd64
+
 # Request a Large build pod (32 vCPU / 64 GB). The default Small pod (8 vCPU
 # / 16 GB) experienced SEVERE CPU throttling (440% of CPU time) during the
 # cpython compile + pandas archive merge — our last build took ~24 min and
