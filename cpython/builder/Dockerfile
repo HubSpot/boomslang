@@ -6,7 +6,7 @@
 #
 ARG WASI_SDK_VERSION=24
 
-FROM rust:1.85-bookworm
+FROM docker.hubteam.com/buildpacks/build-image-rust:latest
 
 ARG WASI_SDK_VERSION
 ARG TARGETARCH
@@ -41,7 +41,7 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") \
     && ln -s /opt/binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt /usr/local/bin/wasm-opt \
     && wasm-opt --version
 
-# Rust WASM target
+# Rust WASM target (HubSpot base image has rustup configured for internal network)
 RUN rustup target add wasm32-wasip1
 
 # wabt (wasm-strip)
