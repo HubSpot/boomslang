@@ -1,7 +1,7 @@
-package com.hubspot.python4j.tests;
+package com.hubspot.boomslang.tests;
 
 import com.dylibso.chicory.runtime.HostFunction;
-import com.hubspot.python4j.HostBridge;
+import com.hubspot.boomslang.HostBridge;
 
 class SharedTestSetup {
 

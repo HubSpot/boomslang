@@ -1,4 +1,4 @@
-package com.hubspot.python4j;
+package com.hubspot.boomslang;
 
 import static java.lang.Math.min;
 

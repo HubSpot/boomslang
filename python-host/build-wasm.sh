@@ -89,7 +89,7 @@ check_prerequisites() {
 }
 
 do_build() {
-    echo "=== Building python4j-host (Rust) ==="
+    echo "=== Building boomslang-host (Rust) ==="
 
     setup_wasi_sdk
     check_prerequisites
@@ -128,11 +128,11 @@ do_build() {
     fi
 
     mkdir -p "$BUILD_DIR/output"
-    cp "$SCRIPT_DIR/target/wasm32-wasip1/release/python4j_host.wasm" \
-       "$BUILD_DIR/output/python4j.wasm"
+    cp "$SCRIPT_DIR/target/wasm32-wasip1/release/boomslang_host.wasm" \
+       "$BUILD_DIR/output/boomslang.wasm"
 
-    echo "Built: $BUILD_DIR/output/python4j.wasm"
-    ls -lh "$BUILD_DIR/output/python4j.wasm"
+    echo "Built: $BUILD_DIR/output/boomslang.wasm"
+    ls -lh "$BUILD_DIR/output/boomslang.wasm"
 }
 
 do_wizer() {
@@ -141,8 +141,8 @@ do_wizer() {
     setup_wasi_sdk
     setup_wizer
 
-    local input_wasm="$BUILD_DIR/output/python4j.wasm"
-    local output_wasm="$BUILD_DIR/output/python4j-wizer.wasm"
+    local input_wasm="$BUILD_DIR/output/boomslang.wasm"
+    local output_wasm="$BUILD_DIR/output/boomslang-wizer.wasm"
 
     if [ ! -f "$input_wasm" ]; then
         echo "ERROR: WASM binary not found at $input_wasm"
@@ -219,8 +219,8 @@ do_wizer() {
 }
 
 do_install() {
-    if [ ! -f "$BUILD_DIR/output/python4j.wasm" ]; then
-        echo "ERROR: WASM binary not found at $BUILD_DIR/output/python4j.wasm"
+    if [ ! -f "$BUILD_DIR/output/boomslang.wasm" ]; then
+        echo "ERROR: WASM binary not found at $BUILD_DIR/output/boomslang.wasm"
         echo "Run './build-wasm.sh build' first."
         exit 1
     fi
@@ -228,9 +228,9 @@ do_install() {
     echo "=== Installing to runtime module ==="
 
     mkdir -p "$RUNTIME_RESOURCES/bin"
-    cp "$BUILD_DIR/output/python4j.wasm" "$RUNTIME_RESOURCES/bin/python4j.wasm"
+    cp "$BUILD_DIR/output/boomslang.wasm" "$RUNTIME_RESOURCES/bin/boomslang.wasm"
 
-    echo "Installed: $RUNTIME_RESOURCES/bin/python4j.wasm"
+    echo "Installed: $RUNTIME_RESOURCES/bin/boomslang.wasm"
 }
 
 do_all() {

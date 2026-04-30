@@ -1,4 +1,4 @@
-package com.hubspot.python4j;
+package com.hubspot.boomslang;
 
 import com.dylibso.chicory.runtime.ExportFunction;
 import com.dylibso.chicory.runtime.HostFunction;

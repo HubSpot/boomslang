@@ -1,8 +1,8 @@
 [package]
-name = "python4j_host"
+name = "boomslang_host"
 version = "0.1.0"
 edition = "2024"
-description = "Stock python4j WASM host with host-bridge extension."
+description = "Stock boomslang WASM host with host-bridge extension."
 
 [lib]
 crate-type = ["cdylib"]
@@ -12,5 +12,5 @@ opt-level = "s"
 lto = "thin"
 
 [dependencies]
-python4j-host-core = { path = "../python-host-core" }
-python4j-ext-host-bridge = { path = "../extensions/host-bridge" }
+boomslang-host-core = { path = "../python-host-core" }
+boomslang-ext-host-bridge = { path = "../extensions/host-bridge" }

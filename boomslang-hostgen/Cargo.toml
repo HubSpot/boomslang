@@ -1,5 +1,5 @@
 [package]
-name = "py4j-hostgen"
+name = "boomslang-hostgen"
 version = "0.1.0"
 edition = "2021"
 
@@ -14,5 +14,5 @@ default = ["cli"]
 cli = ["clap"]
 
 [[bin]]
-name = "py4j-hostgen"
+name = "boomslang-hostgen"
 required-features = ["cli"]

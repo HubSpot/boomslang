@@ -23,8 +23,8 @@ build-pydantic-core-wasi:
     set -euo pipefail
     echo "=== Building pydantic-core-wasi ==="
     cd cpython/pydantic-core-wasi
-    DOCKER_BUILDKIT=1 docker build -t python4j-pydantic-core-wasi .
-    CID=$(docker create python4j-pydantic-core-wasi unused-cmd)
+    DOCKER_BUILDKIT=1 docker build -t boomslang-pydantic-core-wasi .
+    CID=$(docker create boomslang-pydantic-core-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
     docker rm "$CID" > /dev/null
     echo "pydantic-core-wasi artifact: $(ls -lh artifact.tgz)"
@@ -35,8 +35,8 @@ build-numpy-wasi:
     set -euo pipefail
     echo "=== Building numpy-wasi ==="
     cd cpython/numpy-wasi
-    DOCKER_BUILDKIT=1 docker build -t python4j-numpy-wasi .
-    CID=$(docker create python4j-numpy-wasi unused-cmd)
+    DOCKER_BUILDKIT=1 docker build -t boomslang-numpy-wasi .
+    CID=$(docker create boomslang-numpy-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
     docker rm "$CID" > /dev/null
     echo "numpy-wasi artifact: $(ls -lh artifact.tgz)"
@@ -47,8 +47,8 @@ build-pandas-wasi:
     set -euo pipefail
     echo "=== Building pandas-wasi ==="
     cd cpython/pandas-wasi
-    DOCKER_BUILDKIT=1 docker build -t python4j-pandas-wasi .
-    CID=$(docker create python4j-pandas-wasi unused-cmd)
+    DOCKER_BUILDKIT=1 docker build -t boomslang-pandas-wasi .
+    CID=$(docker create boomslang-pandas-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
     docker rm "$CID" > /dev/null
     echo "pandas-wasi artifact: $(ls -lh artifact.tgz)"
@@ -59,8 +59,8 @@ build-matplotlib-wasi:
     set -euo pipefail
     echo "=== Building matplotlib-wasi ==="
     cd cpython/matplotlib-wasi
-    DOCKER_BUILDKIT=1 docker build -t python4j-matplotlib-wasi .
-    CID=$(docker create python4j-matplotlib-wasi unused-cmd)
+    DOCKER_BUILDKIT=1 docker build -t boomslang-matplotlib-wasi .
+    CID=$(docker create boomslang-matplotlib-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
     docker rm "$CID" > /dev/null
     echo "matplotlib-wasi artifact: $(ls -lh artifact.tgz)"
@@ -85,8 +85,8 @@ build-cpython-wasi:
         echo "  vendor/${mod}.tgz <- $src"
     done
 
-    DOCKER_BUILDKIT=1 docker build -t python4j-cpython-wasi .
-    CID=$(docker create python4j-cpython-wasi unused-cmd)
+    DOCKER_BUILDKIT=1 docker build -t boomslang-cpython-wasi .
+    CID=$(docker create boomslang-cpython-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
     docker rm "$CID" > /dev/null
 
@@ -101,7 +101,7 @@ build-cpython-wasi:
 # ============================================================
 
 builder-image:
-    docker build -t python4j-builder cpython/builder/
+    docker build -t boomslang-builder cpython/builder/
 
 # ============================================================
 # Local Rust + Java build (after Docker artifacts are ready)
@@ -111,7 +111,7 @@ builder-image:
 pip-packages:
     #!/usr/bin/env bash
     set -euo pipefail
-    pip_tmp="/tmp/pip-packages-python4j"
+    pip_tmp="/tmp/pip-packages-boomslang"
     rm -rf "$pip_tmp" && mkdir -p "$pip_tmp"
     python3 -m pip download "pydantic==2.12.5" "annotated-types>=0.6.0" "typing-extensions>=4.14.1" "typing-inspection>=0.4.2" --no-deps -d "$pip_tmp" --quiet
     for whl in "$pip_tmp"/*.whl; do
@@ -130,12 +130,12 @@ pip-packages:
 wasm:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "=== Building python4j WASM (Docker) ==="
+    echo "=== Building boomslang WASM (Docker) ==="
 
     # Ensure builder image exists
-    if ! docker image inspect python4j-builder > /dev/null 2>&1; then
+    if ! docker image inspect boomslang-builder > /dev/null 2>&1; then
         echo "Building builder image..."
-        docker build -t python4j-builder cpython/builder/
+        docker build -t boomslang-builder cpython/builder/
     fi
 
     # Prepare build context
@@ -148,7 +148,7 @@ wasm:
     [ -d cpython/lib/pip-packages ] && cp -r cpython/lib/pip-packages "$TMPCTX/pip-packages" || mkdir -p "$TMPCTX/pip-packages"
 
     cat > "$TMPCTX/Dockerfile" <<'DOCKERFILE'
-    ARG BUILDER_IMAGE=python4j-builder
+    ARG BUILDER_IMAGE=boomslang-builder
     FROM ${BUILDER_IMAGE}
     WORKDIR /build
 
@@ -160,16 +160,16 @@ wasm:
     RUN cd python-host && chmod +x build-wasm.sh && ./build-wasm.sh all
 
     FROM scratch
-    COPY --from=0 /build/cpython/build/output/python4j.wasm /python4j.wasm
+    COPY --from=0 /build/cpython/build/output/boomslang.wasm /boomslang.wasm
     DOCKERFILE
 
-    DOCKER_BUILDKIT=1 docker build -t python4j-wasm "$TMPCTX"
-    CID=$(docker create python4j-wasm unused-cmd)
-    docker cp "$CID:/python4j.wasm" core/src/main/resources/python/bin/python4j.wasm
+    DOCKER_BUILDKIT=1 docker build -t boomslang-wasm "$TMPCTX"
+    CID=$(docker create boomslang-wasm unused-cmd)
+    docker cp "$CID:/boomslang.wasm" core/src/main/resources/python/bin/boomslang.wasm
     docker rm "$CID" > /dev/null
 
-    echo "Installed: core/src/main/resources/python/bin/python4j.wasm"
-    ls -lh core/src/main/resources/python/bin/python4j.wasm
+    echo "Installed: core/src/main/resources/python/bin/boomslang.wasm"
+    ls -lh core/src/main/resources/python/bin/boomslang.wasm
 
 # Build the WASM binary locally (requires WASI SDK + Wizer + Rust on PATH)
 wasm-local:

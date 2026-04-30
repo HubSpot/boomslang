@@ -1,3 +1,3 @@
 fn main() {
-    py4j_hostgen::generate_rust("extension.toml");
+    boomslang_hostgen::generate_rust("extension.toml");
 }

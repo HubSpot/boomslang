@@ -1,11 +1,11 @@
-package com.hubspot.python4j.tests;
+package com.hubspot.boomslang.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.hubspot.python4j.HostBridge;
-import com.hubspot.python4j.PythonExecutorFactory;
-import com.hubspot.python4j.PythonInstance;
-import com.hubspot.python4j.PythonResult;
+import com.hubspot.boomslang.HostBridge;
+import com.hubspot.boomslang.PythonExecutorFactory;
+import com.hubspot.boomslang.PythonInstance;
+import com.hubspot.boomslang.PythonResult;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
@@ -44,7 +44,7 @@ class HostBridgeTest {
             () -> {
               PythonInstance instance = factory.createInstance();
               return instance.execute(
-                  "from python4j_host import call; print(call('add', '[3, 4]'))");
+                  "from boomslang_host import call; print(call('add', '[3, 4]'))");
             });
 
     assertThat(result.stderr()).as("stderr").isEmpty();
@@ -59,7 +59,7 @@ class HostBridgeTest {
             () -> {
               PythonInstance instance = factory.createInstance();
               return instance.execute(
-                  "from python4j_host import call; print(call('echo', '{\"hello\": \"world\"}'))");
+                  "from boomslang_host import call; print(call('echo', '{\"hello\": \"world\"}'))");
             });
 
     assertThat(result.stderr()).as("stderr").isEmpty();
@@ -76,7 +76,8 @@ class HostBridgeTest {
         factory.runOnWasmThread(
             () -> {
               PythonInstance instance = factory.createInstance();
-              return instance.execute("from python4j_host import log; log(2, 'hello from python')");
+              return instance.execute(
+                  "from boomslang_host import log; log(2, 'hello from python')");
             });
 
     assertThat(result.exitCode()).isEqualTo(0);

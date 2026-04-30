@@ -1,4 +1,4 @@
-# python4j
+# boomslang
 
 Execute Python 3.14 from Java via WebAssembly (Chicory).
 
@@ -75,7 +75,7 @@ mvn test -pl tests
   - `pandas-wasi/` — Pandas C extensions build
   - `matplotlib-wasi/` — Matplotlib C extensions build
   - `builder/` — Docker builder image (WASI SDK + Wizer + Binaryen + Rust)
-- `py4j-hostgen/` — Extension code generator (Rust CLI + library)
+- `boomslang-hostgen/` — Extension code generator (Rust CLI + library)
 - `extensions/` — Extension crates (demo included)
 - `tests/` — Integration tests
 - `benchmarks/` — JMH benchmarks

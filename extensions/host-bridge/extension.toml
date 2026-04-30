@@ -1,7 +1,7 @@
 [extension]
-name = "python4j_host"
-wasm_module = "python4j"
-prewarm = ["_python4j_host", "python4j_host"]
+name = "boomslang_host"
+wasm_module = "boomslang"
+prewarm = ["_boomslang_host", "boomslang_host"]
 
 [[functions]]
 name = "call"

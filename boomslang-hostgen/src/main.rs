@@ -2,7 +2,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "py4j-hostgen", about = "Generate host function bindings from extension.toml")]
+#[command(name = "boomslang-hostgen", about = "Generate host function bindings from extension.toml")]
 struct Cli {
     #[arg(help = "Path to extension.toml")]
     manifest: PathBuf,
@@ -22,8 +22,8 @@ fn main() {
         let package = cli
             .java_package
             .as_deref()
-            .unwrap_or("com.hubspot.python4j.extensions");
-        py4j_hostgen::generate_java(manifest_path, java_out.to_str().unwrap(), package);
+            .unwrap_or("com.hubspot.boomslang.extensions");
+        boomslang_hostgen::generate_java(manifest_path, java_out.to_str().unwrap(), package);
         eprintln!("Generated Java to {}", java_out.display());
     }
 }

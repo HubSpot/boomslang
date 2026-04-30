@@ -1,13 +1,13 @@
-# Build the final python4j WASM binary: Rust host linked against libpython3.14.a
+# Build the final boomslang WASM binary: Rust host linked against libpython3.14.a
 #
 # For CI (Blazar): the builder image is pre-built and artifacts are downloaded
 # in before: steps. For local dev: use `just wasm` instead (no Docker needed).
 #
 # To build locally with Docker:
-#   docker build -t python4j-builder ../builder/
+#   docker build -t boomslang-builder ../builder/
 #   # Then build this image with the builder as base
 #
-ARG BUILDER_IMAGE=python4j-builder
+ARG BUILDER_IMAGE=boomslang-builder
 FROM ${BUILDER_IMAGE}
 
 WORKDIR /build
@@ -37,7 +37,7 @@ RUN chmod +x cpython/scripts/build.sh \
 # Package artifact
 RUN set -ex \
     && mkdir -p /tmp/staging/bin /tmp/staging/usr/local/lib \
-    && cp cpython/build/output/python4j.wasm /tmp/staging/bin/ \
+    && cp cpython/build/output/boomslang.wasm /tmp/staging/bin/ \
     && cp -r cpython/build/cpython-wasi/usr/local/lib/python3.14 /tmp/staging/usr/local/lib/ \
     && for pkg in pydantic typing_inspection; do \
          [ -d cpython/lib/pip-packages/$pkg ] && cp -r cpython/lib/pip-packages/$pkg /tmp/staging/usr/local/lib/python3.14/; \

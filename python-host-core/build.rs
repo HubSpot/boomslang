@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const CPYTHON_WASI_VERSION: &str = "0.1.0";
-const CPYTHON_WASI_URL: &str = "https://github.com/HubSpot/python4j/releases/download";
+const CPYTHON_WASI_URL: &str = "https://github.com/HubSpot/boomslang/releases/download";
 
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());

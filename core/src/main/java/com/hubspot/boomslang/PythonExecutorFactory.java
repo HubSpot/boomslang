@@ -1,4 +1,4 @@
-package com.hubspot.python4j;
+package com.hubspot.boomslang;
 
 import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.Instance;
@@ -43,8 +43,8 @@ public class PythonExecutorFactory {
 
   private static final Logger LOG = LoggerFactory.getLogger(PythonExecutorFactory.class);
   private static final Object JAR_EXTRACTION_LOCK = new Object();
-  private static final String PYTHON_WASM_FILENAME = "python4j.wasm";
-  private static final String AOT_CLASS_NAME = "com.hubspot.python4j.compiled.PythonWasmMachine";
+  private static final String PYTHON_WASM_FILENAME = "boomslang.wasm";
+  private static final String AOT_CLASS_NAME = "com.hubspot.boomslang.compiled.PythonWasmMachine";
   private static final List<String> PYTHON_RESOURCES =
       ImmutableList.of("bin/" + PYTHON_WASM_FILENAME);
   private static final String PYTHON_LIB_DIR = "usr/local/lib/python3.14";

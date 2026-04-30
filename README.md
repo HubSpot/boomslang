@@ -1,8 +1,8 @@
-# python4j
+# boomslang
 
 Run Python 3.14 from Java, safely sandboxed via WebAssembly.
 
-python4j compiles CPython to [WebAssembly](https://webassembly.org/) and executes it through [Chicory](https://github.com/dylibso/chicory), a pure-Java WASM runtime. No native code, no JNI, no subprocess — Python runs as JVM bytecode with full memory isolation.
+boomslang compiles CPython to [WebAssembly](https://webassembly.org/) and executes it through [Chicory](https://github.com/dylibso/chicory), a pure-Java WASM runtime. No native code, no JNI, no subprocess — Python runs as JVM bytecode with full memory isolation.
 
 ## What's included
 
@@ -52,7 +52,7 @@ PythonResult r2 = instance.loadCode(bytecode);
 
 ### Call Java from Python
 
-python4j includes a built-in host bridge for calling Java functions from Python:
+boomslang includes a built-in host bridge for calling Java functions from Python:
 
 ```java
 var factory = PythonExecutorFactory.builder()
@@ -68,7 +68,7 @@ var factory = PythonExecutorFactory.builder()
 ```
 
 ```python
-from python4j_host import call, log
+from boomslang_host import call, log
 
 user_json = call("lookup_user", "12345")
 log(2, "got user data")
@@ -124,7 +124,7 @@ Each `PythonInstance` starts from a memory snapshot of an already-initialized in
 ## Project structure
 
 ```
-python4j/
+boomslang/
 ├── core/              Java runtime
 ├── python-host/       Rust WASM host (PyO3 + CPython)
 ├── cpython/           Native build infrastructure
@@ -135,7 +135,7 @@ python4j/
 │   ├── matplotlib-wasi/
 │   └── builder/           Docker image with build tools
 ├── extensions/        Host function extensions
-├── py4j-hostgen/      Extension code generator
+├── boomslang-hostgen/      Extension code generator
 ├── tests/
 └── benchmarks/
 ```

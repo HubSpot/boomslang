@@ -1,4 +1,4 @@
-package com.hubspot.python4j;
+package com.hubspot.boomslang;
 
 import com.google.common.collect.ImmutableMap;
 import java.util.Map;

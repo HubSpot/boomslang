@@ -1,4 +1,4 @@
-package com.hubspot.python4j;
+package com.hubspot.boomslang;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;

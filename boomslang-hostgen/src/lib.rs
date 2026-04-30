@@ -48,7 +48,7 @@ pub fn parse_manifest(path: &Path) -> Manifest {
 /// ```rust,ignore
 /// // build.rs
 /// fn main() {
-///     py4j_hostgen::generate_rust("extension.toml");
+///     boomslang_hostgen::generate_rust("extension.toml");
 /// }
 /// ```
 pub fn generate_rust(manifest_path: &str) {

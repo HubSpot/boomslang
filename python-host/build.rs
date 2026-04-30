@@ -4,8 +4,8 @@ use std::fs;
 fn main() {
     let wasi_sdk_path = env::var("WASI_SDK_PATH").expect("WASI_SDK_PATH is not set");
 
-    // Get lib dir from python4j-host-core's build.rs (DEP_PYTHON4J_HOST_CORE_LIB_DIR)
-    let lib_dir = env::var("DEP_PYTHON4J_HOST_CORE_LIB_DIR")
+    // Get lib dir from boomslang-host-core's build.rs (DEP_BOOMSLANG_HOST_CORE_LIB_DIR)
+    let lib_dir = env::var("DEP_BOOMSLANG_HOST_CORE_LIB_DIR")
         .unwrap_or_else(|_| env::var("PYTHON_PATH").expect("PYTHON_PATH is not set"));
 
     println!("cargo:rustc-link-search=native={}", lib_dir);

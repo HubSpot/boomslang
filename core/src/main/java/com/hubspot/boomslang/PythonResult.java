@@ -1,4 +1,4 @@
-package com.hubspot.python4j;
+package com.hubspot.boomslang;
 
 public record PythonResult(String stdout, String stderr, int exitCode, long executionTimeMs) {
 

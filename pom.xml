@@ -3,13 +3,13 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.hubspot</groupId>
-  <artifactId>python4j-parent</artifactId>
+  <artifactId>boomslang-parent</artifactId>
   <version>999-SNAPSHOT</version>
   <packaging>pom</packaging>
 
-  <name>python4j</name>
+  <name>boomslang</name>
   <description>Execute Python 3.14 from Java via WebAssembly</description>
-  <url>https://github.com/HubSpot/python4j</url>
+  <url>https://github.com/HubSpot/boomslang</url>
 
   <licenses>
     <license>
@@ -43,7 +43,7 @@
     <dependencies>
       <dependency>
         <groupId>com.hubspot</groupId>
-        <artifactId>python4j</artifactId>
+        <artifactId>boomslang</artifactId>
         <version>${project.version}</version>
       </dependency>
 

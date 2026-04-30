@@ -1,4 +1,4 @@
-package com.hubspot.python4j;
+package com.hubspot.boomslang;
 
 import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.Instance;
@@ -16,7 +16,7 @@ import org.slf4j.LoggerFactory;
 public class HostBridge {
 
   private static final Logger LOG = LoggerFactory.getLogger(HostBridge.class);
-  private static final String MODULE = "python4j";
+  private static final String MODULE = "boomslang";
 
   @FunctionalInterface
   public interface CallHandler {

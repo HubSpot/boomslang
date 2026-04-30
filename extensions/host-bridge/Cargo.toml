@@ -1,5 +1,5 @@
 [package]
-name = "python4j-ext-host-bridge"
+name = "boomslang-ext-host-bridge"
 version = "0.1.0"
 edition = "2024"
 
@@ -10,4 +10,4 @@ crate-type = ["rlib"]
 pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
 
 [build-dependencies]
-py4j-hostgen = { path = "../../py4j-hostgen" }
+boomslang-hostgen = { path = "../../boomslang-hostgen" }

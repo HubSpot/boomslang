@@ -1,15 +1,15 @@
-# Custom python4j Host Example
+# Custom boomslang Host Example
 
-This example shows how to build a custom python4j WASM binary with your own extensions.
+This example shows how to build a custom boomslang WASM binary with your own extensions.
 
 ## Why build a custom host?
 
-The stock `python-host` ships with the generic host bridge (`python4j_host.call()` / `python4j_host.log()`). If you need:
+The stock `python-host` ships with the generic host bridge (`boomslang_host.call()` / `boomslang_host.log()`). If you need:
 - Dedicated WASM imports with typed signatures (no JSON overhead)
 - Custom Python builtin modules
 - Additional prewarm modules
 
-...you build a custom host that composes `python4j-host-core` with your extensions.
+...you build a custom host that composes `boomslang-host-core` with your extensions.
 
 ## Building
 
@@ -25,7 +25,7 @@ cargo build --target wasm32-wasip1 --release
 
 ## Adding your own extension
 
-1. Create an extension crate using `py4j-hostgen`:
+1. Create an extension crate using `boomslang-hostgen`:
 
 ```bash
 # Define your extension contract
@@ -44,7 +44,7 @@ EOF
 # Create the crate
 mkdir -p my-ext/src
 cat > my-ext/build.rs <<EOF
-fn main() { py4j_hostgen::generate_rust("extension.toml"); }
+fn main() { boomslang_hostgen::generate_rust("extension.toml"); }
 EOF
 cat > my-ext/src/lib.rs <<EOF
 include!(concat!(env!("OUT_DIR"), "/ext_myext.rs"));
@@ -59,13 +59,13 @@ my-extension = { path = "../my-ext" }
 
 3. Register it in `src/lib.rs`:
 ```rust
-python4j_host_core::init(
+boomslang_host_core::init(
     || {
-        python4j_ext_host_bridge::register();
+        boomslang_ext_host_bridge::register();
         my_extension::register();
     },
     |py| {
-        python4j_ext_host_bridge::prewarm(py);
+        boomslang_ext_host_bridge::prewarm(py);
         my_extension::prewarm(py);
     },
 );

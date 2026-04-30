@@ -1,10 +1,10 @@
-package com.hubspot.python4j.tests;
+package com.hubspot.boomslang.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.hubspot.python4j.PythonExecutorFactory;
-import com.hubspot.python4j.PythonInstance;
-import com.hubspot.python4j.PythonResult;
+import com.hubspot.boomslang.PythonExecutorFactory;
+import com.hubspot.boomslang.PythonInstance;
+import com.hubspot.boomslang.PythonResult;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -26,11 +26,11 @@ class PythonExecutorTest {
         factory.runOnWasmThread(
             () -> {
               PythonInstance instance = factory.createInstance();
-              return instance.execute("print('hello from python4j')");
+              return instance.execute("print('hello from boomslang')");
             });
 
     assertThat(result.exitCode()).isEqualTo(0);
-    assertThat(result.stdout()).contains("hello from python4j");
+    assertThat(result.stdout()).contains("hello from boomslang");
   }
 
   @Test

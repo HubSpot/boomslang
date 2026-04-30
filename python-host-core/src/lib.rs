@@ -142,7 +142,7 @@ _WizerWarmupModel(x=1, y='test')
 /// ```rust,ignore
 /// #[unsafe(export_name = "wizer_initialize")]
 /// pub extern "C" fn wizer_initialize() {
-///     python4j_host_core::init(
+///     boomslang_host_core::init(
 ///         || {
 ///             my_extension::register();
 ///         },

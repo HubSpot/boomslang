@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.2
 #
-# python4j WASM builder image
+# boomslang WASM builder image
 # Provides: Rust toolchain, WASI SDK, Wizer, Binaryen for building
 # CPython + Rust host to wasm32-wasip1.
 #

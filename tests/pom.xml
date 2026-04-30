@@ -4,16 +4,16 @@
 
   <parent>
     <groupId>com.hubspot</groupId>
-    <artifactId>python4j-parent</artifactId>
+    <artifactId>boomslang-parent</artifactId>
     <version>999-SNAPSHOT</version>
   </parent>
 
-  <artifactId>python4j-tests</artifactId>
+  <artifactId>boomslang-tests</artifactId>
 
   <dependencies>
     <dependency>
       <groupId>com.hubspot</groupId>
-      <artifactId>python4j</artifactId>
+      <artifactId>boomslang</artifactId>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
