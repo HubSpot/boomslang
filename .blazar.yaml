@@ -36,3 +36,7 @@ before:
         cp /tmp/cpython-staging/bin/boomslang.wasm core/src/main/resources/python/bin/
         cp -r /tmp/cpython-staging/usr/local/lib/python3.14 core/src/main/resources/python/usr/local/lib/
         ls -lh core/src/main/resources/python/bin/boomslang.wasm
+
+        # Build and deploy core JAR with WASM so child modules (tests, benchmarks)
+        # can pull it as a dependency in their separate build pods
+        mvn install -pl core -DskipTests -Dbasepom.check.skip-spotbugs=true -q
