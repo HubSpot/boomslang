@@ -14,8 +14,8 @@ before:
       - |
         set -ex
         BRANCH="${GIT_BRANCH:-main}"
-        BRANCH_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${BRANCH}-cpython_arm64"
-        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython_arm64"
+        BRANCH_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${BRANCH}-cpython_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython_amd64"
 
         if download-artifact -n "$BRANCH_COORDS" -b "$BUILD_NUMBER" -o /tmp/cpython.tgz 2>/dev/null; then
           echo "Downloaded cpython from same build"

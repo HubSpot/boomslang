@@ -8,7 +8,7 @@ buildpack:
   name: Buildpack-Docker
 
 enableBuildTargets:
-  - arm64
+  - amd64
 
 buildResources:
   cpus: 32
@@ -20,8 +20,8 @@ before:
       - |
         set -ex
         BRANCH="${GIT_BRANCH:-main}"
-        BRANCH_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${BRANCH}-cpython-wasi_arm64"
-        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython-wasi_arm64"
+        BRANCH_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${BRANCH}-cpython-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython-wasi_amd64"
 
         mkdir -p vendor
         if [ "$BRANCH" != "main" ] && download-artifact -n "$BRANCH_COORDS" -o vendor/cpython-wasi.tgz 2>/dev/null; then

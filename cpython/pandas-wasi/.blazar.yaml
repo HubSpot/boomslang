@@ -5,7 +5,7 @@ provides:
 # at build time. No cycle: cpython-wasi depends on both, and we depend on
 # numpy-wasi; the DAG is cpython-wasi -> {pandas-wasi, numpy-wasi} and
 # pandas-wasi -> numpy-wasi. This dep also doubles as the scheduling hint
-# Blazar needs so the auto-generated _manifest sub-module waits for _arm64
+# Blazar needs so the auto-generated _manifest sub-module waits for _amd64
 # (without any `depends:` at all, Blazar schedules them in parallel and the
 # manifest step fails with "no such manifest: ...amd64-N").
 depends:
@@ -15,7 +15,7 @@ buildpack:
   name: Buildpack-Docker
 
 enableBuildTargets:
-  - arm64
+  - amd64
 
 # Request a Large build pod (32 vCPU / 64 GB). The ninja compile of pandas's
 # 45 C extensions is CPU-bound and the default Small pod (8 vCPU / 16 GB)
@@ -26,15 +26,15 @@ buildResources:
   memoryMb: 65536
 
 env:
-  PLATFORM_ARCHS: "arm64"
+  PLATFORM_ARCHS: "amd64"
 
 before:
   - description: "Download numpy-wasi artifact for patched numpy headers"
     commands:
       - |
         set -ex
-        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-numpy-wasi_arm64"
-        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-numpy-wasi_arm64"
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-numpy-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-numpy-wasi_amd64"
         mkdir -p vendor
         if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/numpy-wasi.tgz 2>/dev/null; then
             echo "Downloaded numpy-wasi from same build"

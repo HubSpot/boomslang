@@ -6,8 +6,8 @@ provides:
 # unrelated `pydantic-core-wasi` dependency instead: it breaks nothing
 # (pydantic is a sibling of ours, not an ancestor of cpython-wasi's import
 # of us), and its presence makes Blazar correctly sequence our sub-modules
-# (`_manifest` waits for `_arm64`). Without any `depends:` declaration
-# Blazar schedules `_manifest` in parallel with `_arm64` and the manifest
+# (`_manifest` waits for `_amd64`). Without any `depends:` declaration
+# Blazar schedules `_manifest` in parallel with `_amd64` and the manifest
 # step trips on "no such manifest" for the amd64-N tag that hasn't been
 # pushed yet.
 depends:
@@ -17,10 +17,10 @@ buildpack:
   name: Buildpack-Docker
 
 enableBuildTargets:
-  - arm64
+  - amd64
 
 env:
-  PLATFORM_ARCHS: "arm64"
+  PLATFORM_ARCHS: "amd64"
 
 after:
   onSuccess:

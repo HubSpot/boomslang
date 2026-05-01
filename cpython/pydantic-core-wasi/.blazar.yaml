@@ -5,13 +5,13 @@ buildpack:
   name: Blazar-Buildpack-Rust
 
 enableBuildTargets:
-  - arm64
+  - amd64
 
 env:
   RUST_VERSION: "1.85"
   RUN_TESTS: "false"
   TARGET_ARCHS: "wasm32-wasip1"
-  PLATFORM_ARCHS: "arm64"
+  PLATFORM_ARCHS: "amd64"
   CARGO_INSTALL: "false"
   SKIP_RPM: "true"
 
@@ -61,8 +61,8 @@ before:
 
         # Download CPython 3.14 headers and libpython from our cpython-wasi artifact
         # Try current branch first, fall back to main
-        ARTIFACT_NAME="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-cpython-wasi_arm64"
-        MAIN_ARTIFACT="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython-wasi_arm64"
+        ARTIFACT_NAME="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-cpython-wasi_amd64"
+        MAIN_ARTIFACT="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython-wasi_amd64"
 
         mkdir -p /tmp/cpython-wasi
         if download-artifact -n "$ARTIFACT_NAME" -o /tmp/cpython-wasi.tgz 2>/dev/null; then
