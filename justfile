@@ -11,7 +11,7 @@ default:
 # ============================================================
 
 # Build everything from scratch (takes a while — Docker builds are heavy)
-everything: builder-image build-pydantic-core-wasi build-numpy-wasi build-pandas-wasi build-matplotlib-wasi build-cpython-wasi pip-packages wasm resources build
+everything: builder-image build-pydantic-core-wasi build-numpy-wasi build-pandas-wasi build-matplotlib-wasi build-ijson-wasi build-cpython-wasi pip-packages wasm resources build
 
 # ============================================================
 # Docker image builds (WASM artifact production)
@@ -65,8 +65,20 @@ build-matplotlib-wasi:
     docker rm "$CID" > /dev/null
     echo "matplotlib-wasi artifact: $(ls -lh artifact.tgz)"
 
+# Build ijson C extension for wasm32-wasip1
+build-ijson-wasi:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "=== Building ijson-wasi ==="
+    cd cpython/ijson-wasi
+    DOCKER_BUILDKIT=1 docker build -t boomslang-ijson-wasi .
+    CID=$(docker create boomslang-ijson-wasi unused-cmd)
+    docker cp "$CID:/artifact.tgz" artifact.tgz
+    docker rm "$CID" > /dev/null
+    echo "ijson-wasi artifact: $(ls -lh artifact.tgz)"
+
 # Build cpython-wasi (CPython + all libraries merged into libpython3.14.a)
-# Requires: pydantic-core-wasi, numpy-wasi, pandas-wasi, matplotlib-wasi artifacts
+# Requires: pydantic-core-wasi, numpy-wasi, pandas-wasi, matplotlib-wasi, ijson-wasi artifacts
 build-cpython-wasi:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -75,7 +87,7 @@ build-cpython-wasi:
 
     # Populate vendor/ from upstream artifact builds
     mkdir -p vendor
-    for mod in pydantic-core-wasi numpy-wasi pandas-wasi matplotlib-wasi; do
+    for mod in pydantic-core-wasi numpy-wasi pandas-wasi matplotlib-wasi ijson-wasi; do
         src="../${mod}/artifact.tgz"
         if [ ! -f "$src" ]; then
             echo "ERROR: ${mod}/artifact.tgz not found. Run 'just build-${mod}' first."
@@ -237,6 +249,6 @@ clean:
     rm -rf {{runtime_resources}}/bin {{runtime_resources}}/usr
     rm -rf cpython/build
     rm -rf python-host/target
-    rm -f cpython/pydantic-core-wasi/artifact.tgz cpython/numpy-wasi/artifact.tgz cpython/pandas-wasi/artifact.tgz cpython/matplotlib-wasi/artifact.tgz cpython/cpython-wasi/artifact.tgz
+    rm -f cpython/pydantic-core-wasi/artifact.tgz cpython/numpy-wasi/artifact.tgz cpython/pandas-wasi/artifact.tgz cpython/matplotlib-wasi/artifact.tgz cpython/ijson-wasi/artifact.tgz cpython/cpython-wasi/artifact.tgz
     rm -rf cpython/cpython-wasi/vendor
     mvn clean || true

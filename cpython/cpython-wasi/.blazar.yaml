@@ -6,6 +6,7 @@ depends:
   - numpy-wasi
   - pandas-wasi
   - matplotlib-wasi
+  - ijson-wasi
 
 buildpack:
   name: Buildpack-Docker
@@ -98,6 +99,25 @@ before:
             exit 1
         fi
         ls -lh vendor/matplotlib-wasi.tgz
+
+  - description: "Download ijson-wasi artifact"
+    commands:
+      - |
+        set -ex
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-ijson-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-ijson-wasi_amd64"
+        mkdir -p vendor
+        if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/ijson-wasi.tgz 2>/dev/null; then
+            echo "Downloaded ijson-wasi from same build"
+        elif download-artifact -n "$COORDS" -o vendor/ijson-wasi.tgz 2>/dev/null; then
+            echo "Downloaded ijson-wasi from branch"
+        elif download-artifact -n "$MAIN_COORDS" -o vendor/ijson-wasi.tgz 2>/dev/null; then
+            echo "Downloaded ijson-wasi from main"
+        else
+            echo "ERROR: Could not download ijson-wasi artifact"
+            exit 1
+        fi
+        ls -lh vendor/ijson-wasi.tgz
 
 after:
   onSuccess:

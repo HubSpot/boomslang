@@ -391,6 +391,32 @@ class Solver:
     def updateVariables(self, *a, **k): pass
 STUB
 
+##############################
+# ijson (from Blazar artifact)
+##############################
+IJSON_LIB="${BUILD_DIR}/ijson-lib"
+
+log "Extracting ijson from vendor artifact..."
+mkdir -p "${IJSON_LIB}"
+if [ -f /build/vendor/ijson-wasi.tgz ]; then
+    tar xzf /build/vendor/ijson-wasi.tgz -C "${IJSON_LIB}"
+else
+    log "ERROR: ijson artifact not found in /build/vendor/ijson-wasi.tgz"
+    ls -la /build/vendor/ 2>/dev/null || echo "vendor/ does not exist"
+    exit 1
+fi
+cp -r "${IJSON_LIB}/python/ijson" usr/local/lib/python3.14/
+log "ijson archive: $(ls -lh ${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a)"
+cat "${IJSON_LIB}/manifest.txt"
+
+find usr/local/lib/python3.14/ijson -type f \( \
+        -name '*.c' -o -name '*.h' -o -name '*.so' \
+    \) -delete
+rm -rf usr/local/lib/python3.14/ijson/tests 2>/dev/null || true
+
+IJSON_VER=$(sed 's/^v//' "${IJSON_LIB}/version.txt" 2>/dev/null || echo "unknown")
+log "ijson-wasi artifact reports version: ${IJSON_VER}"
+
 log "Installing typing_extensions and annotated_types from vendor..."
 WHEELS_DIR="${PYDANTIC_LIB}/wheels"
 ls -la "${WHEELS_DIR}/" 2>/dev/null || log "No wheels dir, downloading from PyPI..."
@@ -495,6 +521,7 @@ $(for pa in ${PANDAS_LIB}/lib/wasm32-wasi/lib_pandas_*.a; do echo "addlib ${pa}"
 $(for ma in ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_matplotlib_*.a; do echo "addlib ${ma}"; done)
 addlib ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_freetype.a
 addlib ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_png.a
+addlib ${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a
 save
 end
 EOF
@@ -512,6 +539,7 @@ cp -v libpython3.14-aio.a "${OUTPUT_DIR}/lib/wasm32-wasi/libpython3.14.a"
 cp -v "${NUMPY_LIB}/lib/wasm32-wasi/"lib_numpy_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 cp -v "${PANDAS_LIB}/lib/wasm32-wasi/"lib_pandas_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 cp -v "${MATPLOTLIB_LIB}/lib/wasm32-wasi/"lib_matplotlib_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
+cp -v "${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a" "${OUTPUT_DIR}/lib/wasm32-wasi/"
 
 log "Generating pkg-config file..."
 mkdir -p "${OUTPUT_DIR}/lib/wasm32-wasi/pkgconfig"
