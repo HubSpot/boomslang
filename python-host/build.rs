@@ -40,7 +40,7 @@ fn main() {
     println!("cargo:rustc-link-arg=--export=__wasm_call_ctors");
     println!("cargo:rustc-link-arg=-z");
     println!("cargo:rustc-link-arg=stack-size=4194304");
-    println!("cargo:rustc-link-arg=--allow-multiple-definition");
+
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=WASI_SDK_PATH");
