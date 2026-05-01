@@ -6,7 +6,7 @@
 #
 ARG WASI_SDK_VERSION=24
 
-FROM docker.hubteam.com/buildpacks/build-image-rust:latest
+FROM rust:1.85-bookworm
 
 ARG WASI_SDK_VERSION
 ARG TARGETARCH
