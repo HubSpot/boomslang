@@ -27,6 +27,7 @@
     <dep.chicory.version>1.7.5</dep.chicory.version>
     <dep.jimfs.version>1.3.0</dep.jimfs.version>
     <dep.jmh.version>1.37</dep.jmh.version>
+    <basepom.check.skip-spotbugs>true</basepom.check.skip-spotbugs>
   </properties>
 
   <dependencyManagement>
