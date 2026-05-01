@@ -28,7 +28,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>21</maven.compiler.release>
 
-    <dep.chicory.version>1.7.0-hubspot-SNAPSHOT</dep.chicory.version>
+    <dep.chicory.version>1.7.5</dep.chicory.version>
     <dep.jackson.version>2.18.2</dep.jackson.version>
     <dep.guava.version>33.4.0-jre</dep.guava.version>
     <dep.jimfs.version>1.3.0</dep.jimfs.version>
