@@ -5,7 +5,7 @@
 #
 
 # ── Stage 1: Toolchain ────────────────────────────────────────
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.95-bookworm AS builder
 
 ARG TARGETARCH
 
