@@ -31,6 +31,7 @@ before:
         # Extract WASM binary + stdlib into Java resources
         mkdir -p core/src/main/resources/python/bin
         mkdir -p core/src/main/resources/python/usr/local/lib
+        mkdir -p /tmp/cpython-staging
         tar xzf /tmp/cpython.tgz -C /tmp/cpython-staging
         cp /tmp/cpython-staging/bin/boomslang.wasm core/src/main/resources/python/bin/
         cp -r /tmp/cpython-staging/usr/local/lib/python3.14 core/src/main/resources/python/usr/local/lib/
