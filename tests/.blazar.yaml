@@ -1,5 +1,5 @@
 depends:
-  - name: boomslang-parent
+  - name: boomslang
 
 buildResources:
   cpus: 32
