@@ -1,0 +1,34 @@
+depends:
+  - name: cpython
+
+buildResources:
+  cpus: 32
+  memoryMb: 65536
+
+before:
+  - description: "Download cpython WASM artifact and populate resources for tests"
+    commands:
+      - |
+        set -ex
+        BRANCH="${GIT_BRANCH:-main}"
+        BRANCH_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${BRANCH}-cpython_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython_amd64"
+
+        if download-artifact -n "$BRANCH_COORDS" -b "$BUILD_NUMBER" -o /tmp/cpython.tgz 2>/dev/null; then
+          echo "Downloaded cpython from same build"
+        elif download-artifact -n "$BRANCH_COORDS" -o /tmp/cpython.tgz 2>/dev/null; then
+          echo "Downloaded cpython from branch"
+        elif download-artifact -n "$MAIN_COORDS" -o /tmp/cpython.tgz 2>/dev/null; then
+          echo "Downloaded cpython from main"
+        else
+          echo "ERROR: Could not download cpython artifact"
+          exit 1
+        fi
+
+        mkdir -p ../core/src/main/resources/python/bin
+        mkdir -p ../core/src/main/resources/python/usr/local/lib
+        mkdir -p /tmp/cpython-staging
+        tar xzf /tmp/cpython.tgz -C /tmp/cpython-staging
+        cp /tmp/cpython-staging/bin/boomslang.wasm ../core/src/main/resources/python/bin/
+        cp -r /tmp/cpython-staging/usr/local/lib/python3.14 ../core/src/main/resources/python/usr/local/lib/
+        ls -lh ../core/src/main/resources/python/bin/boomslang.wasm
