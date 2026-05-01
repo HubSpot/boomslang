@@ -56,7 +56,10 @@ public class PythonInstance implements AutoCloseable {
   }
 
   public PythonInstance(
-      RuntimeImage image, HostFunction[] hostFunctions, @Nullable Path externalWorkDir) {
+    RuntimeImage image,
+    HostFunction[] hostFunctions,
+    @Nullable Path externalWorkDir
+  ) {
     this.instanceId = UUID.randomUUID().toString().substring(0, 8);
     this.libDir = image.getExtractedPythonPath().resolve("lib-" + instanceId);
 
@@ -71,15 +74,18 @@ public class PythonInstance implements AutoCloseable {
     this.workDir = externalWorkDir != null ? externalWorkDir : jimfsWorkDir;
     this.stdinStream = new ResettableByteArrayInputStream();
 
-    WasiOptions.Builder wasiOptionsBuilder =
-        WasiOptions.builder()
-            .withStdin(stdinStream)
-            .withDirectory("/usr", image.getExtractedPythonPath().resolve("usr"))
-            .withDirectory("/lib", libDir)
-            .withDirectory("/work", workDir)
-            .withEnvironment("PYTHONHOME", "/usr/local");
+    WasiOptions.Builder wasiOptionsBuilder = WasiOptions
+      .builder()
+      .withStdin(stdinStream)
+      .withDirectory("/usr", image.getExtractedPythonPath().resolve("usr"))
+      .withDirectory("/lib", libDir)
+      .withDirectory("/work", workDir)
+      .withEnvironment("PYTHONHOME", "/usr/local");
 
-    WasiPreview1 wasi = WasiPreview1.builder().withOptions(wasiOptionsBuilder.build()).build();
+    WasiPreview1 wasi = WasiPreview1
+      .builder()
+      .withOptions(wasiOptionsBuilder.build())
+      .build();
 
     Store store = new Store().addFunction(wasi.toHostFunctions());
     for (HostFunction hf : hostFunctions) {
@@ -90,18 +96,17 @@ public class PythonInstance implements AutoCloseable {
     int goldenMemoryPages = image.getGoldenMemoryPages();
 
     CopyOnWriteMemory[] memoryRef = new CopyOnWriteMemory[1];
-    Instance.Builder instanceBuilder =
-        Instance.builder(image.getModule())
-            .withImportValues(store.toImportValues())
-            .withMemoryFactory(
-                limits -> {
-                  MemoryLimits adjustedLimits =
-                      new MemoryLimits(
-                          Math.max(limits.initialPages(), goldenMemoryPages),
-                          limits.maximumPages());
-                  memoryRef[0] = new CopyOnWriteMemory(goldenMemory, adjustedLimits);
-                  return memoryRef[0];
-                });
+    Instance.Builder instanceBuilder = Instance
+      .builder(image.getModule())
+      .withImportValues(store.toImportValues())
+      .withMemoryFactory(limits -> {
+        MemoryLimits adjustedLimits = new MemoryLimits(
+          Math.max(limits.initialPages(), goldenMemoryPages),
+          limits.maximumPages()
+        );
+        memoryRef[0] = new CopyOnWriteMemory(goldenMemory, adjustedLimits);
+        return memoryRef[0];
+      });
 
     if (image.getMachineFactory() != null) {
       instanceBuilder.withMachineFactory(image.getMachineFactory());
@@ -109,8 +114,10 @@ public class PythonInstance implements AutoCloseable {
 
     this.wasmInstance = store.instantiate("python", imports -> instanceBuilder.build());
     this.cowMemory =
-        Objects.requireNonNull(
-            memoryRef[0], "CopyOnWriteMemory was not created during instantiation");
+      Objects.requireNonNull(
+        memoryRef[0],
+        "CopyOnWriteMemory was not created during instantiation"
+      );
 
     this.compileSourceFunc = wasmInstance.export("compile_source");
     this.loadBytecodeFunc = wasmInstance.export("load_bytecode");
@@ -155,13 +162,19 @@ public class PythonInstance implements AutoCloseable {
     try {
       wasmInstance.memory().write(sourcePtr, sourceBytes);
 
-      long[] result = compileSourceFunc.apply(sourcePtr, sourceLen, outputPtr, MAX_BYTECODE_SIZE);
+      long[] result = compileSourceFunc.apply(
+        sourcePtr,
+        sourceLen,
+        outputPtr,
+        MAX_BYTECODE_SIZE
+      );
       int bytecodeLen = Math.toIntExact(result[0]);
 
       if (bytecodeLen < 0) {
         String stderr = readStderr();
-        String errorMsg =
-            stderr.isEmpty() ? "Compilation failed with error code: " + bytecodeLen : stderr;
+        String errorMsg = stderr.isEmpty()
+          ? "Compilation failed with error code: " + bytecodeLen
+          : stderr;
         throw new PythonCompilationException(errorMsg);
       }
 
@@ -186,10 +199,9 @@ public class PythonInstance implements AutoCloseable {
         result = loadBytecodeFunc.apply(bytecodePtr, bytecode.length);
       } catch (RuntimeException e) {
         String stderr = readStderr();
-        String message =
-            stderr.isEmpty()
-                ? e.getMessage()
-                : (e.getMessage() != null ? stderr + "\nCaused by: " + e.getMessage() : stderr);
+        String message = stderr.isEmpty()
+          ? e.getMessage()
+          : (e.getMessage() != null ? stderr + "\nCaused by: " + e.getMessage() : stderr);
         throw new PythonExecutionException(message, e);
       }
       int exitCode = Math.toIntExact(result[0]);
@@ -201,12 +213,13 @@ public class PythonInstance implements AutoCloseable {
 
       long executionTimeMs = (System.nanoTime() - startTime) / 1_000_000;
 
-      return PythonResult.builder()
-          .setStdout(stdout)
-          .setStderr(stderr)
-          .setExitCode(exitCode)
-          .setExecutionTimeMs(executionTimeMs)
-          .build();
+      return PythonResult
+        .builder()
+        .setStdout(stdout)
+        .setStderr(stderr)
+        .setExitCode(exitCode)
+        .setExecutionTimeMs(executionTimeMs)
+        .build();
     } finally {
       deallocFunc.apply(bytecodePtr, bytecode.length);
       clearStdin();
@@ -219,10 +232,14 @@ public class PythonInstance implements AutoCloseable {
     long startTime = System.nanoTime();
 
     byte[] funcNameBytes = functionName.getBytes(StandardCharsets.UTF_8);
-    byte[] argsBytes = argsJson != null ? argsJson.getBytes(StandardCharsets.UTF_8) : new byte[0];
+    byte[] argsBytes = argsJson != null
+      ? argsJson.getBytes(StandardCharsets.UTF_8)
+      : new byte[0];
 
     int funcNamePtr = Math.toIntExact(allocFunc.apply(funcNameBytes.length)[0]);
-    int argsPtr = argsBytes.length > 0 ? Math.toIntExact(allocFunc.apply(argsBytes.length)[0]) : 0;
+    int argsPtr = argsBytes.length > 0
+      ? Math.toIntExact(allocFunc.apply(argsBytes.length)[0])
+      : 0;
 
     try {
       wasmInstance.memory().write(funcNamePtr, funcNameBytes);
@@ -230,8 +247,12 @@ public class PythonInstance implements AutoCloseable {
         wasmInstance.memory().write(argsPtr, argsBytes);
       }
 
-      long[] result =
-          executeFunctionFunc.apply(funcNamePtr, funcNameBytes.length, argsPtr, argsBytes.length);
+      long[] result = executeFunctionFunc.apply(
+        funcNamePtr,
+        funcNameBytes.length,
+        argsPtr,
+        argsBytes.length
+      );
       int exitCode = Math.toIntExact(result[0]);
 
       String stdout = readStdout();
@@ -239,12 +260,13 @@ public class PythonInstance implements AutoCloseable {
 
       long executionTimeMs = (System.nanoTime() - startTime) / 1_000_000;
 
-      return PythonResult.builder()
-          .setStdout(stdout)
-          .setStderr(stderr)
-          .setExitCode(exitCode)
-          .setExecutionTimeMs(executionTimeMs)
-          .build();
+      return PythonResult
+        .builder()
+        .setStdout(stdout)
+        .setStderr(stderr)
+        .setExitCode(exitCode)
+        .setExecutionTimeMs(executionTimeMs)
+        .build();
     } finally {
       deallocFunc.apply(funcNamePtr, funcNameBytes.length);
       if (argsPtr != 0) {
@@ -271,10 +293,9 @@ public class PythonInstance implements AutoCloseable {
       exitCode = Math.toIntExact(result[0]);
     } catch (RuntimeException e) {
       String stderr = readStderr();
-      String message =
-          stderr.isEmpty()
-              ? e.getMessage()
-              : (e.getMessage() != null ? stderr + "\nCaused by: " + e.getMessage() : stderr);
+      String message = stderr.isEmpty()
+        ? e.getMessage()
+        : (e.getMessage() != null ? stderr + "\nCaused by: " + e.getMessage() : stderr);
       throw new PythonExecutionException(message, e);
     } finally {
       deallocFunc.apply(scriptPtr, scriptLen);
@@ -286,12 +307,13 @@ public class PythonInstance implements AutoCloseable {
 
     long executionTimeMs = (System.nanoTime() - startTime) / 1_000_000;
 
-    return PythonResult.builder()
-        .setStdout(stdout)
-        .setStderr(stderr)
-        .setExitCode(exitCode)
-        .setExecutionTimeMs(executionTimeMs)
-        .build();
+    return PythonResult
+      .builder()
+      .setStdout(stdout)
+      .setStderr(stderr)
+      .setExitCode(exitCode)
+      .setExecutionTimeMs(executionTimeMs)
+      .build();
   }
 
   public synchronized void reset() {
@@ -344,25 +366,26 @@ public class PythonInstance implements AutoCloseable {
     try {
       if (Files.exists(libDir)) {
         Files.walkFileTree(
-            libDir,
-            new SimpleFileVisitor<>() {
-              @Override
-              public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
-                  throws IOException {
-                Files.delete(file);
-                return FileVisitResult.CONTINUE;
-              }
+          libDir,
+          new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
+              throws IOException {
+              Files.delete(file);
+              return FileVisitResult.CONTINUE;
+            }
 
-              @Override
-              public FileVisitResult postVisitDirectory(Path dir, IOException exc)
-                  throws IOException {
-                if (exc != null) {
-                  throw exc;
-                }
-                Files.delete(dir);
-                return FileVisitResult.CONTINUE;
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc)
+              throws IOException {
+              if (exc != null) {
+                throw exc;
               }
-            });
+              Files.delete(dir);
+              return FileVisitResult.CONTINUE;
+            }
+          }
+        );
       }
     } catch (IOException e) {
       LOG.warn("Failed to clean up lib directory: {}", libDir, e);

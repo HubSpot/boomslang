@@ -15,19 +15,18 @@ class PythonExecutorTest {
   @BeforeAll
   static void setUp() {
     factory =
-        PythonExecutorFactory.builder()
-            .addHostFunctions(SharedTestSetup.defaultHostFunctions())
-            .build();
+      PythonExecutorFactory
+        .builder()
+        .addHostFunctions(SharedTestSetup.defaultHostFunctions())
+        .build();
   }
 
   @Test
   void itRunsHelloWorld() {
-    PythonResult result =
-        factory.runOnWasmThread(
-            () -> {
-              PythonInstance instance = factory.createInstance();
-              return instance.execute("print('hello from boomslang')");
-            });
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance();
+      return instance.execute("print('hello from boomslang')");
+    });
 
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(result.stdout()).contains("hello from boomslang");
@@ -35,12 +34,10 @@ class PythonExecutorTest {
 
   @Test
   void itRunsArithmetic() {
-    PythonResult result =
-        factory.runOnWasmThread(
-            () -> {
-              PythonInstance instance = factory.createInstance();
-              return instance.execute("print(2 + 2)");
-            });
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance();
+      return instance.execute("print(2 + 2)");
+    });
 
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(result.stdout().trim()).isEqualTo("4");
@@ -48,12 +45,10 @@ class PythonExecutorTest {
 
   @Test
   void itImportsNumpy() {
-    PythonResult result =
-        factory.runOnWasmThread(
-            () -> {
-              PythonInstance instance = factory.createInstance();
-              return instance.execute("import numpy as np; print(np.array([1,2,3]).sum())");
-            });
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance();
+      return instance.execute("import numpy as np; print(np.array([1,2,3]).sum())");
+    });
 
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(result.stdout().trim()).isEqualTo("6");
@@ -61,13 +56,12 @@ class PythonExecutorTest {
 
   @Test
   void itImportsPandas() {
-    PythonResult result =
-        factory.runOnWasmThread(
-            () -> {
-              PythonInstance instance = factory.createInstance();
-              return instance.execute(
-                  "import pandas as pd; df = pd.DataFrame({'a': [1,2,3]}); print(df['a'].sum())");
-            });
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance();
+      return instance.execute(
+        "import pandas as pd; df = pd.DataFrame({'a': [1,2,3]}); print(df['a'].sum())"
+      );
+    });
 
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(result.stdout().trim()).isEqualTo("6");
@@ -75,20 +69,20 @@ class PythonExecutorTest {
 
   @Test
   void itImportsPydantic() {
-    PythonResult result =
-        factory.runOnWasmThread(
-            () -> {
-              PythonInstance instance = factory.createInstance();
-              return instance.execute(
-                  String.join(
-                      "\n",
-                      "from pydantic import BaseModel",
-                      "class User(BaseModel):",
-                      "    name: str",
-                      "    age: int",
-                      "u = User(name='Alice', age=30)",
-                      "print(u.model_dump_json())"));
-            });
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance();
+      return instance.execute(
+        String.join(
+          "\n",
+          "from pydantic import BaseModel",
+          "class User(BaseModel):",
+          "    name: str",
+          "    age: int",
+          "u = User(name='Alice', age=30)",
+          "print(u.model_dump_json())"
+        )
+      );
+    });
 
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(result.stdout()).contains("Alice");

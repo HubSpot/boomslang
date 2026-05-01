@@ -24,11 +24,12 @@ public class RuntimeImage {
   private final int goldenMemoryPages;
 
   private RuntimeImage(
-      WasmModule module,
-      Function<Instance, Machine> machineFactory,
-      Path extractedPythonPath,
-      byte[] goldenMemory,
-      int goldenMemoryPages) {
+    WasmModule module,
+    Function<Instance, Machine> machineFactory,
+    Path extractedPythonPath,
+    byte[] goldenMemory,
+    int goldenMemoryPages
+  ) {
     this.module = module;
     this.machineFactory = machineFactory;
     this.extractedPythonPath = extractedPythonPath;
@@ -37,18 +38,19 @@ public class RuntimeImage {
   }
 
   public static RuntimeImage create(
-      WasmModule module,
-      Function<Instance, Machine> machineFactory,
-      Path extractedPythonPath,
-      HostFunction... hostFunctions) {
+    WasmModule module,
+    Function<Instance, Machine> machineFactory,
+    Path extractedPythonPath,
+    HostFunction... hostFunctions
+  ) {
     LOG.debug("Creating RuntimeImage with golden memory snapshot");
     long startTime = System.currentTimeMillis();
 
-    WasiOptions wasiOptions =
-        WasiOptions.builder()
-            .withDirectory("/", extractedPythonPath)
-            .withEnvironment("PYTHONHOME", "/usr/local")
-            .build();
+    WasiOptions wasiOptions = WasiOptions
+      .builder()
+      .withDirectory("/", extractedPythonPath)
+      .withEnvironment("PYTHONHOME", "/usr/local")
+      .build();
 
     WasiPreview1 wasi = WasiPreview1.builder().withOptions(wasiOptions).build();
 
@@ -57,26 +59,37 @@ public class RuntimeImage {
       store.addFunction(hf);
     }
 
-    Instance.Builder instanceBuilder =
-        Instance.builder(module).withImportValues(store.toImportValues());
+    Instance.Builder instanceBuilder = Instance
+      .builder(module)
+      .withImportValues(store.toImportValues());
 
     if (machineFactory != null) {
       instanceBuilder.withMachineFactory(machineFactory);
     }
 
-    Instance initInstance = store.instantiate("python-init", imports -> instanceBuilder.build());
+    Instance initInstance = store.instantiate(
+      "python-init",
+      imports -> instanceBuilder.build()
+    );
 
     int pages = getMemoryPages(initInstance);
     byte[] goldenMemory = initInstance.memory().readBytes(0, pages * 65536);
 
     long elapsed = System.currentTimeMillis() - startTime;
     LOG.info(
-        "RuntimeImage created in {}ms, golden memory: {} pages ({} MB)",
-        elapsed,
-        pages,
-        (pages * 65536) / (1024 * 1024));
+      "RuntimeImage created in {}ms, golden memory: {} pages ({} MB)",
+      elapsed,
+      pages,
+      (pages * 65536) / (1024 * 1024)
+    );
 
-    return new RuntimeImage(module, machineFactory, extractedPythonPath, goldenMemory, pages);
+    return new RuntimeImage(
+      module,
+      machineFactory,
+      extractedPythonPath,
+      goldenMemory,
+      pages
+    );
   }
 
   public WasmModule getModule() {
