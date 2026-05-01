@@ -153,7 +153,7 @@ after:
           cp wheels/*.whl /tmp/artifact-staging/wheels/
 
           # Create artifact tarball in the module working directory
-          WORKSPACE="/usr/share/hubspot/build/workspace/${GIT_REPO}/pydantic-core-wasi"
-          cd /tmp/artifact-staging && tar czf "${WORKSPACE}/artifact.tgz" .
-          touch "${WORKSPACE}/.blazar_notify_deploy_service_and_upload_artifact_if_exists"
-          echo "Artifact created: $(ls -lh ${WORKSPACE}/artifact.tgz)"
+          cd /tmp/artifact-staging && tar czf "${OLDPWD}/artifact.tgz" .
+          cd "${OLDPWD}"
+          touch .blazar_notify_deploy_service_and_upload_artifact_if_exists
+          echo "Artifact created: $(ls -lh artifact.tgz)"
