@@ -65,8 +65,9 @@ RUN PYH=/tmp/cpython-wasi/include/python3.14/pyconfig.h \
 RUN mkdir -p /tmp/cpython-wasi/lib/wasm32-wasi \
     && ar rcs /tmp/cpython-wasi/lib/wasm32-wasi/libpython3.14.a
 
-# Copy sysconfigdata from repo
+# Copy sysconfigdata and wheels from repo
 COPY _sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/lib/wasm32-wasi/
+COPY wheels/ /build/wheels/
 
 # Build pydantic-core
 ENV CC_wasm32_wasip1="/opt/wasi-sdk/bin/clang"
@@ -80,7 +81,7 @@ RUN cargo build --target wasm32-wasip1 --release --lib
 RUN mkdir -p /tmp/artifact/lib /tmp/artifact/python /tmp/artifact/wheels \
     && cp target/wasm32-wasip1/release/lib_pydantic_core.a /tmp/artifact/lib/ \
     && cp -r python/pydantic_core /tmp/artifact/python/ \
-    && cp wheels/*.whl /tmp/artifact/wheels/ 2>/dev/null || true \
+    && cp /build/wheels/*.whl /tmp/artifact/wheels/ 2>/dev/null || true \
     && cd /tmp/artifact && tar czf /artifact.tgz .
 
 FROM scratch
