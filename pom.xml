@@ -2,6 +2,12 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
+  <parent>
+    <groupId>com.hubspot</groupId>
+    <artifactId>basepom</artifactId>
+    <version>69.1</version>
+  </parent>
+
   <groupId>com.hubspot</groupId>
   <artifactId>boomslang-parent</artifactId>
   <version>999-SNAPSHOT</version>
@@ -25,18 +31,10 @@
   </modules>
 
   <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <maven.compiler.release>21</maven.compiler.release>
-
+    <project.build.targetJdk>21</project.build.targetJdk>
     <dep.chicory.version>1.7.5</dep.chicory.version>
-    <dep.jackson.version>2.18.2</dep.jackson.version>
-    <dep.guava.version>33.4.0-jre</dep.guava.version>
     <dep.jimfs.version>1.3.0</dep.jimfs.version>
-    <dep.slf4j.version>2.0.16</dep.slf4j.version>
-    <dep.junit.version>5.11.4</dep.junit.version>
-    <dep.assertj.version>3.27.3</dep.assertj.version>
     <dep.jmh.version>1.37</dep.jmh.version>
-    <dep.jsr305.version>3.0.2</dep.jsr305.version>
   </properties>
 
   <dependencyManagement>
@@ -64,56 +62,11 @@
         <version>${dep.chicory.version}</version>
       </dependency>
 
-      <!-- Jackson -->
-      <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-databind</artifactId>
-        <version>${dep.jackson.version}</version>
-      </dependency>
-
-      <!-- Guava -->
-      <dependency>
-        <groupId>com.google.guava</groupId>
-        <artifactId>guava</artifactId>
-        <version>${dep.guava.version}</version>
-      </dependency>
-
       <!-- Jimfs (in-memory filesystem) -->
       <dependency>
         <groupId>com.google.jimfs</groupId>
         <artifactId>jimfs</artifactId>
         <version>${dep.jimfs.version}</version>
-      </dependency>
-
-      <!-- Logging -->
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-api</artifactId>
-        <version>${dep.slf4j.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-simple</artifactId>
-        <version>${dep.slf4j.version}</version>
-      </dependency>
-
-      <!-- Annotations -->
-      <dependency>
-        <groupId>com.google.code.findbugs</groupId>
-        <artifactId>jsr305</artifactId>
-        <version>${dep.jsr305.version}</version>
-      </dependency>
-
-      <!-- Testing -->
-      <dependency>
-        <groupId>org.junit.jupiter</groupId>
-        <artifactId>junit-jupiter-api</artifactId>
-        <version>${dep.junit.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.assertj</groupId>
-        <artifactId>assertj-core</artifactId>
-        <version>${dep.assertj.version}</version>
       </dependency>
 
       <!-- Benchmarks -->
@@ -135,16 +88,7 @@
       <plugins>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.13.0</version>
-          <configuration>
-            <release>${maven.compiler.release}</release>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.5.2</version>
           <configuration>
             <argLine>-XX:+UseG1GC -XX:CompileThreshold=1500 -XX:+UnlockDiagnosticVMOptions -XX:-DontCompileHugeMethods</argLine>
           </configuration>
@@ -153,18 +97,6 @@
           <groupId>com.dylibso.chicory</groupId>
           <artifactId>chicory-compiler-maven-plugin</artifactId>
           <version>${dep.chicory.version}</version>
-        </plugin>
-        <plugin>
-          <groupId>com.diffplug.spotless</groupId>
-          <artifactId>spotless-maven-plugin</artifactId>
-          <version>2.44.5</version>
-          <configuration>
-            <java>
-              <googleJavaFormat>
-                <version>1.27.0</version>
-              </googleJavaFormat>
-            </java>
-          </configuration>
         </plugin>
       </plugins>
     </pluginManagement>
