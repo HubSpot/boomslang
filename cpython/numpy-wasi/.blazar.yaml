@@ -1,18 +1,6 @@
 provides:
   - numpy-wasi
 
-# NOT `depends: cpython-wasi` — that would create a cycle, since cpython-wasi
-# depends on us (to merge numpy archives into libpython). We declare an
-# unrelated `pydantic-core-wasi` dependency instead: it breaks nothing
-# (pydantic is a sibling of ours, not an ancestor of cpython-wasi's import
-# of us), and its presence makes Blazar correctly sequence our sub-modules
-# (`_manifest` waits for `_amd64`). Without any `depends:` declaration
-# Blazar schedules `_manifest` in parallel with `_amd64` and the manifest
-# step trips on "no such manifest" for the amd64-N tag that hasn't been
-# pushed yet.
-depends:
-  - pydantic-core-wasi
-
 buildpack:
   name: Buildpack-Docker
 
