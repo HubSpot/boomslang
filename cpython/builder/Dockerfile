@@ -45,7 +45,7 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") \
 RUN rustup target add wasm32-wasip1
 
 # wabt (wasm-strip) — download from GitHub since apt is not reachable from Blazar
-ARG WABT_VERSION=1.0.36
+ARG WABT_VERSION=1.0.40
 RUN curl -fSL "https://github.com/WebAssembly/wabt/releases/download/${WABT_VERSION}/wabt-${WABT_VERSION}-ubuntu-20.04.tar.gz" \
     | tar -xz -C /opt \
     && ln -s /opt/wabt-${WABT_VERSION}/bin/wasm-strip /usr/local/bin/wasm-strip \
