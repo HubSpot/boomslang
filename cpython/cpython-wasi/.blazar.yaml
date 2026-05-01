@@ -11,7 +11,7 @@ buildpack:
   name: Buildpack-Docker
 
 enableBuildTargets:
-  - amd64
+  - arm64
 
 # Request a Large build pod (32 vCPU / 64 GB). The default Small pod (8 vCPU
 # / 16 GB) experienced SEVERE CPU throttling (440% of CPU time) during the
@@ -27,8 +27,8 @@ before:
     commands:
       - |
         set -ex
-        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-pydantic-core-wasi_amd64"
-        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-pydantic-core-wasi_amd64"
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-pydantic-core-wasi_arm64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-pydantic-core-wasi_arm64"
         mkdir -p vendor
         if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/pydantic-core-wasi.tgz 2>/dev/null; then
             echo "Downloaded pydantic-core from same build"
@@ -46,8 +46,8 @@ before:
     commands:
       - |
         set -ex
-        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-numpy-wasi_amd64"
-        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-numpy-wasi_amd64"
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-numpy-wasi_arm64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-numpy-wasi_arm64"
         mkdir -p vendor
         if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/numpy-wasi.tgz 2>/dev/null; then
             echo "Downloaded numpy-wasi from same build"
@@ -65,8 +65,8 @@ before:
     commands:
       - |
         set -ex
-        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-pandas-wasi_amd64"
-        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-pandas-wasi_amd64"
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-pandas-wasi_arm64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-pandas-wasi_arm64"
         mkdir -p vendor
         if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/pandas-wasi.tgz 2>/dev/null; then
             echo "Downloaded pandas-wasi from same build"
@@ -84,8 +84,8 @@ before:
     commands:
       - |
         set -ex
-        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-matplotlib-wasi_amd64"
-        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-matplotlib-wasi_amd64"
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-matplotlib-wasi_arm64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-matplotlib-wasi_arm64"
         mkdir -p vendor
         if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/matplotlib-wasi.tgz 2>/dev/null; then
             echo "Downloaded matplotlib-wasi from same build"

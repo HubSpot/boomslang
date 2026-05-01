@@ -5,13 +5,13 @@ buildpack:
   name: Blazar-Buildpack-Rust
 
 enableBuildTargets:
-  - amd64
+  - arm64
 
 env:
   RUST_VERSION: "1.85"
   RUN_TESTS: "false"
   TARGET_ARCHS: "wasm32-wasip1"
-  PLATFORM_ARCHS: "amd64"
+  PLATFORM_ARCHS: "arm64"
   CARGO_INSTALL: "false"
   SKIP_RPM: "true"
 
@@ -48,15 +48,21 @@ before:
       - |
         set -ex
 
-        # Download WASI SDK 20.0
-        curl -sL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sdk-20.0-linux.tar.gz \
+        # Download WASI SDK 24 (supports arm64 + amd64)
+        ARCH=$(uname -m)
+        case "$ARCH" in
+            x86_64)  SDK_ARCH="x86_64" ;;
+            aarch64) SDK_ARCH="arm64" ;;
+            *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+        esac
+        curl -sL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-${SDK_ARCH}-linux.tar.gz" \
             | tar xz -C /opt
-        ln -sf /opt/wasi-sdk-20.0 /opt/wasi-sdk
+        ln -sf "/opt/wasi-sdk-24.0-${SDK_ARCH}-linux" /opt/wasi-sdk
 
         # Download CPython 3.14 headers and libpython from our cpython-wasi artifact
         # Try current branch first, fall back to main
-        ARTIFACT_NAME="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-cpython-wasi_amd64"
-        MAIN_ARTIFACT="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython-wasi_amd64"
+        ARTIFACT_NAME="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-cpython-wasi_arm64"
+        MAIN_ARTIFACT="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-cpython-wasi_arm64"
 
         mkdir -p /tmp/cpython-wasi
         if download-artifact -n "$ARTIFACT_NAME" -o /tmp/cpython-wasi.tgz 2>/dev/null; then
