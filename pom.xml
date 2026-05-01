@@ -15,14 +15,6 @@
 
   <name>boomslang</name>
   <description>Execute Python 3.14 from Java via WebAssembly</description>
-  <url>https://github.com/HubSpot/boomslang</url>
-
-  <licenses>
-    <license>
-      <name>Apache License, Version 2.0</name>
-      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
-    </license>
-  </licenses>
 
   <modules>
     <module>core</module>
@@ -101,5 +93,13 @@
       </plugins>
     </pluginManagement>
   </build>
+  <url>https://github.com/HubSpot/boomslang</url>
+
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+    </license>
+  </licenses>
 
 </project>
