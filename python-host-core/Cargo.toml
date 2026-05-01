@@ -2,6 +2,7 @@
 name = "boomslang-host-core"
 version = "0.0.1"
 edition = "2024"
+links = "boomslang_host_core"
 license = "Apache-2.0"
 description = "Core library for building boomslang WASM hosts — CPython 3.14 + PyO3 exports for Java"
 repository = "https://github.com/HubSpot/boomslang"
