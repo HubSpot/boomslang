@@ -88,4 +88,23 @@ class PythonExecutorTest {
     assertThat(result.stdout()).contains("Alice");
     assertThat(result.stdout()).contains("30");
   }
+
+  @Test
+  void itImportsIjson() {
+    PythonResult result =
+        factory.runOnWasmThread(
+            () -> {
+              PythonInstance instance = factory.createInstance();
+              return instance.execute(
+                  String.join(
+                      "\n",
+                      "import io",
+                      "import ijson",
+                      "items = ijson.items(io.StringIO('{\"items\": [1, 2, 3]}'), 'items.item')",
+                      "print(sum(items))"));
+            });
+
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("6");
+  }
 }

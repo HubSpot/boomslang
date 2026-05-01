@@ -1,0 +1,17 @@
+provides:
+  - ijson-wasi
+
+buildpack:
+  name: Buildpack-Docker
+
+enableBuildTargets:
+  - amd64
+
+env:
+  PLATFORM_ARCHS: "amd64"
+
+after:
+  onSuccess:
+    - description: "Extract and publish artifact tarball"
+      commands:
+        - CID=$(docker create "$PLATFORM_IMAGE" /bin/true) && docker cp "$CID:/artifact.tgz" artifact.tgz && docker rm "$CID" && touch .blazar_notify_deploy_service_and_upload_artifact_if_exists
