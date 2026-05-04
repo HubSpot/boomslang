@@ -5,16 +5,12 @@
 #
 FROM rust:1.85-bookworm AS builder
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl xz-utils ca-certificates python3 \
-    && rm -rf /var/lib/apt/lists/*
-
-# WASI SDK 20 (matches the version pydantic-core was originally built with)
-RUN curl -sL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sdk-20.0-linux.tar.gz \
+# WASI SDK 24 (arch-aware)
+ARG TARGETARCH
+RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "x86_64") \
+    && curl -sL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-${ARCH}-linux.tar.gz" \
     | tar xz -C /opt \
-    && ln -sf /opt/wasi-sdk-20.0 /opt/wasi-sdk
+    && ln -sf "/opt/wasi-sdk-24.0-${ARCH}-linux" /opt/wasi-sdk
 
 ENV WASI_SDK_PATH=/opt/wasi-sdk
 
@@ -69,8 +65,9 @@ RUN PYH=/tmp/cpython-wasi/include/python3.14/pyconfig.h \
 RUN mkdir -p /tmp/cpython-wasi/lib/wasm32-wasi \
     && ar rcs /tmp/cpython-wasi/lib/wasm32-wasi/libpython3.14.a
 
-# Copy sysconfigdata from repo
+# Copy sysconfigdata and wheels from repo
 COPY _sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/lib/wasm32-wasi/
+COPY wheels/ /build/wheels/
 
 # Build pydantic-core
 ENV CC_wasm32_wasip1="/opt/wasi-sdk/bin/clang"
@@ -84,6 +81,7 @@ RUN cargo build --target wasm32-wasip1 --release --lib
 RUN mkdir -p /tmp/artifact/lib /tmp/artifact/python /tmp/artifact/wheels \
     && cp target/wasm32-wasip1/release/lib_pydantic_core.a /tmp/artifact/lib/ \
     && cp -r python/pydantic_core /tmp/artifact/python/ \
+    && cp /build/wheels/*.whl /tmp/artifact/wheels/ 2>/dev/null || true \
     && cd /tmp/artifact && tar czf /artifact.tgz .
 
 FROM scratch

@@ -29,6 +29,7 @@ fn main() {
     println!("cargo:rustc-link-lib=static=_matplotlib_path");
     println!("cargo:rustc-link-lib=static=_matplotlib_c_internal_utils");
     println!("cargo:rustc-link-lib=static=_matplotlib_agg");
+    println!("cargo:rustc-link-lib=static=_ijson_yajl2");
 
     println!("cargo:rustc-link-lib=static=c++");
     println!("cargo:rustc-link-lib=static=c++abi");

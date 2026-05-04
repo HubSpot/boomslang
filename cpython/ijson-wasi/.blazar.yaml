@@ -1,5 +1,5 @@
 provides:
-  - numpy-wasi
+  - ijson-wasi
 
 buildpack:
   name: Buildpack-Docker

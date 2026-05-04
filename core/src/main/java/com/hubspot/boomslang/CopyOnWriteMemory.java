@@ -24,16 +24,26 @@ public final class CopyOnWriteMemory implements Memory {
 
   private boolean initialized = false;
 
-  private static final VarHandle SHORT_HANDLE =
-      MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.LITTLE_ENDIAN);
-  private static final VarHandle INT_HANDLE =
-      MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.LITTLE_ENDIAN);
-  private static final VarHandle FLOAT_HANDLE =
-      MethodHandles.byteArrayViewVarHandle(float[].class, ByteOrder.LITTLE_ENDIAN);
-  private static final VarHandle LONG_HANDLE =
-      MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.LITTLE_ENDIAN);
-  private static final VarHandle DOUBLE_HANDLE =
-      MethodHandles.byteArrayViewVarHandle(double[].class, ByteOrder.LITTLE_ENDIAN);
+  private static final VarHandle SHORT_HANDLE = MethodHandles.byteArrayViewVarHandle(
+    short[].class,
+    ByteOrder.LITTLE_ENDIAN
+  );
+  private static final VarHandle INT_HANDLE = MethodHandles.byteArrayViewVarHandle(
+    int[].class,
+    ByteOrder.LITTLE_ENDIAN
+  );
+  private static final VarHandle FLOAT_HANDLE = MethodHandles.byteArrayViewVarHandle(
+    float[].class,
+    ByteOrder.LITTLE_ENDIAN
+  );
+  private static final VarHandle LONG_HANDLE = MethodHandles.byteArrayViewVarHandle(
+    long[].class,
+    ByteOrder.LITTLE_ENDIAN
+  );
+  private static final VarHandle DOUBLE_HANDLE = MethodHandles.byteArrayViewVarHandle(
+    double[].class,
+    ByteOrder.LITTLE_ENDIAN
+  );
 
   private final byte[] goldenSnapshot;
   private final int goldenPages;
@@ -51,7 +61,10 @@ public final class CopyOnWriteMemory implements Memory {
   }
 
   public CopyOnWriteMemory(
-      byte[] goldenSnapshot, MemoryLimits limits, Map<Integer, byte[]> initialPrivatePages) {
+    byte[] goldenSnapshot,
+    MemoryLimits limits,
+    Map<Integer, byte[]> initialPrivatePages
+  ) {
     this.goldenSnapshot = goldenSnapshot;
     this.goldenPages = goldenSnapshot.length / WASM_PAGE_SIZE;
     this.limits = limits;
@@ -65,19 +78,18 @@ public final class CopyOnWriteMemory implements Memory {
     }
 
     validateInitialPrivatePages(initialPrivatePages, maxWasmPages);
-    initialPrivatePages.forEach(
-        (globalCowIndex, pageData) -> {
-          int wasmPageIndex = globalCowIndex / COW_PAGES_PER_WASM_PAGE;
-          int cowSubPageIndex = globalCowIndex % COW_PAGES_PER_WASM_PAGE;
+    initialPrivatePages.forEach((globalCowIndex, pageData) -> {
+      int wasmPageIndex = globalCowIndex / COW_PAGES_PER_WASM_PAGE;
+      int cowSubPageIndex = globalCowIndex % COW_PAGES_PER_WASM_PAGE;
 
-          if (wasmPageIndex < maxWasmPages) {
-            if (this.privatePages[wasmPageIndex] == null) {
-              this.privatePages[wasmPageIndex] = new byte[COW_PAGES_PER_WASM_PAGE][];
-            }
-            this.privatePages[wasmPageIndex][cowSubPageIndex] = pageData.clone();
-            this.newPageCount++;
-          }
-        });
+      if (wasmPageIndex < maxWasmPages) {
+        if (this.privatePages[wasmPageIndex] == null) {
+          this.privatePages[wasmPageIndex] = new byte[COW_PAGES_PER_WASM_PAGE][];
+        }
+        this.privatePages[wasmPageIndex][cowSubPageIndex] = pageData.clone();
+        this.newPageCount++;
+      }
+    });
   }
 
   @Override
@@ -137,7 +149,10 @@ public final class CopyOnWriteMemory implements Memory {
       int wasmPageIndex = currentAddr / WASM_PAGE_SIZE;
       int cowSubPageIndex = (currentAddr % WASM_PAGE_SIZE) / COW_PAGE_SIZE;
       int offsetInCowPage = currentAddr & COW_PAGE_MASK;
-      int bytesInCowPage = Math.min(COW_PAGE_SIZE - offsetInCowPage, toIndex - currentAddr);
+      int bytesInCowPage = Math.min(
+        COW_PAGE_SIZE - offsetInCowPage,
+        toIndex - currentAddr
+      );
 
       byte[] page = ensurePrivateSubPage(wasmPageIndex, cowSubPageIndex);
       Arrays.fill(page, offsetInCowPage, offsetInCowPage + bytesInCowPage, value);
@@ -160,8 +175,10 @@ public final class CopyOnWriteMemory implements Memory {
     int cowSubPageIndex = (addr % WASM_PAGE_SIZE) / COW_PAGE_SIZE;
     int offsetInCowPage = addr & COW_PAGE_MASK;
 
-    if (privatePages[wasmPageIndex] != null
-        && privatePages[wasmPageIndex][cowSubPageIndex] != null) {
+    if (
+      privatePages[wasmPageIndex] != null &&
+      privatePages[wasmPageIndex][cowSubPageIndex] != null
+    ) {
       return privatePages[wasmPageIndex][cowSubPageIndex][offsetInCowPage];
     }
 
@@ -187,8 +204,10 @@ public final class CopyOnWriteMemory implements Memory {
       int offsetInCowPage = currentAddr & COW_PAGE_MASK;
       int bytesInCowPage = Math.min(COW_PAGE_SIZE - offsetInCowPage, remaining);
 
-      if (privatePages[wasmPageIndex] != null
-          && privatePages[wasmPageIndex][cowSubPageIndex] != null) {
+      if (
+        privatePages[wasmPageIndex] != null &&
+        privatePages[wasmPageIndex][cowSubPageIndex] != null
+      ) {
         byte[] page = privatePages[wasmPageIndex][cowSubPageIndex];
         System.arraycopy(page, offsetInCowPage, result, resultOffset, bytesInCowPage);
       } else if (currentAddr < goldenSnapshot.length) {
@@ -243,8 +262,10 @@ public final class CopyOnWriteMemory implements Memory {
     int wasmPageIndex = addr / WASM_PAGE_SIZE;
     int cowSubPageIndex = (addr % WASM_PAGE_SIZE) / COW_PAGE_SIZE;
 
-    if (privatePages[wasmPageIndex] != null
-        && privatePages[wasmPageIndex][cowSubPageIndex] != null) {
+    if (
+      privatePages[wasmPageIndex] != null &&
+      privatePages[wasmPageIndex][cowSubPageIndex] != null
+    ) {
       return privatePages[wasmPageIndex][cowSubPageIndex];
     }
 
@@ -264,10 +285,12 @@ public final class CopyOnWriteMemory implements Memory {
       }
     }
 
-    return ((read(addr) & 0xFF)
-        | ((read(addr + 1) & 0xFF) << 8)
-        | ((read(addr + 2) & 0xFF) << 16)
-        | ((read(addr + 3) & 0xFF) << 24));
+    return (
+      (read(addr) & 0xFF) |
+      ((read(addr + 1) & 0xFF) << 8) |
+      ((read(addr + 2) & 0xFF) << 16) |
+      ((read(addr + 3) & 0xFF) << 24)
+    );
   }
 
   @Override
@@ -300,8 +323,10 @@ public final class CopyOnWriteMemory implements Memory {
       }
     }
 
-    return (((long) readInt(addr) & 0xFFFFFFFFL)
-        | (((long) readInt(addr + 4) & 0xFFFFFFFFL) << 32));
+    return (
+      ((long) readInt(addr) & 0xFFFFFFFFL) |
+      (((long) readInt(addr + 4) & 0xFFFFFFFFL) << 32)
+    );
   }
 
   @Override
@@ -417,7 +442,8 @@ public final class CopyOnWriteMemory implements Memory {
     }
 
     cowPage = new byte[COW_PAGE_SIZE];
-    int cowPageStartAddr = (wasmPageIndex * WASM_PAGE_SIZE) + (cowSubPageIndex * COW_PAGE_SIZE);
+    int cowPageStartAddr =
+      (wasmPageIndex * WASM_PAGE_SIZE) + (cowSubPageIndex * COW_PAGE_SIZE);
 
     if (cowPageStartAddr < goldenSnapshot.length) {
       int bytesToCopy = Math.min(COW_PAGE_SIZE, goldenSnapshot.length - cowPageStartAddr);
@@ -435,17 +461,20 @@ public final class CopyOnWriteMemory implements Memory {
   }
 
   private void checkBounds(int addr, int size) {
-    if (addr < 0
-        || size < 0
-        || addr > sizeInBytes()
-        || (size > 0 && (addr + size) > sizeInBytes())) {
+    if (
+      addr < 0 ||
+      size < 0 ||
+      addr > sizeInBytes() ||
+      (size > 0 && (addr + size) > sizeInBytes())
+    ) {
       throw new WasmRuntimeException(
-          "out of bounds memory access: attempted to access address: "
-              + addr
-              + " with size: "
-              + size
-              + " but memory size is: "
-              + sizeInBytes());
+        "out of bounds memory access: attempted to access address: " +
+        addr +
+        " with size: " +
+        size +
+        " but memory size is: " +
+        sizeInBytes()
+      );
     }
   }
 
@@ -454,7 +483,9 @@ public final class CopyOnWriteMemory implements Memory {
   }
 
   private void validateInitialPrivatePages(
-      Map<Integer, byte[]> initialPrivatePages, int maxWasmPages) {
+    Map<Integer, byte[]> initialPrivatePages,
+    int maxWasmPages
+  ) {
     for (Map.Entry<Integer, byte[]> entry : initialPrivatePages.entrySet()) {
       int globalCowIndex = entry.getKey();
       byte[] pageData = entry.getValue();
@@ -462,19 +493,28 @@ public final class CopyOnWriteMemory implements Memory {
 
       if (globalCowIndex < 0) {
         throw new IllegalArgumentException(
-            "Invalid snapshot: Private page map contains a negative index: " + globalCowIndex);
+          "Invalid snapshot: Private page map contains a negative index: " +
+          globalCowIndex
+        );
       }
       if (pageData == null || pageData.length != COW_PAGE_SIZE) {
         throw new IllegalArgumentException(
-            String.format(
-                "Invalid snapshot: Page %d has incorrect size. Expected %d, got %d.",
-                globalCowIndex, COW_PAGE_SIZE, pageData != null ? pageData.length : -1));
+          String.format(
+            "Invalid snapshot: Page %d has incorrect size. Expected %d, got %d.",
+            globalCowIndex,
+            COW_PAGE_SIZE,
+            pageData != null ? pageData.length : -1
+          )
+        );
       }
       if (wasmPageIndex >= maxWasmPages) {
         throw new IllegalArgumentException(
-            String.format(
-                "Invalid snapshot: Page %d is out of bounds for the memory limit of %d WASM pages.",
-                globalCowIndex, maxWasmPages));
+          String.format(
+            "Invalid snapshot: Page %d is out of bounds for the memory limit of %d WASM pages.",
+            globalCowIndex,
+            maxWasmPages
+          )
+        );
       }
     }
   }

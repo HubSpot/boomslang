@@ -14,6 +14,6 @@ crate-type = ["rlib"]
 
 [dependencies]
 pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
-libmimalloc-sys = { version = "0.1", features = ["v3"] }
+libmimalloc-sys = "0.1"
 
 [build-dependencies]

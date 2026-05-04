@@ -1,0 +1,6 @@
+depends:
+  - name: boomslang
+
+buildResources:
+  cpus: 32
+  memoryMb: 65536

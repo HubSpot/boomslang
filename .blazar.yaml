@@ -1,0 +1,8 @@
+buildpack:
+  name: Blazar-Buildpack-Java
+
+depends:
+  - name: cpython
+
+properties:
+  basepom.check.skip-spotbugs: true
