@@ -175,10 +175,7 @@ do_wizer() {
         --allow-wasi \
         --wasm-bulk-memory true \
         --wasm-reference-types true \
-        --mapdir /usr::$BUILD_DIR/wizer-fs/usr \
-        --mapdir /lib::$BUILD_DIR/wizer-fs/lib \
-        --mapdir /work::$BUILD_DIR/wizer-fs/work \
-        --mapdir /tmp::$BUILD_DIR/wizer-fs/tmp \
+        --mapdir /::$BUILD_DIR/wizer-fs \
         -o "$output_wasm" \
         "$input_wasm" || {
             echo "WARNING: Wizer pre-initialization failed. Using non-wizered WASM."
