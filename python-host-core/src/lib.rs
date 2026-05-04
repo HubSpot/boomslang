@@ -104,6 +104,7 @@ fn prewarm_stdlib(py: Python) {
         "numpy", "numpy.linalg", "numpy.random", "numpy.fft",
         "pandas",
         "matplotlib", "matplotlib.pyplot",
+        "ijson",
     ];
 
     py.run(

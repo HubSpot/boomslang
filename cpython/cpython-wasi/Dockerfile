@@ -1,18 +1,10 @@
 # syntax=docker/dockerfile:1.4
-FROM ubuntu:22.04 AS builder
+FROM python:3.14-bookworm AS builder
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    git \
-    curl \
-    xz-utils \
-    pkg-config \
-    ca-certificates \
-    libffi-dev libssl-dev zlib1g-dev \
-    python3-pip \
-    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    for tool in gcc g++ make git curl xz tar python3 pip3; do \
+        command -v "${tool}"; \
+    done
 
 # wasi-sdk — dual-arch for local dev speed. ARG TARGETARCH without a default
 # lets buildx auto-populate from --platform. Native arm64 is ~5x faster than

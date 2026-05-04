@@ -16,8 +16,8 @@
       <artifactId>boomslang</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.google.jimfs</groupId>
-      <artifactId>jimfs</artifactId>
+      <groupId>com.dylibso.chicory</groupId>
+      <artifactId>runtime</artifactId>
     </dependency>
     <dependency>
       <groupId>org.openjdk.jmh</groupId>
@@ -26,6 +26,7 @@
     <dependency>
       <groupId>org.openjdk.jmh</groupId>
       <artifactId>jmh-generator-annprocess</artifactId>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 
@@ -47,13 +48,12 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <version>3.6.0</version>
         <executions>
           <execution>
-            <phase>package</phase>
             <goals>
               <goal>shade</goal>
             </goals>
+            <phase>package</phase>
             <configuration>
               <finalName>benchmarks</finalName>
               <transformers>

@@ -7,7 +7,7 @@ boomslang compiles CPython to [WebAssembly](https://webassembly.org/) and execut
 ## What's included
 
 - **CPython 3.14** compiled to `wasm32-wasip1`
-- **NumPy**, **Pandas**, **Matplotlib**, **Pydantic** statically linked
+- **NumPy**, **Pandas**, **Matplotlib**, **Pydantic**, **ijson** statically linked
 - **Copy-on-write memory** for fast instance creation (<1ms)
 - **Wizer pre-initialization** — Python interpreter + all libraries pre-imported at build time
 - **AOT compilation** — WASM compiled to JVM bytecode via Chicory for near-native speed
@@ -25,17 +25,20 @@ PythonResult result = factory.runOnWasmThread(() -> {
 System.out.println(result.stdout()); // "hello from Python"
 ```
 
-### NumPy, Pandas, Pydantic — they just work
+### NumPy, Pandas, Pydantic, ijson — they just work
 
 ```java
 instance.execute("""
+    import io
+    import ijson
     import numpy as np
     import pandas as pd
     from pydantic import BaseModel
 
+    total = sum(ijson.items(io.StringIO('{"items": [1, 2, 3]}'), 'items.item'))
     data = np.random.randn(100)
     df = pd.DataFrame({'values': data})
-    print(df.describe())
+    print(total, df.describe())
     """);
 ```
 
@@ -87,6 +90,7 @@ just build-pydantic-core-wasi   # Build pydantic-core static lib
 just build-numpy-wasi           # Build NumPy C extensions
 just build-pandas-wasi          # Build Pandas C extensions
 just build-matplotlib-wasi      # Build Matplotlib C extensions
+just build-ijson-wasi           # Build ijson C extension
 just build-cpython-wasi         # Compile CPython, merge all libraries
 just pip-packages               # Download Pydantic Python package
 just wasm                       # Build Rust host + Wizer pre-init
@@ -114,7 +118,7 @@ Python source code
          │
          ▼
 ┌─────────────────┐
-│  CPython 3.14   │  Full interpreter + stdlib + numpy/pandas/pydantic
+│  CPython 3.14   │  Full interpreter + stdlib + numpy/pandas/pydantic/ijson
 │  (wasm32-wasi)  │  Pre-initialized via Wizer snapshot
 └─────────────────┘
 ```
@@ -133,6 +137,7 @@ boomslang/
 │   ├── numpy-wasi/
 │   ├── pandas-wasi/
 │   ├── matplotlib-wasi/
+│   ├── ijson-wasi/
 │   └── builder/           Docker image with build tools
 ├── extensions/        Host function extensions
 ├── boomslang-hostgen/      Extension code generator

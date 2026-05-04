@@ -14,6 +14,9 @@ depends:
 buildpack:
   name: Buildpack-Docker
 
+enableBuildTargets:
+  - amd64
+
 # Request a Large build pod (32 vCPU / 64 GB). The ninja compile of pandas's
 # 45 C extensions is CPU-bound and the default Small pod (8 vCPU / 16 GB)
 # runs into heavy CPU throttling. Large provisions slower but the total

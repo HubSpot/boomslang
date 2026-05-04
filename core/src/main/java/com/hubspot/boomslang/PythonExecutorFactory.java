@@ -44,9 +44,11 @@ public class PythonExecutorFactory {
   private static final Logger LOG = LoggerFactory.getLogger(PythonExecutorFactory.class);
   private static final Object JAR_EXTRACTION_LOCK = new Object();
   private static final String PYTHON_WASM_FILENAME = "boomslang.wasm";
-  private static final String AOT_CLASS_NAME = "com.hubspot.boomslang.compiled.PythonWasmMachine";
-  private static final List<String> PYTHON_RESOURCES =
-      ImmutableList.of("bin/" + PYTHON_WASM_FILENAME);
+  private static final String AOT_CLASS_NAME =
+    "com.hubspot.boomslang.compiled.PythonWasmMachine";
+  private static final List<String> PYTHON_RESOURCES = ImmutableList.of(
+    "bin/" + PYTHON_WASM_FILENAME
+  );
   private static final String PYTHON_LIB_DIR = "usr/local/lib/python3.14";
   private static final long WASM_THREAD_STACK_SIZE = 16L * 1024 * 1024;
 
@@ -75,13 +77,14 @@ public class PythonExecutorFactory {
     Function<Instance, Machine> machineFactory = aotAvailable ? loadAotFactory() : null;
 
     this.runtimeImage =
-        RuntimeImage.create(module, machineFactory, extractedPythonPath, hostFunctions);
+      RuntimeImage.create(module, machineFactory, extractedPythonPath, hostFunctions);
 
     LOG.info(
-        "PythonExecutorFactory initialized with Jimfs at: {}, custom libraries: {}, host functions: {}",
-        extractedPythonPath,
-        builder.libraries.size(),
-        hostFunctions.length);
+      "PythonExecutorFactory initialized with Jimfs at: {}, custom libraries: {}, host functions: {}",
+      extractedPythonPath,
+      builder.libraries.size(),
+      hostFunctions.length
+    );
   }
 
   public static Builder builder() {
@@ -135,12 +138,16 @@ public class PythonExecutorFactory {
         installLibrary(sitePackages, library);
         LOG.debug("Installed custom library: {}", library.name());
       } catch (IOException e) {
-        throw new UncheckedIOException("Failed to install custom library: " + library.name(), e);
+        throw new UncheckedIOException(
+          "Failed to install custom library: " + library.name(),
+          e
+        );
       }
     }
   }
 
-  private void installLibrary(Path sitePackages, PythonLibrary library) throws IOException {
+  private void installLibrary(Path sitePackages, PythonLibrary library)
+    throws IOException {
     Path packageDir = sitePackages.resolve(library.name());
     Files.createDirectories(packageDir);
 
@@ -155,7 +162,9 @@ public class PythonExecutorFactory {
   }
 
   private FileSystem createPythonFileSystem() {
-    return Jimfs.newFileSystem(Configuration.unix().toBuilder().setAttributeViews("unix").build());
+    return Jimfs.newFileSystem(
+      Configuration.unix().toBuilder().setAttributeViews("unix").build()
+    );
   }
 
   private boolean checkAotAvailable() {
@@ -165,9 +174,10 @@ public class PythonExecutorFactory {
       return true;
     } catch (ClassNotFoundException e) {
       LOG.warn(
-          "AOT compiled Python WASM module NOT found (class {} missing). "
-              + "Python execution will use interpreted mode which is significantly slower.",
-          AOT_CLASS_NAME);
+        "AOT compiled Python WASM module NOT found (class {} missing). " +
+        "Python execution will use interpreted mode which is significantly slower.",
+        AOT_CLASS_NAME
+      );
       return false;
     }
   }
@@ -193,9 +203,10 @@ public class PythonExecutorFactory {
     Path wasmPath = extractedPythonPath.resolve("bin/" + PYTHON_WASM_FILENAME);
     if (!Files.exists(wasmPath)) {
       throw new IllegalStateException(
-          "Python WASM binary not found at: "
-              + wasmPath
-              + ". Ensure the WASM binary has been built and placed in resources.");
+        "Python WASM binary not found at: " +
+        wasmPath +
+        ". Ensure the WASM binary has been built and placed in resources."
+      );
     }
 
     LOG.debug("Loading Python WASM module from: {}", wasmPath);
@@ -263,21 +274,21 @@ public class PythonExecutorFactory {
   }
 
   private void copyDirectory(Path source, Path target) throws IOException {
-    Files.walk(source)
-        .forEach(
-            sourcePath -> {
-              try {
-                Path targetPath = target.resolve(source.relativize(sourcePath).toString());
-                if (Files.isDirectory(sourcePath)) {
-                  Files.createDirectories(targetPath);
-                } else {
-                  Files.createDirectories(targetPath.getParent());
-                  Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
-                }
-              } catch (IOException e) {
-                throw new UncheckedIOException(e);
-              }
-            });
+    Files
+      .walk(source)
+      .forEach(sourcePath -> {
+        try {
+          Path targetPath = target.resolve(source.relativize(sourcePath).toString());
+          if (Files.isDirectory(sourcePath)) {
+            Files.createDirectories(targetPath);
+          } else {
+            Files.createDirectories(targetPath.getParent());
+            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+          }
+        } catch (IOException e) {
+          throw new UncheckedIOException(e);
+        }
+      });
   }
 
   private void extractResource(Path tempDir, String relativePath) throws IOException {
@@ -304,26 +315,31 @@ public class PythonExecutorFactory {
   }
 
   private ExecutorService createWasmExecutorService() {
-    ThreadFactory threadFactory =
-        new ThreadFactory() {
-          private final ThreadGroup group = new ThreadGroup("python-executor");
-          private final AtomicInteger threadNumber = new AtomicInteger(1);
+    ThreadFactory threadFactory = new ThreadFactory() {
+      private final ThreadGroup group = new ThreadGroup("python-executor");
+      private final AtomicInteger threadNumber = new AtomicInteger(1);
 
-          @Override
-          public Thread newThread(Runnable r) {
-            Thread t =
-                new Thread(
-                    group,
-                    r,
-                    "python-executor-" + threadNumber.getAndIncrement(),
-                    WASM_THREAD_STACK_SIZE);
-            t.setDaemon(true);
-            return t;
-          }
-        };
+      @Override
+      public Thread newThread(Runnable r) {
+        Thread t = new Thread(
+          group,
+          r,
+          "python-executor-" + threadNumber.getAndIncrement(),
+          WASM_THREAD_STACK_SIZE
+        );
+        t.setDaemon(true);
+        return t;
+      }
+    };
 
     return new ThreadPoolExecutor(
-        10, 10, 60L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), threadFactory);
+      10,
+      10,
+      60L,
+      TimeUnit.SECONDS,
+      new LinkedBlockingQueue<>(),
+      threadFactory
+    );
   }
 
   public static class Builder {
@@ -349,7 +365,9 @@ public class PythonExecutorFactory {
     }
 
     public Builder withModule(String packageName, String moduleName, String content) {
-      this.libraries.add(PythonLibrary.of(packageName, Map.of(moduleName + ".py", content)));
+      this.libraries.add(
+          PythonLibrary.of(packageName, Map.of(moduleName + ".py", content))
+        );
       return this;
     }
 

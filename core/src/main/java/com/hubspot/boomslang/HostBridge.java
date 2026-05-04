@@ -36,7 +36,8 @@ public class HostBridge {
 
     private CallHandler callHandler;
     private LogHandler logHandler;
-    private final Map<String, Function<String, String>> handlers = new ConcurrentHashMap<>();
+    private final Map<String, Function<String, String>> handlers =
+      new ConcurrentHashMap<>();
 
     public Builder withCallHandler(CallHandler handler) {
       this.callHandler = handler;
@@ -59,13 +60,13 @@ public class HostBridge {
       CallHandler effectiveCallHandler = callHandler;
       if (effectiveCallHandler == null && !handlers.isEmpty()) {
         effectiveCallHandler =
-            (name, args) -> {
-              Function<String, String> h = handlers.get(name);
-              if (h == null) {
-                throw new RuntimeException("No handler registered for: " + name);
-              }
-              return h.apply(args);
-            };
+          (name, args) -> {
+            Function<String, String> h = handlers.get(name);
+            if (h == null) {
+              throw new RuntimeException("No handler registered for: " + name);
+            }
+            return h.apply(args);
+          };
       }
 
       if (effectiveCallHandler != null) {
@@ -79,57 +80,64 @@ public class HostBridge {
 
     private static HostFunction createCallFunction(CallHandler handler) {
       return new HostFunction(
-          MODULE,
-          "call",
-          List.of(
-              ValueType.I32,
-              ValueType.I32,
-              ValueType.I32,
-              ValueType.I32,
-              ValueType.I32,
-              ValueType.I32),
-          List.of(ValueType.I32),
-          (Instance instance, long... args) -> {
-            Memory memory = instance.memory();
-            int namePtr = Math.toIntExact(args[0]);
-            int nameLen = Math.toIntExact(args[1]);
-            String name = memory.readString(namePtr, nameLen, StandardCharsets.UTF_8);
-            int argsPtr = Math.toIntExact(args[2]);
-            int argsLen = Math.toIntExact(args[3]);
-            String argsJson = memory.readString(argsPtr, argsLen, StandardCharsets.UTF_8);
-            int resultPtr = Math.toIntExact(args[4]);
-            int resultMaxLen = Math.toIntExact(args[5]);
+        MODULE,
+        "call",
+        List.of(
+          ValueType.I32,
+          ValueType.I32,
+          ValueType.I32,
+          ValueType.I32,
+          ValueType.I32,
+          ValueType.I32
+        ),
+        List.of(ValueType.I32),
+        (Instance instance, long... args) -> {
+          Memory memory = instance.memory();
+          int namePtr = Math.toIntExact(args[0]);
+          int nameLen = Math.toIntExact(args[1]);
+          String name = memory.readString(namePtr, nameLen, StandardCharsets.UTF_8);
+          int argsPtr = Math.toIntExact(args[2]);
+          int argsLen = Math.toIntExact(args[3]);
+          String argsJson = memory.readString(argsPtr, argsLen, StandardCharsets.UTF_8);
+          int resultPtr = Math.toIntExact(args[4]);
+          int resultMaxLen = Math.toIntExact(args[5]);
 
-            try {
-              String result = handler.handle(name, argsJson);
-              byte[] resultBytes = result.getBytes(StandardCharsets.UTF_8);
-              if (resultBytes.length > resultMaxLen) {
-                return new long[] {-2};
-              }
-              memory.write(resultPtr, resultBytes);
-              return new long[] {resultBytes.length};
-            } catch (RuntimeException e) {
-              LOG.error("Host call '{}' failed", name, e);
-              return new long[] {-1};
+          try {
+            String result = handler.handle(name, argsJson);
+            byte[] resultBytes = result.getBytes(StandardCharsets.UTF_8);
+            if (resultBytes.length > resultMaxLen) {
+              return new long[] { -2 };
             }
-          });
+            memory.write(resultPtr, resultBytes);
+            return new long[] { resultBytes.length };
+          } catch (RuntimeException e) {
+            LOG.error("Host call '{}' failed", name, e);
+            return new long[] { -1 };
+          }
+        }
+      );
     }
 
     private static HostFunction createLogFunction(LogHandler handler) {
       return new HostFunction(
-          MODULE,
-          "log",
-          List.of(ValueType.I32, ValueType.I32, ValueType.I32),
-          List.of(),
-          (Instance instance, long... args) -> {
-            Memory memory = instance.memory();
-            int level = Math.toIntExact(args[0]);
-            int messagePtr = Math.toIntExact(args[1]);
-            int messageLen = Math.toIntExact(args[2]);
-            String message = memory.readString(messagePtr, messageLen, StandardCharsets.UTF_8);
-            handler.handle(level, message);
-            return null;
-          });
+        MODULE,
+        "log",
+        List.of(ValueType.I32, ValueType.I32, ValueType.I32),
+        List.of(),
+        (Instance instance, long... args) -> {
+          Memory memory = instance.memory();
+          int level = Math.toIntExact(args[0]);
+          int messagePtr = Math.toIntExact(args[1]);
+          int messageLen = Math.toIntExact(args[2]);
+          String message = memory.readString(
+            messagePtr,
+            messageLen,
+            StandardCharsets.UTF_8
+          );
+          handler.handle(level, message);
+          return null;
+        }
+      );
     }
   }
 }
