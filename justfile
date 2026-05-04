@@ -2,6 +2,7 @@ set dotenv-load := false
 
 cpython_wasi_dir := "cpython/build/cpython-wasi"
 runtime_resources := "core/src/main/resources/python"
+container_cli := env_var_or_default("BOOMSLANG_CONTAINER_CLI", "docker")
 
 default:
     @just --list
@@ -10,11 +11,11 @@ default:
 # Full pipeline: build everything from source
 # ============================================================
 
-# Build everything from scratch (takes a while — Docker builds are heavy)
+# Build everything from scratch (takes a while — container builds are heavy)
 everything: builder-image build-pydantic-core-wasi build-numpy-wasi build-pandas-wasi build-matplotlib-wasi build-ijson-wasi build-cpython-wasi pip-packages wasm resources build
 
 # ============================================================
-# Docker image builds (WASM artifact production)
+# Container image builds (WASM artifact production)
 # ============================================================
 
 # Build pydantic-core as static library for wasm32-wasip1
@@ -23,10 +24,19 @@ build-pydantic-core-wasi:
     set -euo pipefail
     echo "=== Building pydantic-core-wasi ==="
     cd cpython/pydantic-core-wasi
-    DOCKER_BUILDKIT=1 docker build -t boomslang-pydantic-core-wasi .
-    CID=$(docker create boomslang-pydantic-core-wasi unused-cmd)
-    docker cp "$CID:/artifact.tgz" artifact.tgz
-    docker rm "$CID" > /dev/null
+    if [ "{{container_cli}}" = "container" ]; then
+        out_dir=$(mktemp -d)
+        trap "rm -rf $out_dir" EXIT
+        container build --progress plain -t boomslang-pydantic-core-wasi -o type=local,dest="$out_dir" .
+        artifact=$(find "$out_dir" -type f -name artifact.tgz -print -quit)
+        [ -n "$artifact" ] || { echo "ERROR: artifact.tgz not found in container build output"; exit 1; }
+        cp "$artifact" artifact.tgz
+    else
+        DOCKER_BUILDKIT=1 docker build -t boomslang-pydantic-core-wasi .
+        CID=$(docker create boomslang-pydantic-core-wasi unused-cmd)
+        docker cp "$CID:/artifact.tgz" artifact.tgz
+        docker rm "$CID" > /dev/null
+    fi
     echo "pydantic-core-wasi artifact: $(ls -lh artifact.tgz)"
 
 # Build numpy C extensions for wasm32-wasip1
@@ -35,10 +45,19 @@ build-numpy-wasi:
     set -euo pipefail
     echo "=== Building numpy-wasi ==="
     cd cpython/numpy-wasi
-    DOCKER_BUILDKIT=1 docker build -t boomslang-numpy-wasi .
-    CID=$(docker create boomslang-numpy-wasi unused-cmd)
-    docker cp "$CID:/artifact.tgz" artifact.tgz
-    docker rm "$CID" > /dev/null
+    if [ "{{container_cli}}" = "container" ]; then
+        out_dir=$(mktemp -d)
+        trap "rm -rf $out_dir" EXIT
+        container build --progress plain -t boomslang-numpy-wasi -o type=local,dest="$out_dir" .
+        artifact=$(find "$out_dir" -type f -name artifact.tgz -print -quit)
+        [ -n "$artifact" ] || { echo "ERROR: artifact.tgz not found in container build output"; exit 1; }
+        cp "$artifact" artifact.tgz
+    else
+        DOCKER_BUILDKIT=1 docker build -t boomslang-numpy-wasi .
+        CID=$(docker create boomslang-numpy-wasi unused-cmd)
+        docker cp "$CID:/artifact.tgz" artifact.tgz
+        docker rm "$CID" > /dev/null
+    fi
     echo "numpy-wasi artifact: $(ls -lh artifact.tgz)"
 
 # Build pandas C extensions for wasm32-wasip1
@@ -48,11 +67,26 @@ build-pandas-wasi:
     echo "=== Building pandas-wasi ==="
     cd cpython/pandas-wasi
     mkdir -p vendor
-    cp ../numpy-wasi/artifact.tgz vendor/numpy-wasi.tgz
-    DOCKER_BUILDKIT=1 docker build -t boomslang-pandas-wasi .
-    CID=$(docker create boomslang-pandas-wasi unused-cmd)
-    docker cp "$CID:/artifact.tgz" artifact.tgz
-    docker rm "$CID" > /dev/null
+    src="../numpy-wasi/artifact.tgz"
+    if [ ! -f "$src" ]; then
+        echo "ERROR: numpy-wasi/artifact.tgz not found. Run 'just build-numpy-wasi' first."
+        exit 1
+    fi
+    cp "$src" vendor/numpy-wasi.tgz
+    echo "  vendor/numpy-wasi.tgz <- $src"
+    if [ "{{container_cli}}" = "container" ]; then
+        out_dir=$(mktemp -d)
+        trap "rm -rf $out_dir" EXIT
+        container build --progress plain -t boomslang-pandas-wasi -o type=local,dest="$out_dir" .
+        artifact=$(find "$out_dir" -type f -name artifact.tgz -print -quit)
+        [ -n "$artifact" ] || { echo "ERROR: artifact.tgz not found in container build output"; exit 1; }
+        cp "$artifact" artifact.tgz
+    else
+        DOCKER_BUILDKIT=1 docker build -t boomslang-pandas-wasi .
+        CID=$(docker create boomslang-pandas-wasi unused-cmd)
+        docker cp "$CID:/artifact.tgz" artifact.tgz
+        docker rm "$CID" > /dev/null
+    fi
     echo "pandas-wasi artifact: $(ls -lh artifact.tgz)"
 
 # Build matplotlib C extensions for wasm32-wasip1
@@ -62,11 +96,26 @@ build-matplotlib-wasi:
     echo "=== Building matplotlib-wasi ==="
     cd cpython/matplotlib-wasi
     mkdir -p vendor
-    cp ../numpy-wasi/artifact.tgz vendor/numpy-wasi.tgz
-    DOCKER_BUILDKIT=1 docker build -t boomslang-matplotlib-wasi .
-    CID=$(docker create boomslang-matplotlib-wasi unused-cmd)
-    docker cp "$CID:/artifact.tgz" artifact.tgz
-    docker rm "$CID" > /dev/null
+    src="../numpy-wasi/artifact.tgz"
+    if [ ! -f "$src" ]; then
+        echo "ERROR: numpy-wasi/artifact.tgz not found. Run 'just build-numpy-wasi' first."
+        exit 1
+    fi
+    cp "$src" vendor/numpy-wasi.tgz
+    echo "  vendor/numpy-wasi.tgz <- $src"
+    if [ "{{container_cli}}" = "container" ]; then
+        out_dir=$(mktemp -d)
+        trap "rm -rf $out_dir" EXIT
+        container build --progress plain -t boomslang-matplotlib-wasi -o type=local,dest="$out_dir" .
+        artifact=$(find "$out_dir" -type f -name artifact.tgz -print -quit)
+        [ -n "$artifact" ] || { echo "ERROR: artifact.tgz not found in container build output"; exit 1; }
+        cp "$artifact" artifact.tgz
+    else
+        DOCKER_BUILDKIT=1 docker build -t boomslang-matplotlib-wasi .
+        CID=$(docker create boomslang-matplotlib-wasi unused-cmd)
+        docker cp "$CID:/artifact.tgz" artifact.tgz
+        docker rm "$CID" > /dev/null
+    fi
     echo "matplotlib-wasi artifact: $(ls -lh artifact.tgz)"
 
 # Build ijson C extension for wasm32-wasip1
@@ -75,10 +124,19 @@ build-ijson-wasi:
     set -euo pipefail
     echo "=== Building ijson-wasi ==="
     cd cpython/ijson-wasi
-    DOCKER_BUILDKIT=1 docker build -t boomslang-ijson-wasi .
-    CID=$(docker create boomslang-ijson-wasi unused-cmd)
-    docker cp "$CID:/artifact.tgz" artifact.tgz
-    docker rm "$CID" > /dev/null
+    if [ "{{container_cli}}" = "container" ]; then
+        out_dir=$(mktemp -d)
+        trap "rm -rf $out_dir" EXIT
+        container build --progress plain -t boomslang-ijson-wasi -o type=local,dest="$out_dir" .
+        artifact=$(find "$out_dir" -type f -name artifact.tgz -print -quit)
+        [ -n "$artifact" ] || { echo "ERROR: artifact.tgz not found in container build output"; exit 1; }
+        cp "$artifact" artifact.tgz
+    else
+        DOCKER_BUILDKIT=1 docker build -t boomslang-ijson-wasi .
+        CID=$(docker create boomslang-ijson-wasi unused-cmd)
+        docker cp "$CID:/artifact.tgz" artifact.tgz
+        docker rm "$CID" > /dev/null
+    fi
     echo "ijson-wasi artifact: $(ls -lh artifact.tgz)"
 
 # Build cpython-wasi (CPython + all libraries merged into libpython3.14.a)
@@ -101,10 +159,19 @@ build-cpython-wasi:
         echo "  vendor/${mod}.tgz <- $src"
     done
 
-    DOCKER_BUILDKIT=1 docker build -t boomslang-cpython-wasi .
-    CID=$(docker create boomslang-cpython-wasi unused-cmd)
-    docker cp "$CID:/artifact.tgz" artifact.tgz
-    docker rm "$CID" > /dev/null
+    if [ "{{container_cli}}" = "container" ]; then
+        out_dir=$(mktemp -d)
+        trap "rm -rf $out_dir" EXIT
+        container build --progress plain -t boomslang-cpython-wasi -o type=local,dest="$out_dir" .
+        artifact=$(find "$out_dir" -type f -name artifact.tgz -print -quit)
+        [ -n "$artifact" ] || { echo "ERROR: artifact.tgz not found in container build output"; exit 1; }
+        cp "$artifact" artifact.tgz
+    else
+        DOCKER_BUILDKIT=1 docker build -t boomslang-cpython-wasi .
+        CID=$(docker create boomslang-cpython-wasi unused-cmd)
+        docker cp "$CID:/artifact.tgz" artifact.tgz
+        docker rm "$CID" > /dev/null
+    fi
 
     # Extract to the location the Rust host build expects
     mkdir -p ../build/cpython-wasi
@@ -113,14 +180,14 @@ build-cpython-wasi:
     ls ../build/cpython-wasi/
 
 # ============================================================
-# Build the builder Docker image (for CI use)
+# Build the builder container image (for CI use)
 # ============================================================
 
 builder-image:
-    docker build -t boomslang-builder cpython/builder/
+    if [ "{{container_cli}}" = "container" ]; then container build --progress plain -t boomslang-builder cpython/builder/; else docker build -t boomslang-builder cpython/builder/; fi
 
 # ============================================================
-# Local Rust + Java build (after Docker artifacts are ready)
+# Local Rust + Java build (after container artifacts are ready)
 # ============================================================
 
 # Download pip packages for local dev
@@ -142,16 +209,23 @@ pip-packages:
     echo "Pip packages installed to cpython/lib/pip-packages/"
     ls cpython/lib/pip-packages/
 
-# Build the WASM binary via Docker (no local WASI SDK/Wizer/Rust needed)
+# Build the WASM binary via a container engine (no local WASI SDK/Wizer/Rust needed)
 wasm:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "=== Building boomslang WASM (Docker) ==="
+    echo "=== Building boomslang WASM ({{container_cli}}) ==="
 
     # Ensure builder image exists
-    if ! docker image inspect boomslang-builder > /dev/null 2>&1; then
+    if [ "{{container_cli}}" = "container" ]; then
+        image_inspect="container image inspect boomslang-builder"
+        image_build="container build --progress plain -t boomslang-builder cpython/builder/"
+    else
+        image_inspect="docker image inspect boomslang-builder"
+        image_build="docker build -t boomslang-builder cpython/builder/"
+    fi
+    if ! $image_inspect > /dev/null 2>&1; then
         echo "Building builder image..."
-        docker build -t boomslang-builder cpython/builder/
+        $image_build
     fi
 
     # Prepare build context
@@ -186,10 +260,20 @@ wasm:
     COPY --from=0 /build/cpython/build/output/boomslang.wasm /boomslang.wasm
     DOCKERFILE
 
-    DOCKER_BUILDKIT=1 docker build -t boomslang-wasm "$TMPCTX"
-    CID=$(docker create boomslang-wasm unused-cmd)
-    docker cp "$CID:/boomslang.wasm" core/src/main/resources/python/bin/boomslang.wasm
-    docker rm "$CID" > /dev/null
+    mkdir -p core/src/main/resources/python/bin
+    if [ "{{container_cli}}" = "container" ]; then
+        out_dir=$(mktemp -d)
+        trap "rm -rf $TMPCTX $out_dir" EXIT
+        container build --progress plain -t boomslang-wasm -o type=local,dest="$out_dir" "$TMPCTX"
+        wasm_artifact=$(find "$out_dir" -type f -name boomslang.wasm -print -quit)
+        [ -n "$wasm_artifact" ] || { echo "ERROR: boomslang.wasm not found in container build output"; exit 1; }
+        cp "$wasm_artifact" core/src/main/resources/python/bin/boomslang.wasm
+    else
+        DOCKER_BUILDKIT=1 docker build -t boomslang-wasm "$TMPCTX"
+        CID=$(docker create boomslang-wasm unused-cmd)
+        docker cp "$CID:/boomslang.wasm" core/src/main/resources/python/bin/boomslang.wasm
+        docker rm "$CID" > /dev/null
+    fi
 
     echo "Installed: core/src/main/resources/python/bin/boomslang.wasm"
     ls -lh core/src/main/resources/python/bin/boomslang.wasm
@@ -216,13 +300,27 @@ resources:
         [ -f "cpython/lib/pip-packages/typing_extensions.py" ] && cp "cpython/lib/pip-packages/typing_extensions.py" {{runtime_resources}}/usr/local/lib/python3.14/
     fi
     # Copy built-in extension Python packages
-    echo "Copying built-in host bridge package"
-    cp -r extensions/host-bridge/lib/* {{runtime_resources}}/usr/local/lib/python3.14/
+    for ext_lib_dir in extensions/*/lib; do
+        if [ -d "$ext_lib_dir" ]; then
+            echo "Copying built-in extension packages from $ext_lib_dir"
+            cp -r "$ext_lib_dir/"* {{runtime_resources}}/usr/local/lib/python3.14/ 2>/dev/null || true
+        fi
+    done
+    # Copy extension Python packages
+    if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
+        IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
+        for ext_dir in "${EXT_DIRS[@]}"; do
+            if [ -d "$ext_dir/lib" ]; then
+                echo "Copying extension packages from $ext_dir/lib"
+                cp -r "$ext_dir/lib/"* {{runtime_resources}}/usr/local/lib/python3.14/ 2>/dev/null || true
+            fi
+        done
+    fi
     echo "Resources populated at {{runtime_resources}}/usr/local/lib/python3.14/"
 
 # Build Java project (AOT compile WASM + package)
 build:
-    mvn clean install -DskipTests
+    mvn clean package -DskipTests
 
 # Run tests
 test:

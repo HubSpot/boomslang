@@ -151,8 +151,24 @@ do_wizer() {
     fi
 
     # Copy built-in extension Python packages.
-    echo "Copying built-in host bridge package"
-    cp -r "$PROJECT_DIR/extensions/host-bridge/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/"
+    for ext_lib_dir in "$PROJECT_DIR"/extensions/*/lib; do
+        if [ -d "$ext_lib_dir" ]; then
+            echo "Copying built-in extension packages from $ext_lib_dir"
+            cp -r "$ext_lib_dir/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
+        fi
+    done
+
+    # Copy extension Python packages (PYTHON4J_EXTENSIONS paths are relative to PROJECT_DIR)
+    if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
+        IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
+        for ext_dir in "${EXT_DIRS[@]}"; do
+            local abs_ext_dir="$PROJECT_DIR/$ext_dir"
+            if [ -d "$abs_ext_dir/lib" ]; then
+                echo "Copying extension packages from $abs_ext_dir/lib"
+                cp -r "$abs_ext_dir/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
+            fi
+        done
+    fi
 
     wizer \
         --init-func wizer_initialize \
