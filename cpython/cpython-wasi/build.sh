@@ -488,6 +488,7 @@ ls ${PANDAS_LIB}/lib/wasm32-wasi/ 2>&1 | head -5 || log "    PANDAS_LIB dir miss
 log "  Generated addlib lines (sanity):"
 for pa in ${PANDAS_LIB}/lib/wasm32-wasi/lib_pandas_*.a; do echo "    addlib ${pa}"; done | head -3
 for ma in ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_matplotlib_*.a; do echo "    addlib ${ma}"; done
+log "  pydantic-core intentionally remains separate; the Rust host links it as a Cargo dependency."
 
 (${AR} -M <<EOF
 create libpython3.14-aio.a
@@ -501,8 +502,6 @@ addlib Modules/_decimal/libmpdec/libmpdec.a
 addlib Modules/_hacl/libHacl_Hash_SHA2.a
 addlib Modules/_hacl/libHacl_Hash_BLAKE2.a
 addlib Modules/_hacl/libHacl_HMAC.a
-# pydantic-core is intentionally not merged here. The Rust host links it as a
-# Cargo dependency so pydantic-core and the host share one Rust stdlib instance.
 addlib ${NUMPY_LIB}/lib/wasm32-wasi/lib_numpy_multiarray_umath.a
 addlib ${NUMPY_LIB}/lib/wasm32-wasi/lib_numpy_simd.a
 addlib ${NUMPY_LIB}/lib/wasm32-wasi/lib_numpy_pocketfft_umath.a
