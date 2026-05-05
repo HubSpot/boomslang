@@ -8,6 +8,7 @@ import com.dylibso.chicory.wasi.WasiOptions;
 import com.dylibso.chicory.wasi.WasiPreview1;
 import com.dylibso.chicory.wasm.types.MemoryLimits;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
@@ -18,6 +19,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
 import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,13 +54,22 @@ public class PythonInstance implements AutoCloseable {
   private final int goldenMemoryPages;
 
   public PythonInstance(RuntimeImage image, HostFunction[] hostFunctions) {
-    this(image, hostFunctions, null);
+    this(image, hostFunctions, null, null);
   }
 
   public PythonInstance(
     RuntimeImage image,
     HostFunction[] hostFunctions,
     @Nullable Path externalWorkDir
+  ) {
+    this(image, hostFunctions, externalWorkDir, null);
+  }
+
+  public PythonInstance(
+    RuntimeImage image,
+    HostFunction[] hostFunctions,
+    @Nullable Path externalWorkDir,
+    @Nullable BiFunction<Path, InputStream, WasiOptions> wasiOptionsFactory
   ) {
     this.instanceId = UUID.randomUUID().toString().substring(0, 8);
     this.libDir = image.getExtractedPythonPath().resolve("lib-" + instanceId);
@@ -74,18 +85,21 @@ public class PythonInstance implements AutoCloseable {
     this.workDir = externalWorkDir != null ? externalWorkDir : jimfsWorkDir;
     this.stdinStream = new ResettableByteArrayInputStream();
 
-    WasiOptions.Builder wasiOptionsBuilder = WasiOptions
-      .builder()
-      .withStdin(stdinStream)
-      .withDirectory("/usr", image.getExtractedPythonPath().resolve("usr"))
-      .withDirectory("/lib", libDir)
-      .withDirectory("/work", workDir)
-      .withEnvironment("PYTHONHOME", "/usr/local");
+    WasiOptions wasiOptions = wasiOptionsFactory != null
+      ? Objects.requireNonNull(
+        wasiOptionsFactory.apply(image.getExtractedPythonPath(), stdinStream),
+        "wasiOptionsFactory returned null"
+      )
+      : WasiOptions
+        .builder()
+        .withStdin(stdinStream)
+        .withDirectory("/usr", image.getExtractedPythonPath().resolve("usr"))
+        .withDirectory("/lib", libDir)
+        .withDirectory("/work", workDir)
+        .withEnvironment("PYTHONHOME", "/usr/local")
+        .build();
 
-    WasiPreview1 wasi = WasiPreview1
-      .builder()
-      .withOptions(wasiOptionsBuilder.build())
-      .build();
+    WasiPreview1 wasi = WasiPreview1.builder().withOptions(wasiOptions).build();
 
     Store store = new Store().addFunction(wasi.toHostFunctions());
     for (HostFunction hf : hostFunctions) {

@@ -3,9 +3,9 @@ package com.hubspot.boomslang;
 import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.Machine;
+import com.dylibso.chicory.wasi.WasiOptions;
 import com.dylibso.chicory.wasm.Parser;
 import com.dylibso.chicory.wasm.WasmModule;
-import com.google.common.collect.ImmutableList;
 import com.google.common.io.ByteStreams;
 import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -35,6 +36,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,12 +45,10 @@ public class PythonExecutorFactory {
 
   private static final Logger LOG = LoggerFactory.getLogger(PythonExecutorFactory.class);
   private static final Object JAR_EXTRACTION_LOCK = new Object();
-  private static final String PYTHON_WASM_FILENAME = "boomslang.wasm";
+  private static final String DEFAULT_WASM_RESOURCE = "python/bin/boomslang.wasm";
+  private static final String PYTHON_RESOURCE_PREFIX = "python/";
   private static final String AOT_CLASS_NAME =
     "com.hubspot.boomslang.compiled.PythonWasmMachine";
-  private static final List<String> PYTHON_RESOURCES = ImmutableList.of(
-    "bin/" + PYTHON_WASM_FILENAME
-  );
   private static final String PYTHON_LIB_DIR = "usr/local/lib/python3.14";
   private static final long WASM_THREAD_STACK_SIZE = 16L * 1024 * 1024;
 
@@ -59,25 +59,35 @@ public class PythonExecutorFactory {
   private final boolean aotAvailable;
   private final RuntimeImage runtimeImage;
   private final HostFunction[] hostFunctions;
+  private final BiFunction<Path, InputStream, WasiOptions> wasiOptionsFactory;
 
   public PythonExecutorFactory() {
     this(builder());
   }
 
   private PythonExecutorFactory(Builder builder) {
-    this.aotAvailable = checkAotAvailable();
     this.pythonFileSystem = createPythonFileSystem();
-    this.extractedPythonPath = extractPythonResources();
-    this.module = loadWasmModule();
+    this.extractedPythonPath = extractPythonResources(builder.wasmResource);
+    this.module = loadWasmModule(builder.wasmResource);
     this.executorService = createWasmExecutorService();
     this.hostFunctions = builder.hostFunctions.toArray(new HostFunction[0]);
+    this.wasiOptionsFactory = builder.wasiOptionsFactory;
 
     installCustomLibraries(builder.libraries);
 
-    Function<Instance, Machine> machineFactory = aotAvailable ? loadAotFactory() : null;
+    Function<Instance, Machine> machineFactory = resolveMachineFactory(
+      builder.machineFactory
+    );
+    this.aotAvailable = machineFactory != null;
 
     this.runtimeImage =
-      RuntimeImage.create(module, machineFactory, extractedPythonPath, hostFunctions);
+      RuntimeImage.create(
+        module,
+        machineFactory,
+        extractedPythonPath,
+        wasiOptionsFactory,
+        hostFunctions
+      );
 
     LOG.info(
       "PythonExecutorFactory initialized with Jimfs at: {}, custom libraries: {}, host functions: {}",
@@ -92,11 +102,11 @@ public class PythonExecutorFactory {
   }
 
   public PythonInstance createInstance(Path workDir) {
-    return new PythonInstance(runtimeImage, hostFunctions, workDir);
+    return new PythonInstance(runtimeImage, hostFunctions, workDir, wasiOptionsFactory);
   }
 
   public PythonInstance createInstance() {
-    return new PythonInstance(runtimeImage, hostFunctions);
+    return new PythonInstance(runtimeImage, hostFunctions, null, wasiOptionsFactory);
   }
 
   public <T> T runOnWasmThread(Callable<T> task) {
@@ -167,25 +177,21 @@ public class PythonExecutorFactory {
     );
   }
 
-  private boolean checkAotAvailable() {
-    try {
-      Class.forName(AOT_CLASS_NAME);
-      LOG.debug("AOT compiled Python WASM module is available");
-      return true;
-    } catch (ClassNotFoundException e) {
-      LOG.warn(
-        "AOT compiled Python WASM module NOT found (class {} missing). " +
-        "Python execution will use interpreted mode which is significantly slower.",
-        AOT_CLASS_NAME
-      );
-      return false;
+  private Function<Instance, Machine> resolveMachineFactory(
+    Function<Instance, Machine> configuredMachineFactory
+  ) {
+    if (configuredMachineFactory != null) {
+      LOG.debug("Using configured AOT machine factory");
+      return configuredMachineFactory;
     }
+    return loadAotFactory();
   }
 
   private Function<Instance, Machine> loadAotFactory() {
     try {
       Class<?> aotClass = Class.forName(AOT_CLASS_NAME);
       java.lang.reflect.Constructor<?> ctor = aotClass.getConstructor(Instance.class);
+      LOG.debug("AOT compiled Python WASM module is available");
       return instance -> {
         try {
           return (Machine) ctor.newInstance(instance);
@@ -193,14 +199,21 @@ public class PythonExecutorFactory {
           throw new RuntimeException("Failed to create AOT machine", e);
         }
       };
+    } catch (ClassNotFoundException e) {
+      LOG.warn(
+        "AOT compiled Python WASM module NOT found (class {} missing). " +
+        "Python execution will use interpreted mode which is significantly slower.",
+        AOT_CLASS_NAME
+      );
+      return null;
     } catch (ReflectiveOperationException e) {
       LOG.warn("Failed to load AOT factory, falling back to interpreter", e);
       return null;
     }
   }
 
-  private WasmModule loadWasmModule() {
-    Path wasmPath = extractedPythonPath.resolve("bin/" + PYTHON_WASM_FILENAME);
+  private WasmModule loadWasmModule(String wasmResource) {
+    Path wasmPath = extractedPythonPath.resolve(toExtractedRelativePath(wasmResource));
     if (!Files.exists(wasmPath)) {
       throw new IllegalStateException(
         "Python WASM binary not found at: " +
@@ -213,14 +226,12 @@ public class PythonExecutorFactory {
     return Parser.parse(wasmPath);
   }
 
-  private Path extractPythonResources() {
+  private Path extractPythonResources(String wasmResource) {
     try {
       Path rootDir = pythonFileSystem.getPath("/");
       LOG.debug("Extracting Python resources to Jimfs");
 
-      for (String resource : PYTHON_RESOURCES) {
-        extractResource(rootDir, resource);
-      }
+      extractResource(rootDir, wasmResource);
 
       extractPythonStdlib(rootDir);
       extractLibDynload(rootDir);
@@ -292,18 +303,37 @@ public class PythonExecutorFactory {
   }
 
   private void extractResource(Path tempDir, String relativePath) throws IOException {
-    String resourcePath = "/python/" + relativePath;
+    String resourcePath = normalizeResourcePath(relativePath);
     try (InputStream is = getClass().getResourceAsStream(resourcePath)) {
       if (is == null) {
         LOG.warn("Resource not found: {}", resourcePath);
         return;
       }
 
-      Path targetFile = tempDir.resolve(relativePath);
+      Path targetFile = tempDir.resolve(toExtractedRelativePath(resourcePath));
       Files.createDirectories(targetFile.getParent());
       Files.write(targetFile, ByteStreams.toByteArray(is));
       LOG.debug("Extracted {} to: {}", relativePath, targetFile);
     }
+  }
+
+  private static String normalizeResourcePath(String resourcePath) {
+    String normalized = Objects.requireNonNull(resourcePath, "resourcePath");
+    if (!normalized.startsWith("/")) {
+      normalized = "/" + normalized;
+    }
+    if (normalized.length() == 1) {
+      throw new IllegalArgumentException("WASM resource path must not be empty");
+    }
+    return normalized;
+  }
+
+  private static String toExtractedRelativePath(String resourcePath) {
+    String normalized = normalizeResourcePath(resourcePath).substring(1);
+    if (normalized.startsWith(PYTHON_RESOURCE_PREFIX)) {
+      return normalized.substring(PYTHON_RESOURCE_PREFIX.length());
+    }
+    return normalized;
   }
 
   private void extractLibDynload(Path tempDir) throws IOException {
@@ -346,8 +376,28 @@ public class PythonExecutorFactory {
 
     private final List<PythonLibrary> libraries = new ArrayList<>();
     private final List<HostFunction> hostFunctions = new ArrayList<>();
+    private String wasmResource = DEFAULT_WASM_RESOURCE;
+    private Function<Instance, Machine> machineFactory;
+    private BiFunction<Path, InputStream, WasiOptions> wasiOptionsFactory;
 
     private Builder() {}
+
+    public Builder withWasmResource(String resourcePath) {
+      this.wasmResource = resourcePath;
+      return this;
+    }
+
+    public Builder withMachineFactory(Function<Instance, Machine> factory) {
+      this.machineFactory = factory;
+      return this;
+    }
+
+    public Builder withWasiOptionsFactory(
+      BiFunction<Path, InputStream, WasiOptions> factory
+    ) {
+      this.wasiOptionsFactory = factory;
+      return this;
+    }
 
     public Builder addHostFunctions(HostFunction... functions) {
       Collections.addAll(this.hostFunctions, functions);
