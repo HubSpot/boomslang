@@ -21,7 +21,7 @@ class HostBridgeTest {
     factory =
       PythonExecutorFactory
         .builder()
-        .addHostFunctions(
+        .addExtension(
           HostBridge
             .builder()
             .withFunction(
@@ -37,7 +37,7 @@ class HostBridgeTest {
             .withLogHandler((level, message) ->
               LOG_MESSAGES.add("[" + level + "] " + message)
             )
-            .build()
+            .buildExtension()
         )
         .build();
   }

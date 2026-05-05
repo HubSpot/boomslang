@@ -59,14 +59,14 @@ boomslang includes a built-in host bridge for calling Java functions from Python
 
 ```java
 var factory = PythonExecutorFactory.builder()
-    .addHostFunctions(
+    .addExtension(
         HostBridge.builder()
             .withFunction("lookup_user", args -> {
                 String userId = args;
                 return userService.findById(userId).toJson();
             })
             .withLogHandler((level, msg) -> LOG.info("[Python] {}", msg))
-            .build())
+            .buildExtension())
     .build();
 ```
 

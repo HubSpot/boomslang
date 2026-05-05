@@ -46,11 +46,7 @@ just test                       # Run tests
 
 ### Extensions
 
-Build with extensions enabled:
-```bash
-PYTHON4J_EXTENSIONS="extensions/demo" just wasm-local
-PYTHON4J_EXTENSIONS="extensions/demo" just resources
-```
+The stock host includes the built-in `host-bridge` extension. For custom typed extensions, build a custom host that composes `boomslang-host-core` with your extension crate; see `examples/custom-host/`.
 
 ### Rust changes
 

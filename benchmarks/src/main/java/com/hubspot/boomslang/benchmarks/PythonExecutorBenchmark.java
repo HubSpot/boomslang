@@ -48,12 +48,12 @@ public class PythonExecutorBenchmark {
     factory =
       PythonExecutorFactory
         .builder()
-        .addHostFunctions(
+        .addExtension(
           HostBridge
             .builder()
             .withCallHandler((name, args) -> "{}")
             .withLogHandler((level, message) -> {})
-            .build()
+            .buildExtension()
         )
         .build();
 
