@@ -71,4 +71,25 @@ boomslang_host_core::init(
 );
 ```
 
-4. Build and use.
+4. Generate the typed Java host-function bridge for the extension:
+
+```bash
+cargo run --manifest-path ../../boomslang-hostgen/Cargo.toml -- \
+  ../my-ext/extension.toml \
+  --java-out ../../core/src/main/java \
+  --java-package com.hubspot.boomslang.generated
+```
+
+The generated class exposes typed functional interfaces and a builder, so Java users only fill in the host implementations:
+
+```java
+var extension = MyextHostFunctions.builder()
+    .withDoThing(input -> "result from Java")
+    .buildExtension();
+
+var factory = PythonExecutorFactory.builder()
+    .addExtension(extension)
+    .build();
+```
+
+5. Build and use.

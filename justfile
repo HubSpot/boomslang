@@ -47,6 +47,8 @@ build-pandas-wasi:
     set -euo pipefail
     echo "=== Building pandas-wasi ==="
     cd cpython/pandas-wasi
+    mkdir -p vendor
+    cp ../numpy-wasi/artifact.tgz vendor/numpy-wasi.tgz
     DOCKER_BUILDKIT=1 docker build -t boomslang-pandas-wasi .
     CID=$(docker create boomslang-pandas-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
@@ -59,6 +61,8 @@ build-matplotlib-wasi:
     set -euo pipefail
     echo "=== Building matplotlib-wasi ==="
     cd cpython/matplotlib-wasi
+    mkdir -p vendor
+    cp ../numpy-wasi/artifact.tgz vendor/numpy-wasi.tgz
     DOCKER_BUILDKIT=1 docker build -t boomslang-matplotlib-wasi .
     CID=$(docker create boomslang-matplotlib-wasi unused-cmd)
     docker cp "$CID:/artifact.tgz" artifact.tgz
@@ -154,7 +158,11 @@ wasm:
     TMPCTX=$(mktemp -d)
     trap "rm -rf $TMPCTX" EXIT
 
-    cp -r python-host "$TMPCTX/python-host"
+    mkdir -p "$TMPCTX/python-host" "$TMPCTX/python-host-core" "$TMPCTX/extensions" "$TMPCTX/boomslang-hostgen"
+    rsync -a --exclude target python-host/ "$TMPCTX/python-host/"
+    rsync -a --exclude target python-host-core/ "$TMPCTX/python-host-core/"
+    rsync -a --exclude target extensions/ "$TMPCTX/extensions/"
+    rsync -a --exclude target boomslang-hostgen/ "$TMPCTX/boomslang-hostgen/"
     cp -r cpython/build/cpython-wasi "$TMPCTX/cpython-wasi"
     cp -r cpython/lib "$TMPCTX/lib"
     [ -d cpython/lib/pip-packages ] && cp -r cpython/lib/pip-packages "$TMPCTX/pip-packages" || mkdir -p "$TMPCTX/pip-packages"
@@ -168,6 +176,9 @@ wasm:
     COPY lib/ cpython/lib/
     COPY pip-packages/ cpython/lib/pip-packages/
     COPY python-host/ python-host/
+    COPY python-host-core/ python-host-core/
+    COPY extensions/ extensions/
+    COPY boomslang-hostgen/ boomslang-hostgen/
 
     RUN cd python-host && chmod +x build-wasm.sh && ./build-wasm.sh all
 
@@ -204,16 +215,9 @@ resources:
         done
         [ -f "cpython/lib/pip-packages/typing_extensions.py" ] && cp "cpython/lib/pip-packages/typing_extensions.py" {{runtime_resources}}/usr/local/lib/python3.14/
     fi
-    # Copy extension Python packages
-    if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
-        IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
-        for ext_dir in "${EXT_DIRS[@]}"; do
-            if [ -d "$ext_dir/lib" ]; then
-                echo "Copying extension packages from $ext_dir/lib"
-                cp -r "$ext_dir/lib/"* {{runtime_resources}}/usr/local/lib/python3.14/ 2>/dev/null || true
-            fi
-        done
-    fi
+    # Copy built-in extension Python packages
+    echo "Copying built-in host bridge package"
+    cp -r extensions/host-bridge/lib/* {{runtime_resources}}/usr/local/lib/python3.14/
     echo "Resources populated at {{runtime_resources}}/usr/local/lib/python3.14/"
 
 # Build Java project (AOT compile WASM + package)

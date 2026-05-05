@@ -354,6 +354,10 @@ public class PythonExecutorFactory {
       return this;
     }
 
+    public Builder addExtension(BoomslangExtension extension) {
+      return addHostFunctions(extension.hostFunctions());
+    }
+
     public Builder withLibrary(PythonLibrary library) {
       this.libraries.add(library);
       return this;

@@ -73,7 +73,7 @@ COPY lib/pydantic_core/ cpython/lib/pydantic_core/
 # Build: compile Rust host against upstream libpython, apply Wizer, optimize
 RUN chmod +x cpython/scripts/build.sh \
     && cd python-host \
-    && PYTHON4J_EXTENSIONS="../extensions/host-bridge" ./build-wasm.sh all
+    && ./build-wasm.sh all
 
 # Package artifact
 RUN set -ex \

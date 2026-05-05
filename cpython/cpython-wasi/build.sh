@@ -501,7 +501,8 @@ addlib Modules/_decimal/libmpdec/libmpdec.a
 addlib Modules/_hacl/libHacl_Hash_SHA2.a
 addlib Modules/_hacl/libHacl_Hash_BLAKE2.a
 addlib Modules/_hacl/libHacl_HMAC.a
-addlib ${PYDANTIC_LIB}/lib/lib_pydantic_core.a
+# pydantic-core is intentionally not merged here. The Rust host links it as a
+# Cargo dependency so pydantic-core and the host share one Rust stdlib instance.
 addlib ${NUMPY_LIB}/lib/wasm32-wasi/lib_numpy_multiarray_umath.a
 addlib ${NUMPY_LIB}/lib/wasm32-wasi/lib_numpy_simd.a
 addlib ${NUMPY_LIB}/lib/wasm32-wasi/lib_numpy_pocketfft_umath.a

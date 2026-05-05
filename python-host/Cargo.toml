@@ -17,3 +17,6 @@ lto = "thin"
 [dependencies]
 boomslang-host-core = { version = "0.0.1", path = "../python-host-core" }
 boomslang-ext-host-bridge = { version = "0.0.1", path = "../extensions/host-bridge" }
+# Link pydantic-core here instead of merging it into libpython3.14.a so the
+# Rust host and pydantic-core share one Rust stdlib instance.
+pydantic-core = { git = "https://github.com/pydantic/pydantic-core", tag = "v2.41.5", package = "pydantic-core" }

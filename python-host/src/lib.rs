@@ -1,3 +1,5 @@
+use pydantic_core as _;
+
 pub use boomslang_host_core::export::*;
 pub use boomslang_host_core::stubs::*;
 

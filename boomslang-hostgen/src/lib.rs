@@ -1,3 +1,4 @@
+use askama::Template;
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use serde::Deserialize;
 use std::env;
@@ -275,206 +276,202 @@ fn rust_py_type(ty: &str) -> &'static str {
 
 // ── Java codegen ──────────────────────────────────────────────
 
+#[derive(Template)]
+#[template(path = "java_host_functions.java", escape = "none")]
+struct JavaHostFunctionsTemplate {
+    package: String,
+    class_name: String,
+    extension_name: String,
+    wasm_module: String,
+    functions: Vec<JavaFunctionTemplate>,
+}
+
+struct JavaFunctionTemplate {
+    name: String,
+    upper_name: String,
+    field: String,
+    handler_type: String,
+    with_method: String,
+    return_type: &'static str,
+    interface_params: String,
+    wasm_params: String,
+    wasm_returns: String,
+    param_reads: String,
+    return_handling: String,
+    error_handling: &'static str,
+}
+
 pub fn generate_java_code(m: &Manifest, package: &str) -> String {
     let ext_name = &m.extension.name;
-    let class_name = format!("{}HostFunctions", ext_name.to_upper_camel_case());
-    let wasm_mod = m.extension.wasm_module.as_deref().unwrap_or(ext_name);
+    let template = JavaHostFunctionsTemplate {
+        package: package.to_string(),
+        class_name: format!("{}HostFunctions", ext_name.to_upper_camel_case()),
+        extension_name: ext_name.to_string(),
+        wasm_module: m.extension.wasm_module.as_deref().unwrap_or(ext_name).to_string(),
+        functions: m.functions.iter().map(java_function_template).collect(),
+    };
 
-    let mut out = String::new();
-    out.push_str(&format!("package {};\n\n", package));
-    out.push_str("import com.dylibso.chicory.runtime.HostFunction;\n");
-    out.push_str("import com.dylibso.chicory.runtime.Instance;\n");
-    out.push_str("import com.dylibso.chicory.runtime.Memory;\n");
-    out.push_str("import com.dylibso.chicory.wasm.types.ValueType;\n");
-    out.push_str("import java.nio.charset.StandardCharsets;\n");
-    out.push_str("import java.util.ArrayList;\n");
-    out.push_str("import java.util.List;\n\n");
-
-    out.push_str(&format!("public class {} {{\n\n", class_name));
-    out.push_str(&format!(
-        "  private static final String MODULE = \"{}\";\n\n",
-        wasm_mod
-    ));
-
-    for f in &m.functions {
-        out.push_str(&generate_java_interface(f));
-    }
-
-    out.push_str("  public static Builder builder() {\n");
-    out.push_str("    return new Builder();\n");
-    out.push_str("  }\n\n");
-
-    out.push_str("  public static class Builder {\n\n");
-    for f in &m.functions {
-        let handler_type = format!("{}Handler", f.name.to_upper_camel_case());
-        let field = f.name.to_lower_camel_case();
-        out.push_str(&format!("    private {} {};\n", handler_type, field));
-    }
-    out.push_str("\n");
-
-    for f in &m.functions {
-        let handler_type = format!("{}Handler", f.name.to_upper_camel_case());
-        let field = f.name.to_lower_camel_case();
-        let method = format!("with{}", f.name.to_upper_camel_case());
-        out.push_str(&format!(
-            "    public Builder {}({} handler) {{\n      this.{} = handler;\n      return this;\n    }}\n\n",
-            method, handler_type, field
-        ));
-    }
-
-    out.push_str("    public HostFunction[] build() {\n");
-    out.push_str("      List<HostFunction> functions = new ArrayList<>();\n");
-    for f in &m.functions {
-        let field = f.name.to_lower_camel_case();
-        out.push_str(&format!(
-            "      if ({} != null) {{\n        functions.add(create{}Function());\n      }}\n",
-            field,
-            f.name.to_upper_camel_case()
-        ));
-    }
-    out.push_str("      return functions.toArray(new HostFunction[0]);\n");
-    out.push_str("    }\n\n");
-
-    for f in &m.functions {
-        out.push_str(&generate_java_host_function(f, wasm_mod));
-    }
-
-    out.push_str("  }\n");
-    out.push_str("}\n");
-
-    out
+    template.render().expect("failed to render Java host functions template")
 }
 
-fn generate_java_interface(f: &Function) -> String {
-    let iface_name = format!("{}Handler", f.name.to_upper_camel_case());
-    let ret = java_return_type(f.returns.as_deref());
-    let params: Vec<String> = f
-        .params
+fn java_function_template(f: &Function) -> JavaFunctionTemplate {
+    let field = f.name.to_lower_camel_case();
+    JavaFunctionTemplate {
+        name: f.name.clone(),
+        upper_name: f.name.to_upper_camel_case(),
+        field: field.clone(),
+        handler_type: format!("{}Handler", f.name.to_upper_camel_case()),
+        with_method: format!("with{}", f.name.to_upper_camel_case()),
+        return_type: java_return_type(f.returns.as_deref()),
+        interface_params: java_interface_params(f),
+        wasm_params: java_wasm_params(f).join(", "),
+        wasm_returns: java_wasm_returns(f).join(", "),
+        param_reads: java_param_reads(f),
+        return_handling: java_return_handling(f, &field),
+        error_handling: java_error_handling(f),
+    }
+}
+
+fn java_interface_params(f: &Function) -> String {
+    f.params
         .iter()
         .map(|p| format!("{} {}", java_type(&p.ty), p.name.to_lower_camel_case()))
-        .collect();
-
-    format!(
-        "  @FunctionalInterface\n  public interface {} {{\n    {} handle({});\n  }}\n\n",
-        iface_name,
-        ret,
-        params.join(", ")
-    )
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
-fn generate_java_host_function(f: &Function, wasm_mod: &str) -> String {
-    let method_name = format!("create{}Function", f.name.to_upper_camel_case());
-    let field = f.name.to_lower_camel_case();
-    let has_string_return =
-        f.returns.as_deref() == Some("string") || f.returns.as_deref() == Some("bytes");
-
-    let mut wasm_params = Vec::new();
+fn java_wasm_params(f: &Function) -> Vec<&'static str> {
+    let mut params = Vec::new();
     for p in &f.params {
         match p.ty.as_str() {
             "string" | "bytes" => {
-                wasm_params.push("ValueType.I32");
-                wasm_params.push("ValueType.I32");
+                params.push("ValueType.I32");
+                params.push("ValueType.I32");
             }
-            "int" => wasm_params.push("ValueType.I32"),
-            "float" => wasm_params.push("ValueType.F64"),
-            _ => wasm_params.push("ValueType.I32"),
+            "int" => params.push("ValueType.I32"),
+            "float" => params.push("ValueType.F64"),
+            other => panic!("Unsupported Java parameter type '{}' for {}", other, f.name),
         }
     }
-    if has_string_return {
-        wasm_params.push("ValueType.I32");
-        wasm_params.push("ValueType.I32");
+    if is_buffer_return(f.returns.as_deref()) {
+        params.push("ValueType.I32");
+        params.push("ValueType.I32");
     }
+    params
+}
 
-    let wasm_returns = match f.returns.as_deref() {
+fn java_wasm_returns(f: &Function) -> Vec<&'static str> {
+    match f.returns.as_deref() {
         Some("string") | Some("bytes") | Some("int") => vec!["ValueType.I32"],
         Some("float") => vec!["ValueType.F64"],
         None => vec![],
-        _ => vec!["ValueType.I32"],
-    };
+        Some(other) => panic!("Unsupported Java return type '{}' for {}", other, f.name),
+    }
+}
 
+fn java_param_reads(f: &Function) -> String {
     let mut out = String::new();
-    out.push_str(&format!("    private HostFunction {}() {{\n", method_name));
-    out.push_str(&format!(
-        "      return new HostFunction(\n          MODULE,\n          \"{}\",\n          List.of({}),\n          List.of({}),\n          (Instance instance, long... args) -> {{\n",
-        f.name,
-        wasm_params.join(", "),
-        wasm_returns.join(", ")
-    ));
-
-    out.push_str("            Memory memory = instance.memory();\n");
     let mut arg_idx = 0;
-    for p in &f.params {
-        let java_name = p.name.to_lower_camel_case();
+    for (param_idx, p) in f.params.iter().enumerate() {
+        let java_name = format!("param{}", param_idx);
         match p.ty.as_str() {
             "string" => {
                 out.push_str(&format!(
-                    "            int {name}Ptr = Math.toIntExact(args[{i}]);\n            int {name}Len = Math.toIntExact(args[{j}]);\n            String {name} = memory.readString({name}Ptr, {name}Len, StandardCharsets.UTF_8);\n",
-                    name = java_name, i = arg_idx, j = arg_idx + 1
+                    "            int {name}Ptr = Math.toIntExact(wasmArgs[{i}]);\n            int {name}Len = Math.toIntExact(wasmArgs[{j}]);\n            String {name} = memory.readString({name}Ptr, {name}Len, StandardCharsets.UTF_8);\n",
+                    name = java_name,
+                    i = arg_idx,
+                    j = arg_idx + 1
                 ));
                 arg_idx += 2;
             }
             "bytes" => {
                 out.push_str(&format!(
-                    "            int {name}Ptr = Math.toIntExact(args[{i}]);\n            int {name}Len = Math.toIntExact(args[{j}]);\n            byte[] {name} = memory.readBytes({name}Ptr, {name}Len);\n",
-                    name = java_name, i = arg_idx, j = arg_idx + 1
+                    "            int {name}Ptr = Math.toIntExact(wasmArgs[{i}]);\n            int {name}Len = Math.toIntExact(wasmArgs[{j}]);\n            byte[] {name} = memory.readBytes({name}Ptr, {name}Len);\n",
+                    name = java_name,
+                    i = arg_idx,
+                    j = arg_idx + 1
                 ));
                 arg_idx += 2;
             }
             "int" => {
                 out.push_str(&format!(
-                    "            int {} = Math.toIntExact(args[{}]);\n",
+                    "            int {} = Math.toIntExact(wasmArgs[{}]);\n",
                     java_name, arg_idx
                 ));
                 arg_idx += 1;
             }
             "float" => {
                 out.push_str(&format!(
-                    "            double {} = Double.longBitsToDouble(args[{}]);\n",
+                    "            double {} = Double.longBitsToDouble(wasmArgs[{}]);\n",
                     java_name, arg_idx
                 ));
                 arg_idx += 1;
             }
-            _ => { arg_idx += 1; }
+            other => panic!("Unsupported Java parameter type '{}' for {}", other, f.name),
         }
     }
 
-    if has_string_return {
+    if is_buffer_return(f.returns.as_deref()) {
         out.push_str(&format!(
-            "            int resultPtr = Math.toIntExact(args[{}]);\n            int resultMaxLen = Math.toIntExact(args[{}]);\n",
-            arg_idx, arg_idx + 1
+            "            int resultPtr = Math.toIntExact(wasmArgs[{}]);\n            int resultMaxLen = Math.toIntExact(wasmArgs[{}]);\n",
+            arg_idx,
+            arg_idx + 1
         ));
     }
 
-    let call_args: Vec<String> = f.params.iter().map(|p| p.name.to_lower_camel_case()).collect();
-    let call_expr = format!("{}.handle({})", field, call_args.join(", "));
-
-    match f.returns.as_deref() {
-        Some("string") => {
-            out.push_str(&format!("            String result = {};\n", call_expr));
-            out.push_str("            byte[] resultBytes = result.getBytes(StandardCharsets.UTF_8);\n");
-            out.push_str("            if (resultBytes.length > resultMaxLen) {\n");
-            out.push_str("              return new long[] { -2 };\n");
-            out.push_str("            }\n");
-            out.push_str("            memory.write(resultPtr, resultBytes);\n");
-            out.push_str("            return new long[] { resultBytes.length };\n");
-        }
-        Some("int") => {
-            out.push_str(&format!("            int result = {};\n", call_expr));
-            out.push_str("            return new long[] { result };\n");
-        }
-        None => {
-            out.push_str(&format!("            {};\n", call_expr));
-            out.push_str("            return null;\n");
-        }
-        _ => {
-            out.push_str(&format!("            return new long[] {{ {} }};\n", call_expr));
-        }
-    }
-
-    out.push_str("          });\n");
-    out.push_str("    }\n\n");
-
     out
+}
+
+fn java_return_handling(f: &Function, field: &str) -> String {
+    let call_expr = java_handler_call(f, field);
+    match f.returns.as_deref() {
+        Some("string") => format!(
+            "              String result = {call_expr};\n              if (result == null) {{\n                throw new IllegalStateException(\"Host function returned null: \" + MODULE + \"::{name}\");\n              }}\n              byte[] resultBytes = result.getBytes(StandardCharsets.UTF_8);\n              if (resultBytes.length > resultMaxLen) {{\n                return new long[] {{ -2 }};\n              }}\n              memory.write(resultPtr, resultBytes);\n              return new long[] {{ resultBytes.length }};",
+            call_expr = call_expr,
+            name = f.name
+        ),
+        Some("bytes") => format!(
+            "              byte[] resultBytes = {call_expr};\n              if (resultBytes == null) {{\n                throw new IllegalStateException(\"Host function returned null: \" + MODULE + \"::{name}\");\n              }}\n              if (resultBytes.length > resultMaxLen) {{\n                return new long[] {{ -2 }};\n              }}\n              memory.write(resultPtr, resultBytes);\n              return new long[] {{ resultBytes.length }};",
+            call_expr = call_expr,
+            name = f.name
+        ),
+        Some("int") => format!(
+            "              int result = {};\n              return new long[] {{ result }};",
+            call_expr
+        ),
+        Some("float") => format!(
+            "              double result = {};\n              return new long[] {{ Double.doubleToRawLongBits(result) }};",
+            call_expr
+        ),
+        None => format!(
+            "              {};\n              return null;",
+            call_expr
+        ),
+        Some(other) => panic!("Unsupported Java return type '{}' for {}", other, f.name),
+    }
+}
+
+fn java_handler_call(f: &Function, field: &str) -> String {
+    let call_args = f
+        .params
+        .iter()
+        .enumerate()
+        .map(|(idx, _)| format!("param{}", idx))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{}.handle({})", field, call_args)
+}
+
+fn java_error_handling(f: &Function) -> &'static str {
+    if is_buffer_return(f.returns.as_deref()) {
+        "              return new long[] { -1 };"
+    } else {
+        "              throw e;"
+    }
+}
+
+fn is_buffer_return(ty: Option<&str>) -> bool {
+    matches!(ty, Some("string") | Some("bytes"))
 }
 
 fn java_type(ty: &str) -> &'static str {
@@ -483,7 +480,7 @@ fn java_type(ty: &str) -> &'static str {
         "int" => "int",
         "float" => "double",
         "bytes" => "byte[]",
-        _ => "String",
+        other => panic!("Unsupported Java type '{}'", other),
     }
 }
 
@@ -494,6 +491,6 @@ fn java_return_type(ty: Option<&str>) -> &'static str {
         Some("float") => "double",
         Some("bytes") => "byte[]",
         None => "void",
-        _ => "String",
+        Some(other) => panic!("Unsupported Java return type '{}'", other),
     }
 }

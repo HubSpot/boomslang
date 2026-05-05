@@ -94,38 +94,19 @@ do_build() {
     setup_wasi_sdk
     check_prerequisites
 
+    cp "$BUILD_DIR"/cpython-wasi/usr/local/lib/python3.14/_sysconfigdata*.py \
+       "$BUILD_DIR/cpython-wasi/lib/wasm32-wasi/"
+
     export CC_wasm32_wasip1="$WASI_SDK_PATH/bin/clang"
     export CFLAGS_wasm32_wasip1="--sysroot=$WASI_SDK_PATH/share/wasi-sysroot -I$BUILD_DIR/cpython-wasi/include/python3.14 -Dmi_align_up_ptr=_mi_align_up_ptr"
     export PYO3_CROSS_PYTHON_VERSION=3.14
+    export PYO3_CROSS_LIB_DIR="$BUILD_DIR/cpython-wasi/lib/wasm32-wasi"
     export PYTHON_PATH="$BUILD_DIR/cpython-wasi/lib/wasm32-wasi"
     export CPYTHON_WASI_DIR="$BUILD_DIR/cpython-wasi"
 
     cd "$SCRIPT_DIR"
 
-    # Build cargo features from PYTHON4J_EXTENSIONS (paths are relative to PROJECT_DIR)
-    # Only enable features for optional extensions (non-optional ones are always compiled)
-    CARGO_FEATURES=""
-    if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
-        IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
-        for ext_dir in "${EXT_DIRS[@]}"; do
-            local abs_ext_dir="$PROJECT_DIR/$ext_dir"
-            if [ -f "$abs_ext_dir/extension.toml" ]; then
-                ext_name=$(grep '^name' "$abs_ext_dir/extension.toml" | head -1 | sed 's/.*= *"\(.*\)"/\1/')
-                if grep "$ext_name" "$SCRIPT_DIR/Cargo.toml" 2>/dev/null | grep -q "optional"; then
-                    CARGO_FEATURES="$CARGO_FEATURES $ext_name"
-                    echo "Enabling optional extension: $ext_name"
-                else
-                    echo "Extension $ext_name is always-on (not optional)"
-                fi
-            fi
-        done
-    fi
-
-    if [ -n "$CARGO_FEATURES" ]; then
-        cargo build --target wasm32-wasip1 --release --features "$CARGO_FEATURES"
-    else
-        cargo build --target wasm32-wasip1 --release
-    fi
+    cargo build --target wasm32-wasip1 --release
 
     mkdir -p "$BUILD_DIR/output"
     cp "$SCRIPT_DIR/target/wasm32-wasip1/release/boomslang_host.wasm" \
@@ -169,17 +150,9 @@ do_wizer() {
         done
     fi
 
-    # Copy extension Python packages (PYTHON4J_EXTENSIONS paths are relative to PROJECT_DIR)
-    if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
-        IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
-        for ext_dir in "${EXT_DIRS[@]}"; do
-            local abs_ext_dir="$PROJECT_DIR/$ext_dir"
-            if [ -d "$abs_ext_dir/lib" ]; then
-                echo "Copying extension packages from $abs_ext_dir/lib"
-                cp -r "$abs_ext_dir/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
-            fi
-        done
-    fi
+    # Copy built-in extension Python packages.
+    echo "Copying built-in host bridge package"
+    cp -r "$PROJECT_DIR/extensions/host-bridge/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/"
 
     wizer \
         --init-func wizer_initialize \

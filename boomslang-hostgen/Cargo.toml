@@ -9,6 +9,7 @@ keywords = ["python", "wasm", "chicory", "codegen"]
 categories = ["development-tools::build-utils"]
 
 [dependencies]
+askama = "0.12"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 heck = "0.5"

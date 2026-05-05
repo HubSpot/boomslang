@@ -1,22 +1,12 @@
 package com.hubspot.boomslang;
 
 import com.dylibso.chicory.runtime.HostFunction;
-import com.dylibso.chicory.runtime.Instance;
-import com.dylibso.chicory.runtime.Memory;
-import com.dylibso.chicory.wasm.types.ValueType;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
+import com.hubspot.boomslang.generated.BoomslangHostHostFunctions;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class HostBridge {
-
-  private static final Logger LOG = LoggerFactory.getLogger(HostBridge.class);
-  private static final String MODULE = "boomslang";
 
   @FunctionalInterface
   public interface CallHandler {
@@ -55,8 +45,21 @@ public class HostBridge {
     }
 
     public HostFunction[] build() {
-      List<HostFunction> functions = new ArrayList<>();
+      return generatedBuilder().build();
+    }
 
+    public BoomslangExtension buildExtension() {
+      return generatedBuilder().buildExtension();
+    }
+
+    private BoomslangHostHostFunctions.Builder generatedBuilder() {
+      return BoomslangHostHostFunctions
+        .builder()
+        .withCall(effectiveCallHandler())
+        .withLog(effectiveLogHandler());
+    }
+
+    private BoomslangHostHostFunctions.CallHandler effectiveCallHandler() {
       CallHandler effectiveCallHandler = callHandler;
       if (effectiveCallHandler == null && !handlers.isEmpty()) {
         effectiveCallHandler =
@@ -69,75 +72,21 @@ public class HostBridge {
           };
       }
 
-      if (effectiveCallHandler != null) {
-        functions.add(createCallFunction(effectiveCallHandler));
+      if (effectiveCallHandler == null) {
+        return (name, args) -> {
+          throw new RuntimeException("No handler registered for: " + name);
+        };
       }
-      if (logHandler != null) {
-        functions.add(createLogFunction(logHandler));
-      }
-      return functions.toArray(new HostFunction[0]);
+
+      CallHandler handler = effectiveCallHandler;
+      return (name, args) -> handler.handle(name, args);
     }
 
-    private static HostFunction createCallFunction(CallHandler handler) {
-      return new HostFunction(
-        MODULE,
-        "call",
-        List.of(
-          ValueType.I32,
-          ValueType.I32,
-          ValueType.I32,
-          ValueType.I32,
-          ValueType.I32,
-          ValueType.I32
-        ),
-        List.of(ValueType.I32),
-        (Instance instance, long... args) -> {
-          Memory memory = instance.memory();
-          int namePtr = Math.toIntExact(args[0]);
-          int nameLen = Math.toIntExact(args[1]);
-          String name = memory.readString(namePtr, nameLen, StandardCharsets.UTF_8);
-          int argsPtr = Math.toIntExact(args[2]);
-          int argsLen = Math.toIntExact(args[3]);
-          String argsJson = memory.readString(argsPtr, argsLen, StandardCharsets.UTF_8);
-          int resultPtr = Math.toIntExact(args[4]);
-          int resultMaxLen = Math.toIntExact(args[5]);
-
-          try {
-            String result = handler.handle(name, argsJson);
-            byte[] resultBytes = result.getBytes(StandardCharsets.UTF_8);
-            if (resultBytes.length > resultMaxLen) {
-              return new long[] { -2 };
-            }
-            memory.write(resultPtr, resultBytes);
-            return new long[] { resultBytes.length };
-          } catch (RuntimeException e) {
-            LOG.error("Host call '{}' failed", name, e);
-            return new long[] { -1 };
-          }
-        }
-      );
-    }
-
-    private static HostFunction createLogFunction(LogHandler handler) {
-      return new HostFunction(
-        MODULE,
-        "log",
-        List.of(ValueType.I32, ValueType.I32, ValueType.I32),
-        List.of(),
-        (Instance instance, long... args) -> {
-          Memory memory = instance.memory();
-          int level = Math.toIntExact(args[0]);
-          int messagePtr = Math.toIntExact(args[1]);
-          int messageLen = Math.toIntExact(args[2]);
-          String message = memory.readString(
-            messagePtr,
-            messageLen,
-            StandardCharsets.UTF_8
-          );
-          handler.handle(level, message);
-          return null;
-        }
-      );
+    private BoomslangHostHostFunctions.LogHandler effectiveLogHandler() {
+      if (logHandler == null) {
+        return (level, message) -> {};
+      }
+      return (level, message) -> logHandler.handle(level, message);
     }
   }
 }
