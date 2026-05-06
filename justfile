@@ -307,8 +307,8 @@ resources:
         fi
     done
     # Copy extension Python packages
-    if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
-        IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
+    if [ -n "${BOOMSLANG_EXTENSIONS:-}" ]; then
+        IFS=',' read -ra EXT_DIRS <<< "$BOOMSLANG_EXTENSIONS"
         for ext_dir in "${EXT_DIRS[@]}"; do
             if [ -d "$ext_dir/lib" ]; then
                 echo "Copying extension packages from $ext_dir/lib"

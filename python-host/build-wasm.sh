@@ -158,9 +158,9 @@ do_wizer() {
         fi
     done
 
-    # Copy extension Python packages (PYTHON4J_EXTENSIONS paths are relative to PROJECT_DIR)
-    if [ -n "${PYTHON4J_EXTENSIONS:-}" ]; then
-        IFS=',' read -ra EXT_DIRS <<< "$PYTHON4J_EXTENSIONS"
+    # Copy extension Python packages (BOOMSLANG_EXTENSIONS paths are relative to PROJECT_DIR)
+    if [ -n "${BOOMSLANG_EXTENSIONS:-}" ]; then
+        IFS=',' read -ra EXT_DIRS <<< "$BOOMSLANG_EXTENSIONS"
         for ext_dir in "${EXT_DIRS[@]}"; do
             local abs_ext_dir="$PROJECT_DIR/$ext_dir"
             if [ -d "$abs_ext_dir/lib" ]; then
