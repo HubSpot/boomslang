@@ -79,11 +79,15 @@ log(2, "got user data")
 
 ## Building from source
 
-Requires: Docker, Java 21+, Maven.
+Requires: a container engine, Java 21+, Maven.
 
 ```bash
-# Full build from scratch (~1 hour first time, Docker caches subsequent runs)
+# Full build from scratch (~1 hour first time, container caches subsequent runs)
 just everything
+
+# To use Apple container instead of Docker:
+container system start
+BOOMSLANG_CONTAINER_CLI=container just everything
 
 # Or step by step:
 just build-pydantic-core-wasi   # Build pydantic-core static lib
@@ -99,7 +103,7 @@ just build                      # Maven build with AOT compilation
 just test                       # Run tests
 ```
 
-All native compilation happens inside Docker — no local Rust, WASI SDK, or C toolchain needed.
+All native compilation happens inside a container engine — no local Rust, WASI SDK, or C toolchain needed.
 
 ## How it works
 

@@ -13,7 +13,7 @@ cpython/
   pandas-wasi ────────┼→ cpython-wasi → python-host (Rust) → Java AOT
   matplotlib-wasi ────┤
   ijson-wasi ─────────┘
-  builder/             (Docker image with WASI SDK + Wizer + Binaryen)
+  builder/             (container image with WASI SDK + Wizer + Binaryen)
 ```
 
 ### Full build from scratch
@@ -22,12 +22,19 @@ cpython/
 just everything
 ```
 
-This runs all Docker builds (~1hr total on first run), then Rust + Java.
+This runs all container builds (~1hr total on first run), then Rust + Java.
+
+To use Apple container instead of Docker:
+
+```bash
+container system start
+BOOMSLANG_CONTAINER_CLI=container just everything
+```
 
 ### Individual stages
 
 ```bash
-# Docker builds (produce WASM artifacts, all under cpython/)
+# Container builds (produce WASM artifacts, all under cpython/)
 just build-pydantic-core-wasi   # ~15 min (Rust compilation)
 just build-numpy-wasi           # ~10 min
 just build-pandas-wasi          # ~10 min
@@ -35,9 +42,9 @@ just build-matplotlib-wasi      # ~10 min
 just build-ijson-wasi           # ~5 min
 just build-cpython-wasi         # ~20 min (needs all five above)
 
-# Local builds (after Docker stages are done)
+# Local builds (after container stages are done)
 just pip-packages               # Download pydantic etc.
-just wasm                       # Build Rust host + Wizer pre-init (Docker)
+just wasm                       # Build Rust host + Wizer pre-init in a container
 just wasm-local                 # Build Rust host locally (needs WASI SDK)
 just resources                  # Populate Java resources
 just build                      # Maven build with AOT
@@ -67,13 +74,13 @@ mvn test -pl tests
 - `core/` — Java runtime (PythonExecutorFactory, PythonInstance, CopyOnWriteMemory)
 - `python-host/` — Rust WASM host (PyO3 wrapper around CPython)
 - `cpython/` — All native WASM build infrastructure:
-  - `cpython-wasi/` — CPython → WASM build pipeline (Docker)
+  - `cpython-wasi/` — CPython → WASM build pipeline
   - `pydantic-core-wasi/` — pydantic-core static lib build
   - `numpy-wasi/` — NumPy C extensions build
   - `pandas-wasi/` — Pandas C extensions build
   - `matplotlib-wasi/` — Matplotlib C extensions build
   - `ijson-wasi/` — ijson YAJL2 C extension build
-  - `builder/` — Docker builder image (WASI SDK + Wizer + Binaryen + Rust)
+  - `builder/` — container builder image (WASI SDK + Wizer + Binaryen + Rust)
 - `boomslang-hostgen/` — Extension code generator (Rust CLI + library)
 - `extensions/` — Extension crates (demo included)
 - `tests/` — Integration tests

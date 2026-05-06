@@ -151,18 +151,31 @@ do_wizer() {
     fi
 
     # Copy built-in extension Python packages.
-    echo "Copying built-in host bridge package"
-    cp -r "$PROJECT_DIR/extensions/host-bridge/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/"
+    for ext_lib_dir in "$PROJECT_DIR"/extensions/*/lib; do
+        if [ -d "$ext_lib_dir" ]; then
+            echo "Copying built-in extension packages from $ext_lib_dir"
+            cp -r "$ext_lib_dir/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
+        fi
+    done
+
+    # Copy extension Python packages (BOOMSLANG_EXTENSIONS paths are relative to PROJECT_DIR)
+    if [ -n "${BOOMSLANG_EXTENSIONS:-}" ]; then
+        IFS=',' read -ra EXT_DIRS <<< "$BOOMSLANG_EXTENSIONS"
+        for ext_dir in "${EXT_DIRS[@]}"; do
+            local abs_ext_dir="$PROJECT_DIR/$ext_dir"
+            if [ -d "$abs_ext_dir/lib" ]; then
+                echo "Copying extension packages from $abs_ext_dir/lib"
+                cp -r "$abs_ext_dir/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
+            fi
+        done
+    fi
 
     wizer \
         --init-func wizer_initialize \
         --allow-wasi \
         --wasm-bulk-memory true \
         --wasm-reference-types true \
-        --mapdir /usr::$BUILD_DIR/wizer-fs/usr \
-        --mapdir /lib::$BUILD_DIR/wizer-fs/lib \
-        --mapdir /work::$BUILD_DIR/wizer-fs/work \
-        --mapdir /tmp::$BUILD_DIR/wizer-fs/tmp \
+        --mapdir /::$BUILD_DIR/wizer-fs \
         -o "$output_wasm" \
         "$input_wasm" || {
             echo "WARNING: Wizer pre-initialization failed. Using non-wizered WASM."
