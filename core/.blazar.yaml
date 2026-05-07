@@ -1,6 +1,9 @@
 depends:
   - name: cpython
 
+env:
+  SKIP_DEPLOY_WHEN_ARTIFACT_MATCHES_EXISTING: false
+
 buildResources:
   cpus: 32
   memoryMb: 65536
