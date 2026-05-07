@@ -105,6 +105,19 @@ just test                       # Run tests
 
 All native compilation happens inside a container engine — no local Rust, WASI SDK, or C toolchain needed.
 
+## Published artifacts
+
+The default `com.hubspot:boomslang` JAR includes the Java API, `boomslang.wasm`, the Python runtime resources, and Chicory AOT classes. Builds also publish a `no-python-runtime` classifier that contains only the handwritten Java runtime classes. Use that classifier when another dependency provides its own Python WASM binary and stdlib resources:
+
+```xml
+<dependency>
+  <groupId>com.hubspot</groupId>
+  <artifactId>boomslang</artifactId>
+  <version>${boomslang.version}</version>
+  <classifier>no-python-runtime</classifier>
+</dependency>
+```
+
 ## How it works
 
 ```
