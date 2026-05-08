@@ -1,9 +1,12 @@
 package com.hubspot.boomslang.benchmarks;
 
+import com.google.common.jimfs.Configuration;
+import com.google.common.jimfs.Jimfs;
 import com.hubspot.boomslang.HostBridge;
 import com.hubspot.boomslang.PythonExecutorFactory;
 import com.hubspot.boomslang.PythonInstance;
 import com.hubspot.boomslang.PythonResult;
+import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -59,13 +62,13 @@ public class PythonExecutorBenchmark {
 
     helloWorldBytecode =
       factory.runOnWasmThread(() -> {
-        PythonInstance tmp = factory.createInstance();
+        PythonInstance tmp = factory.createInstance(createRootPath());
         return tmp.compile("print('hello')");
       });
 
     fibBytecode =
       factory.runOnWasmThread(() -> {
-        PythonInstance tmp = factory.createInstance();
+        PythonInstance tmp = factory.createInstance(createRootPath());
         return tmp.compile(
           String.join(
             "\n",
@@ -81,7 +84,7 @@ public class PythonExecutorBenchmark {
 
     numpyBytecode =
       factory.runOnWasmThread(() -> {
-        PythonInstance tmp = factory.createInstance();
+        PythonInstance tmp = factory.createInstance(createRootPath());
         return tmp.compile(
           String.join(
             "\n",
@@ -97,7 +100,7 @@ public class PythonExecutorBenchmark {
   public void setupInstance() {
     instance =
       factory.runOnWasmThread(() -> {
-        return factory.createInstance();
+        return factory.createInstance(createRootPath());
       });
   }
 
@@ -110,7 +113,7 @@ public class PythonExecutorBenchmark {
 
   @Benchmark
   public PythonInstance instanceCreation() {
-    return factory.runOnWasmThread(() -> factory.createInstance());
+    return factory.runOnWasmThread(() -> factory.createInstance(createRootPath()));
   }
 
   @Benchmark
@@ -174,5 +177,11 @@ public class PythonExecutorBenchmark {
       .include(PythonExecutorBenchmark.class.getSimpleName())
       .build();
     new Runner(opt).run();
+  }
+
+  private static Path createRootPath() {
+    return Jimfs
+      .newFileSystem(Configuration.unix().toBuilder().setAttributeViews("unix").build())
+      .getPath("/");
   }
 }

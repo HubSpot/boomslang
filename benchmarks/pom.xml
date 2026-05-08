@@ -12,6 +12,10 @@
 
   <dependencies>
     <dependency>
+      <groupId>com.google.jimfs</groupId>
+      <artifactId>jimfs</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.hubspot</groupId>
       <artifactId>boomslang</artifactId>
     </dependency>

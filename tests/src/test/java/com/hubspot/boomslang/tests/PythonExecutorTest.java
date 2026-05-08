@@ -17,6 +17,7 @@ class PythonExecutorTest {
     factory =
       PythonExecutorFactory
         .builder()
+        .withStdlibPath(SharedTestSetup.createRootPath())
         .addHostFunctions(SharedTestSetup.defaultHostFunctions())
         .build();
   }
@@ -24,7 +25,7 @@ class PythonExecutorTest {
   @Test
   void itRunsHelloWorld() {
     PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
       return instance.execute("print('hello from boomslang')");
     });
 
@@ -35,7 +36,7 @@ class PythonExecutorTest {
   @Test
   void itRunsArithmetic() {
     PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
       return instance.execute("print(2 + 2)");
     });
 
@@ -46,7 +47,7 @@ class PythonExecutorTest {
   @Test
   void itImportsNumpy() {
     PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
       return instance.execute("import numpy as np; print(np.array([1,2,3]).sum())");
     });
 
@@ -57,7 +58,7 @@ class PythonExecutorTest {
   @Test
   void itImportsPandas() {
     PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
       return instance.execute(
         "import pandas as pd; df = pd.DataFrame({'a': [1,2,3]}); print(df['a'].sum())"
       );
@@ -70,7 +71,7 @@ class PythonExecutorTest {
   @Test
   void itImportsPydantic() {
     PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
       return instance.execute(
         String.join(
           "\n",
@@ -92,7 +93,7 @@ class PythonExecutorTest {
   @Test
   void itImportsIjson() {
     PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
       return instance.execute(
         String.join(
           "\n",
