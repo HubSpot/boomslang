@@ -36,7 +36,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,15 +58,21 @@ public class PythonExecutorFactory {
   private final boolean aotAvailable;
   private final RuntimeImage runtimeImage;
   private final HostFunction[] hostFunctions;
-  private final BiFunction<Path, InputStream, WasiOptions> wasiOptionsFactory;
+  private final Function<InputStream, WasiOptions> wasiOptionsFactory;
 
   public PythonExecutorFactory() {
     this(builder());
   }
 
   private PythonExecutorFactory(Builder builder) {
-    this.pythonFileSystem = createPythonFileSystem();
-    this.extractedPythonPath = extractPythonResources(builder.wasmResource);
+    if (builder.stdlibPath != null) {
+      this.pythonFileSystem = null;
+      this.extractedPythonPath =
+        extractPythonResourcesToPath(builder.stdlibPath, builder.wasmResource);
+    } else {
+      this.pythonFileSystem = createPythonFileSystem();
+      this.extractedPythonPath = extractPythonResources(builder.wasmResource);
+    }
     this.module = loadWasmModule(builder.wasmResource);
     this.executorService = createWasmExecutorService();
     this.hostFunctions = builder.hostFunctions.toArray(new HostFunction[0]);
@@ -90,7 +95,7 @@ public class PythonExecutorFactory {
       );
 
     LOG.info(
-      "PythonExecutorFactory initialized with Jimfs at: {}, custom libraries: {}, host functions: {}",
+      "PythonExecutorFactory initialized at: {}, custom libraries: {}, host functions: {}",
       extractedPythonPath,
       builder.libraries.size(),
       hostFunctions.length
@@ -242,6 +247,22 @@ public class PythonExecutorFactory {
     }
   }
 
+  private Path extractPythonResourcesToPath(Path stdlibPath, String wasmResource) {
+    try {
+      Files.createDirectories(stdlibPath);
+      LOG.debug("Extracting Python resources to path: {}", stdlibPath);
+
+      extractResource(stdlibPath, wasmResource);
+
+      extractPythonStdlib(stdlibPath);
+      extractLibDynload(stdlibPath);
+
+      return stdlibPath;
+    } catch (IOException e) {
+      throw new UncheckedIOException("Failed to extract Python resources", e);
+    }
+  }
+
   private void extractPythonStdlib(Path tempDir) throws IOException {
     URL resourceUrl = getClass().getResource("/python/" + PYTHON_LIB_DIR);
     if (resourceUrl == null) {
@@ -378,7 +399,8 @@ public class PythonExecutorFactory {
     private final List<HostFunction> hostFunctions = new ArrayList<>();
     private String wasmResource = DEFAULT_WASM_RESOURCE;
     private Function<Instance, Machine> machineFactory;
-    private BiFunction<Path, InputStream, WasiOptions> wasiOptionsFactory;
+    private Function<InputStream, WasiOptions> wasiOptionsFactory;
+    private Path stdlibPath;
 
     private Builder() {}
 
@@ -392,10 +414,13 @@ public class PythonExecutorFactory {
       return this;
     }
 
-    public Builder withWasiOptionsFactory(
-      BiFunction<Path, InputStream, WasiOptions> factory
-    ) {
+    public Builder withWasiOptionsFactory(Function<InputStream, WasiOptions> factory) {
       this.wasiOptionsFactory = factory;
+      return this;
+    }
+
+    public Builder withStdlibPath(Path stdlibPath) {
+      this.stdlibPath = stdlibPath;
       return this;
     }
 
