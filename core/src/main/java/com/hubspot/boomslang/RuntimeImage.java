@@ -8,10 +8,9 @@ import com.dylibso.chicory.runtime.Store;
 import com.dylibso.chicory.wasi.WasiOptions;
 import com.dylibso.chicory.wasi.WasiPreview1;
 import com.dylibso.chicory.wasm.WasmModule;
-import java.io.InputStream;
 import java.nio.file.Path;
-import java.util.Objects;
 import java.util.function.Function;
+import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,31 +42,21 @@ public class RuntimeImage {
     WasmModule module,
     Function<Instance, Machine> machineFactory,
     Path extractedPythonPath,
-    HostFunction... hostFunctions
-  ) {
-    return create(module, machineFactory, extractedPythonPath, null, hostFunctions);
-  }
-
-  public static RuntimeImage create(
-    WasmModule module,
-    Function<Instance, Machine> machineFactory,
-    Path extractedPythonPath,
-    Function<InputStream, WasiOptions> wasiOptionsFactory,
+    String pythonHome,
+    @Nullable String pythonPath,
     HostFunction... hostFunctions
   ) {
     LOG.debug("Creating RuntimeImage with golden memory snapshot");
     long startTime = System.currentTimeMillis();
 
-    WasiOptions wasiOptions = wasiOptionsFactory != null
-      ? Objects.requireNonNull(
-        wasiOptionsFactory.apply(InputStream.nullInputStream()),
-        "wasiOptionsFactory returned null"
-      )
-      : WasiOptions
-        .builder()
-        .withDirectory("/", extractedPythonPath)
-        .withEnvironment("PYTHONHOME", "/usr/local")
-        .build();
+    WasiOptions.Builder wasiBuilder = WasiOptions
+      .builder()
+      .withDirectory("/", extractedPythonPath)
+      .withEnvironment("PYTHONHOME", pythonHome);
+    if (pythonPath != null) {
+      wasiBuilder.withEnvironment("PYTHONPATH", pythonPath);
+    }
+    WasiOptions wasiOptions = wasiBuilder.build();
 
     WasiPreview1 wasi = WasiPreview1.builder().withOptions(wasiOptions).build();
 

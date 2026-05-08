@@ -21,6 +21,7 @@ class HostBridgeTest {
     factory =
       PythonExecutorFactory
         .builder()
+        .withStdlibPath(SharedTestSetup.createRootPath())
         .addExtension(
           HostBridge
             .builder()
@@ -45,7 +46,7 @@ class HostBridgeTest {
   @Test
   void itCallsNamedHostFunction() {
     PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
       return instance.execute(
         "from boomslang_host import call; print(call('add', '[3, 4]'))"
       );
@@ -59,7 +60,7 @@ class HostBridgeTest {
   @Test
   void itEchoesArgs() {
     PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
       return instance.execute(
         "from boomslang_host import call; print(call('echo', '{\"hello\": \"world\"}'))"
       );
@@ -76,7 +77,7 @@ class HostBridgeTest {
     LOG_MESSAGES.clear();
 
     PythonResult result = factory.runOnWasmThread(() -> {
-      PythonInstance instance = factory.createInstance();
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
       return instance.execute(
         "from boomslang_host import log; log(2, 'hello from python')"
       );

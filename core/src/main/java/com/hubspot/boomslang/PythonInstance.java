@@ -7,19 +7,12 @@ import com.dylibso.chicory.runtime.Store;
 import com.dylibso.chicory.wasi.WasiOptions;
 import com.dylibso.chicory.wasi.WasiPreview1;
 import com.dylibso.chicory.wasm.types.MemoryLimits;
-import java.io.IOException;
 import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
 import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,8 +28,6 @@ public class PythonInstance implements AutoCloseable {
   private final AtomicBoolean closed = new AtomicBoolean(false);
 
   private final String instanceId;
-  private final Path workDir;
-  private final Path libDir;
   private final ResettableByteArrayInputStream stdinStream;
 
   private final ExportFunction compileSourceFunc;
@@ -53,51 +44,25 @@ public class PythonInstance implements AutoCloseable {
   private final ExportFunction getHeapPagesFunc;
   private final int goldenMemoryPages;
 
-  public PythonInstance(RuntimeImage image, HostFunction[] hostFunctions) {
-    this(image, hostFunctions, null, null);
-  }
-
   public PythonInstance(
     RuntimeImage image,
     HostFunction[] hostFunctions,
-    @Nullable Path externalWorkDir
-  ) {
-    this(image, hostFunctions, externalWorkDir, null);
-  }
-
-  public PythonInstance(
-    RuntimeImage image,
-    HostFunction[] hostFunctions,
-    @Nullable Path externalWorkDir,
-    @Nullable Function<InputStream, WasiOptions> wasiOptionsFactory
+    Path rootPath,
+    String pythonHome,
+    @Nullable String pythonPath
   ) {
     this.instanceId = UUID.randomUUID().toString().substring(0, 8);
-    this.libDir = image.getExtractedPythonPath().resolve("lib-" + instanceId);
-
-    Path jimfsWorkDir = image.getExtractedPythonPath().resolve("work");
-    try {
-      Files.createDirectories(jimfsWorkDir);
-      Files.createDirectories(libDir);
-    } catch (IOException e) {
-      throw new UncheckedIOException("Failed to create work directories", e);
-    }
-
-    this.workDir = externalWorkDir != null ? externalWorkDir : jimfsWorkDir;
     this.stdinStream = new ResettableByteArrayInputStream();
 
-    WasiOptions wasiOptions = wasiOptionsFactory != null
-      ? Objects.requireNonNull(
-        wasiOptionsFactory.apply(stdinStream),
-        "wasiOptionsFactory returned null"
-      )
-      : WasiOptions
-        .builder()
-        .withStdin(stdinStream)
-        .withDirectory("/usr", image.getExtractedPythonPath().resolve("usr"))
-        .withDirectory("/lib", libDir)
-        .withDirectory("/work", workDir)
-        .withEnvironment("PYTHONHOME", "/usr/local")
-        .build();
+    WasiOptions.Builder wasiBuilder = WasiOptions
+      .builder()
+      .withStdin(stdinStream)
+      .withDirectory("/", Objects.requireNonNull(rootPath, "rootPath is required"))
+      .withEnvironment("PYTHONHOME", pythonHome);
+    if (pythonPath != null) {
+      wasiBuilder.withEnvironment("PYTHONPATH", pythonPath);
+    }
+    WasiOptions wasiOptions = wasiBuilder.build();
 
     WasiPreview1 wasi = WasiPreview1.builder().withOptions(wasiOptions).build();
 
@@ -146,14 +111,6 @@ public class PythonInstance implements AutoCloseable {
     this.getStderrFunc = wasmInstance.export("get_stderr");
     this.getHeapPagesFunc = wasmInstance.export("get_heap_pages");
     this.goldenMemoryPages = image.getGoldenMemoryPages();
-  }
-
-  public Path getWorkDir() {
-    return workDir;
-  }
-
-  public Path getLibDir() {
-    return libDir;
   }
 
   public synchronized void setStdin(byte[] data) {
@@ -372,37 +329,6 @@ public class PythonInstance implements AutoCloseable {
   public synchronized void close() {
     if (!closed.compareAndSet(false, true)) {
       return;
-    }
-    deleteLibDir();
-  }
-
-  private void deleteLibDir() {
-    try {
-      if (Files.exists(libDir)) {
-        Files.walkFileTree(
-          libDir,
-          new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
-              throws IOException {
-              Files.delete(file);
-              return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult postVisitDirectory(Path dir, IOException exc)
-              throws IOException {
-              if (exc != null) {
-                throw exc;
-              }
-              Files.delete(dir);
-              return FileVisitResult.CONTINUE;
-            }
-          }
-        );
-      }
-    } catch (IOException e) {
-      LOG.warn("Failed to clean up lib directory: {}", libDir, e);
     }
   }
 
