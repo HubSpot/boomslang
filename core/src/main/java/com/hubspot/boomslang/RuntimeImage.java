@@ -11,7 +11,6 @@ import com.dylibso.chicory.wasm.WasmModule;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Objects;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +52,7 @@ public class RuntimeImage {
     WasmModule module,
     Function<Instance, Machine> machineFactory,
     Path extractedPythonPath,
-    BiFunction<Path, InputStream, WasiOptions> wasiOptionsFactory,
+    Function<InputStream, WasiOptions> wasiOptionsFactory,
     HostFunction... hostFunctions
   ) {
     LOG.debug("Creating RuntimeImage with golden memory snapshot");
@@ -61,7 +60,7 @@ public class RuntimeImage {
 
     WasiOptions wasiOptions = wasiOptionsFactory != null
       ? Objects.requireNonNull(
-        wasiOptionsFactory.apply(extractedPythonPath, InputStream.nullInputStream()),
+        wasiOptionsFactory.apply(InputStream.nullInputStream()),
         "wasiOptionsFactory returned null"
       )
       : WasiOptions

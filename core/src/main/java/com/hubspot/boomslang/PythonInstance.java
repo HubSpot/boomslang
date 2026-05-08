@@ -19,7 +19,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiFunction;
+import java.util.function.Function;
 import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,7 +69,7 @@ public class PythonInstance implements AutoCloseable {
     RuntimeImage image,
     HostFunction[] hostFunctions,
     @Nullable Path externalWorkDir,
-    @Nullable BiFunction<Path, InputStream, WasiOptions> wasiOptionsFactory
+    @Nullable Function<InputStream, WasiOptions> wasiOptionsFactory
   ) {
     this.instanceId = UUID.randomUUID().toString().substring(0, 8);
     this.libDir = image.getExtractedPythonPath().resolve("lib-" + instanceId);
@@ -87,7 +87,7 @@ public class PythonInstance implements AutoCloseable {
 
     WasiOptions wasiOptions = wasiOptionsFactory != null
       ? Objects.requireNonNull(
-        wasiOptionsFactory.apply(image.getExtractedPythonPath(), stdinStream),
+        wasiOptionsFactory.apply(stdinStream),
         "wasiOptionsFactory returned null"
       )
       : WasiOptions
