@@ -2,9 +2,14 @@ package com.hubspot.boomslang.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.google.common.jimfs.Configuration;
+import com.google.common.jimfs.Jimfs;
 import com.hubspot.boomslang.PythonExecutorFactory;
 import com.hubspot.boomslang.PythonInstance;
 import com.hubspot.boomslang.PythonResult;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -88,6 +93,33 @@ class PythonExecutorTest {
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(result.stdout()).contains("Alice");
     assertThat(result.stdout()).contains("30");
+  }
+
+  @Test
+  void itRespectsPythonPath() throws Exception {
+    PythonExecutorFactory pathFactory = PythonExecutorFactory
+      .builder()
+      .withStdlibPath(SharedTestSetup.createRootPath())
+      .withPythonPath("/work/libs")
+      .addHostFunctions(SharedTestSetup.defaultHostFunctions())
+      .build();
+
+    PythonResult result = pathFactory.runOnWasmThread(() -> {
+      PythonInstance instance = pathFactory.createInstance(
+        SharedTestSetup.createRootPath()
+      );
+      return instance.execute(
+        String.join(
+          "\n",
+          "import sys",
+          "paths = [p for p in sys.path if p == '/work/libs']",
+          "print(len(paths))"
+        )
+      );
+    });
+
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("1");
   }
 
   @Test

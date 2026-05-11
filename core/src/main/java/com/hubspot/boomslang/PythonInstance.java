@@ -59,9 +59,6 @@ public class PythonInstance implements AutoCloseable {
       .withStdin(stdinStream)
       .withDirectory("/", Objects.requireNonNull(rootPath, "rootPath is required"))
       .withEnvironment("PYTHONHOME", pythonHome);
-    if (pythonPath != null) {
-      wasiBuilder.withEnvironment("PYTHONPATH", pythonPath);
-    }
     WasiOptions wasiOptions = wasiBuilder.build();
 
     WasiPreview1 wasi = WasiPreview1.builder().withOptions(wasiOptions).build();
@@ -111,6 +108,31 @@ public class PythonInstance implements AutoCloseable {
     this.getStderrFunc = wasmInstance.export("get_stderr");
     this.getHeapPagesFunc = wasmInstance.export("get_heap_pages");
     this.goldenMemoryPages = image.getGoldenMemoryPages();
+
+    if (pythonPath != null) {
+      injectPythonPath(pythonPath);
+    }
+  }
+
+  private void injectPythonPath(String pythonPath) {
+    String[] entries = pythonPath.split(":");
+    StringBuilder script = new StringBuilder("import sys");
+    for (String entry : entries) {
+      script.append("\nsys.path.insert(0, '").append(entry).append("')");
+    }
+    String scriptStr = script.toString();
+    byte[] scriptBytes = scriptStr.getBytes(StandardCharsets.UTF_8);
+    int scriptPtr = Math.toIntExact(allocFunc.apply(scriptBytes.length)[0]);
+    try {
+      wasmInstance.memory().write(scriptPtr, scriptBytes);
+      long[] result = executeFunc.apply(scriptPtr, scriptBytes.length);
+      if (result[0] != 0) {
+        LOG.warn("pythonPath injection failed with code: {}", result[0]);
+      }
+    } finally {
+      deallocFunc.apply(scriptPtr, scriptBytes.length);
+      clearStdin();
+    }
   }
 
   public synchronized void setStdin(byte[] data) {
