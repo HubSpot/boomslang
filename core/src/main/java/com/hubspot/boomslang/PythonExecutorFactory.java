@@ -366,6 +366,12 @@ public class PythonExecutorFactory {
     );
   }
 
+  /**
+   * Configures a Python executor factory. Filesystem paths on this builder are host-side setup
+   * paths used while creating the runtime image; guest-visible paths are provided by the root path
+   * passed to {@link PythonExecutorFactory#createInstance(Path)} and by Python's configured home and
+   * path values.
+   */
   public static class Builder {
 
     private final List<PythonLibrary> libraries = new ArrayList<>();
@@ -378,50 +384,83 @@ public class PythonExecutorFactory {
 
     private Builder() {}
 
+    /**
+     * Sets the classpath resource for the Python WASM binary. The default is
+     * {@code python/bin/boomslang.wasm}. Resources under the {@code python/} prefix are extracted
+     * relative to {@link #withStdlibPath(Path)}, so {@code /python/bin/boomslang.wasm} is written to
+     * {@code <stdlibPath>/bin/boomslang.wasm}.
+     */
     public Builder withWasmResource(String resourcePath) {
       this.wasmResource = resourcePath;
       return this;
     }
 
+    /**
+     * Provides an AOT machine factory for the WASM module. When omitted, boomslang attempts to load
+     * its default generated AOT class and falls back to interpreted execution if unavailable.
+     */
     public Builder withMachineFactory(Function<Instance, Machine> factory) {
       this.machineFactory = factory;
       return this;
     }
 
+    /**
+     * Sets the host-side extraction root for Python resources. This is not the guest-visible stdlib
+     * directory. Boomslang copies resources under this root while preserving their layout after the
+     * {@code python/} resource prefix; for example, the CPython stdlib is extracted to
+     * {@code <stdlibPath>/usr/local/lib/python3.14}. The caller must make that extracted tree
+     * visible to the WASM instance at the paths expected by {@link #withPythonHome(String)} and
+     * {@link #withPythonPath(String)}, usually by passing an appropriate root filesystem to
+     * {@link PythonExecutorFactory#createInstance(Path)}.
+     */
     public Builder withStdlibPath(Path stdlibPath) {
       this.stdlibPath = stdlibPath;
       return this;
     }
 
+    /**
+     * Sets Python's guest-visible {@code PYTHONHOME}. The default is {@code /usr/local}, so CPython
+     * expects its stdlib at {@code /usr/local/lib/python3.14} inside the filesystem passed to
+     * {@link PythonExecutorFactory#createInstance(Path)}.
+     */
     public Builder withPythonHome(String pythonHome) {
       this.pythonHome = pythonHome;
       return this;
     }
 
+    /**
+     * Sets Python's guest-visible {@code PYTHONPATH}. Entries must be paths visible inside the root
+     * filesystem passed to {@link PythonExecutorFactory#createInstance(Path)}.
+     */
     public Builder withPythonPath(String pythonPath) {
       this.pythonPath = pythonPath;
       return this;
     }
 
+    /** Adds raw WASM host functions to the Python instance imports. */
     public Builder addHostFunctions(HostFunction... functions) {
       Collections.addAll(this.hostFunctions, functions);
       return this;
     }
 
+    /** Adds all host functions from a named boomslang extension. */
     public Builder addExtension(BoomslangExtension extension) {
       return addHostFunctions(extension.hostFunctions());
     }
 
+    /** Installs an in-memory Python package into site-packages during factory creation. */
     public Builder withLibrary(PythonLibrary library) {
       this.libraries.add(library);
       return this;
     }
 
+    /** Installs an in-memory Python package into site-packages during factory creation. */
     public Builder withLibrary(String name, Map<String, String> modules) {
       this.libraries.add(PythonLibrary.of(name, modules));
       return this;
     }
 
+    /** Installs a single in-memory Python module into a package during factory creation. */
     public Builder withModule(String packageName, String moduleName, String content) {
       this.libraries.add(
           PythonLibrary.of(packageName, Map.of(moduleName + ".py", content))
