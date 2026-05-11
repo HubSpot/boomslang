@@ -47,7 +47,7 @@ public class RuntimeImage {
     HostFunction... hostFunctions
   ) {
     LOG.debug("Creating RuntimeImage with golden memory snapshot");
-    long startTime = System.currentTimeMillis();
+    long startTime = System.nanoTime();
 
     WasiOptions.Builder wasiBuilder = WasiOptions
       .builder()
@@ -81,10 +81,10 @@ public class RuntimeImage {
     int pages = getMemoryPages(initInstance);
     byte[] goldenMemory = initInstance.memory().readBytes(0, pages * 65536);
 
-    long elapsed = System.currentTimeMillis() - startTime;
+    long elapsedNanos = System.nanoTime() - startTime;
     LOG.info(
       "RuntimeImage created in {}ms, golden memory: {} pages ({} MB)",
-      elapsed,
+      elapsedNanos / 1_000_000,
       pages,
       (pages * 65536) / (1024 * 1024)
     );
