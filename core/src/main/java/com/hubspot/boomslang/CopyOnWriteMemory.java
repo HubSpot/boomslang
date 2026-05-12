@@ -48,6 +48,7 @@ public final class CopyOnWriteMemory implements Memory {
   private final byte[] goldenSnapshot;
   private final int goldenPages;
   private final MemoryLimits limits;
+  private final int callerMaxPages;
 
   private final byte[][][] privatePages;
   private int totalPages;
@@ -57,17 +58,23 @@ public final class CopyOnWriteMemory implements Memory {
   private int copiedPageCount = 0;
 
   public CopyOnWriteMemory(byte[] goldenSnapshot, MemoryLimits limits) {
-    this(goldenSnapshot, limits, null);
+    this(goldenSnapshot, limits, 0, null);
+  }
+
+  public CopyOnWriteMemory(byte[] goldenSnapshot, MemoryLimits limits, int callerMaxPages) {
+    this(goldenSnapshot, limits, callerMaxPages, null);
   }
 
   public CopyOnWriteMemory(
     byte[] goldenSnapshot,
     MemoryLimits limits,
+    int callerMaxPages,
     Map<Integer, byte[]> initialPrivatePages
   ) {
     this.goldenSnapshot = goldenSnapshot;
     this.goldenPages = goldenSnapshot.length / WASM_PAGE_SIZE;
     this.limits = limits;
+    this.callerMaxPages = callerMaxPages;
     this.totalPages = Math.max(goldenPages, limits.initialPages());
 
     int maxWasmPages = maximumPages();
@@ -117,7 +124,8 @@ public final class CopyOnWriteMemory implements Memory {
 
   @Override
   public int maximumPages() {
-    return min(limits.maximumPages(), RUNTIME_MAX_PAGES);
+    int moduleMax = min(limits.maximumPages(), RUNTIME_MAX_PAGES);
+    return callerMaxPages > 0 ? min(moduleMax, callerMaxPages) : moduleMax;
   }
 
   @Override

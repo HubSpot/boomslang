@@ -24,8 +24,10 @@ public class PythonInstance implements AutoCloseable {
 
   private final Instance wasmInstance;
   private final CopyOnWriteMemory cowMemory;
+  private final ResourceLimits limits;
   private final AtomicBoolean codeLoaded = new AtomicBoolean(false);
   private final AtomicBoolean closed = new AtomicBoolean(false);
+  private final AtomicBoolean poisoned = new AtomicBoolean(false);
 
   private final String instanceId;
   private final ResettableByteArrayInputStream stdinStream;
@@ -51,6 +53,18 @@ public class PythonInstance implements AutoCloseable {
     String pythonHome,
     @Nullable String pythonPath
   ) {
+    this(image, hostFunctions, rootPath, pythonHome, pythonPath, ResourceLimits.defaults());
+  }
+
+  public PythonInstance(
+    RuntimeImage image,
+    HostFunction[] hostFunctions,
+    Path rootPath,
+    String pythonHome,
+    @Nullable String pythonPath,
+    ResourceLimits limits
+  ) {
+    this.limits = limits;
     this.instanceId = UUID.randomUUID().toString().substring(0, 8);
     this.stdinStream = new ResettableByteArrayInputStream();
 
@@ -71,16 +85,17 @@ public class PythonInstance implements AutoCloseable {
     byte[] goldenMemory = image.getGoldenMemory();
     int goldenMemoryPages = image.getGoldenMemoryPages();
 
+    int callerMaxPages = limits.maximumMemoryPages();
     CopyOnWriteMemory[] memoryRef = new CopyOnWriteMemory[1];
     Instance.Builder instanceBuilder = Instance
       .builder(image.getModule())
       .withImportValues(store.toImportValues())
-      .withMemoryFactory(limits -> {
+      .withMemoryFactory(memoryLimits -> {
         MemoryLimits adjustedLimits = new MemoryLimits(
-          Math.max(limits.initialPages(), goldenMemoryPages),
-          limits.maximumPages()
+          Math.max(memoryLimits.initialPages(), goldenMemoryPages),
+          memoryLimits.maximumPages()
         );
-        memoryRef[0] = new CopyOnWriteMemory(goldenMemory, adjustedLimits);
+        memoryRef[0] = new CopyOnWriteMemory(goldenMemory, adjustedLimits, callerMaxPages);
         return memoryRef[0];
       });
 
@@ -313,6 +328,20 @@ public class PythonInstance implements AutoCloseable {
     checkNotClosed();
     cowMemory.reset();
     codeLoaded.set(false);
+    poisoned.set(false);
+    clearStdin();
+  }
+
+  public void poison() {
+    poisoned.set(true);
+  }
+
+  public boolean isPoisoned() {
+    return poisoned.get();
+  }
+
+  public ResourceLimits getResourceLimits() {
+    return limits;
   }
 
   public boolean isCodeLoaded() {
@@ -337,7 +366,7 @@ public class PythonInstance implements AutoCloseable {
   }
 
   public boolean isHealthy(int maxGrowthPages) {
-    if (closed.get()) {
+    if (closed.get() || poisoned.get()) {
       return false;
     }
     try {
@@ -366,6 +395,11 @@ public class PythonInstance implements AutoCloseable {
     if (closed.get()) {
       throw new IllegalStateException("PythonInstance has been closed");
     }
+    if (poisoned.get()) {
+      throw new IllegalStateException(
+        "PythonInstance has been poisoned after timeout — call reset() before reuse"
+      );
+    }
   }
 
   private String readStdout() {
@@ -374,13 +408,22 @@ public class PythonInstance implements AutoCloseable {
       return "";
     }
 
-    int outBufPtr = Math.toIntExact(allocFunc.apply(stdoutLen)[0]);
+    long maxOutput = limits.maximumOutputBytes();
+    boolean truncated = stdoutLen > maxOutput;
+    int readLen = truncated ? Math.toIntExact(maxOutput) : stdoutLen;
+
+    int outBufPtr = Math.toIntExact(allocFunc.apply(readLen)[0]);
     try {
-      getStdoutFunc.apply(outBufPtr, stdoutLen);
-      byte[] stdoutBytes = wasmInstance.memory().readBytes(outBufPtr, stdoutLen);
-      return new String(stdoutBytes, StandardCharsets.UTF_8);
+      getStdoutFunc.apply(outBufPtr, readLen);
+      byte[] stdoutBytes = wasmInstance.memory().readBytes(outBufPtr, readLen);
+      String result = new String(stdoutBytes, StandardCharsets.UTF_8);
+      if (truncated) {
+        LOG.warn("stdout truncated: {} bytes exceeds limit {}", stdoutLen, maxOutput);
+        return result + "\n[truncated: output exceeded " + maxOutput + " byte limit]";
+      }
+      return result;
     } finally {
-      deallocFunc.apply(outBufPtr, stdoutLen);
+      deallocFunc.apply(outBufPtr, readLen);
     }
   }
 
@@ -390,13 +433,22 @@ public class PythonInstance implements AutoCloseable {
       return "";
     }
 
-    int errBufPtr = Math.toIntExact(allocFunc.apply(stderrLen)[0]);
+    long maxOutput = limits.maximumOutputBytes();
+    boolean truncated = stderrLen > maxOutput;
+    int readLen = truncated ? Math.toIntExact(maxOutput) : stderrLen;
+
+    int errBufPtr = Math.toIntExact(allocFunc.apply(readLen)[0]);
     try {
-      getStderrFunc.apply(errBufPtr, stderrLen);
-      byte[] stderrBytes = wasmInstance.memory().readBytes(errBufPtr, stderrLen);
-      return new String(stderrBytes, StandardCharsets.UTF_8);
+      getStderrFunc.apply(errBufPtr, readLen);
+      byte[] stderrBytes = wasmInstance.memory().readBytes(errBufPtr, readLen);
+      String result = new String(stderrBytes, StandardCharsets.UTF_8);
+      if (truncated) {
+        LOG.warn("stderr truncated: {} bytes exceeds limit {}", stderrLen, maxOutput);
+        return result + "\n[truncated: output exceeded " + maxOutput + " byte limit]";
+      }
+      return result;
     } finally {
-      deallocFunc.apply(errBufPtr, stderrLen);
+      deallocFunc.apply(errBufPtr, readLen);
     }
   }
 
@@ -414,6 +466,17 @@ public class PythonInstance implements AutoCloseable {
     }
 
     public PythonExecutionException(String message, Throwable cause) {
+      super(message, cause);
+    }
+  }
+
+  public static class PythonTimeoutException extends RuntimeException {
+
+    public PythonTimeoutException(String message) {
+      super(message);
+    }
+
+    public PythonTimeoutException(String message, Throwable cause) {
       super(message, cause);
     }
   }
