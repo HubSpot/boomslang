@@ -61,7 +61,11 @@ public final class CopyOnWriteMemory implements Memory {
     this(goldenSnapshot, limits, 0, null);
   }
 
-  public CopyOnWriteMemory(byte[] goldenSnapshot, MemoryLimits limits, int callerMaxPages) {
+  public CopyOnWriteMemory(
+    byte[] goldenSnapshot,
+    MemoryLimits limits,
+    int callerMaxPages
+  ) {
     this(goldenSnapshot, limits, callerMaxPages, null);
   }
 

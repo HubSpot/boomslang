@@ -53,7 +53,14 @@ public class PythonInstance implements AutoCloseable {
     String pythonHome,
     @Nullable String pythonPath
   ) {
-    this(image, hostFunctions, rootPath, pythonHome, pythonPath, ResourceLimits.defaults());
+    this(
+      image,
+      hostFunctions,
+      rootPath,
+      pythonHome,
+      pythonPath,
+      ResourceLimits.defaults()
+    );
   }
 
   public PythonInstance(
@@ -95,7 +102,8 @@ public class PythonInstance implements AutoCloseable {
           Math.max(memoryLimits.initialPages(), goldenMemoryPages),
           memoryLimits.maximumPages()
         );
-        memoryRef[0] = new CopyOnWriteMemory(goldenMemory, adjustedLimits, callerMaxPages);
+        memoryRef[0] =
+          new CopyOnWriteMemory(goldenMemory, adjustedLimits, callerMaxPages);
         return memoryRef[0];
       });
 
