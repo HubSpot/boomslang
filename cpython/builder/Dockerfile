@@ -6,7 +6,7 @@
 #
 ARG WASI_SDK_VERSION=24
 
-FROM rust:1.85-bookworm
+FROM rust:1.86-bookworm
 
 ARG WASI_SDK_VERSION
 ARG TARGETARCH
