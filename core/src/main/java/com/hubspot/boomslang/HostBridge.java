@@ -87,7 +87,7 @@ public class HostBridge {
 
     private BoomslangHostHostFunctions.LogHandler effectiveLogHandler() {
       if (logHandler == null) {
-        return (level, message) -> {};
+        return (level, message) -> checkInterrupted();
       }
       return (level, message) -> {
         checkInterrupted();

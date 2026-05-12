@@ -333,7 +333,9 @@ public class PythonInstance implements AutoCloseable {
   }
 
   public synchronized void reset() {
-    checkNotClosed();
+    if (closed.get()) {
+      throw new IllegalStateException("PythonInstance has been closed");
+    }
     cowMemory.reset();
     codeLoaded.set(false);
     poisoned.set(false);
