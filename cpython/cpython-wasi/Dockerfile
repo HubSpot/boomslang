@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM python:3.14-bookworm AS builder
+FROM python:3.14.5-bookworm AS builder
 
 RUN set -eux; \
     for tool in gcc g++ make git curl xz tar python3 pip3; do \
@@ -24,13 +24,13 @@ RUN set -ex; \
     ln -s "/opt/${SDK_DIR}" /opt/wasi-sdk
 
 # Python 3.14 built from source (used as --with-build-python for cross-compilation)
-RUN curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.0.tar.gz | tar xz -C /tmp \
-    && cd /tmp/cpython-3.14.0 \
+RUN curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.5.tar.gz | tar xz -C /tmp \
+    && cd /tmp/cpython-3.14.5 \
     && ./configure --prefix=/opt/python3.14 --without-ensurepip \
     && make -j$(nproc) \
     && make install \
     && ln -sf /opt/python3.14/bin/python3.14 /usr/local/bin/python3 \
-    && rm -rf /tmp/cpython-3.14.0
+    && rm -rf /tmp/cpython-3.14.5
 
 # binaryen (wasm-opt) — dual-arch. Version 111 only has x86_64; arm64
 # needs version 125+.

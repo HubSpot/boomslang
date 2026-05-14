@@ -19,7 +19,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 RUST_HOST_DIR="$PROJECT_DIR/../python-host"
 
-PYTHON_VERSION="3.14.0"
+PYTHON_VERSION="3.14.5"
 
 CMD="${1:-build}"
 

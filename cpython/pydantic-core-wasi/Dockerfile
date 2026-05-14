@@ -3,7 +3,7 @@
 # Build pydantic-core as a static library for wasm32-wasip1.
 # Produces: lib_pydantic_core.a + Python stubs + dependency wheels
 #
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.86-bookworm AS builder
 
 # WASI SDK 24 (arch-aware)
 ARG TARGETARCH
@@ -30,10 +30,10 @@ WORKDIR /build/pydantic-core
 RUN sed -i '/crate-type/s/.*/crate-type = ["staticlib"]/' Cargo.toml
 
 # CPython 3.14 headers for PyO3 cross-compilation
-RUN curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.0.tar.gz | tar xz -C /tmp \
+RUN curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.5.tar.gz | tar xz -C /tmp \
     && mkdir -p /tmp/cpython-wasi/include/python3.14 \
-    && cp -r /tmp/cpython-3.14.0/Include/* /tmp/cpython-wasi/include/python3.14/ \
-    && rm -rf /tmp/cpython-3.14.0
+    && cp -r /tmp/cpython-3.14.5/Include/* /tmp/cpython-wasi/include/python3.14/ \
+    && rm -rf /tmp/cpython-3.14.5
 
 # Minimal pyconfig.h for wasm32-wasi cross-compilation
 RUN PYH=/tmp/cpython-wasi/include/python3.14/pyconfig.h \

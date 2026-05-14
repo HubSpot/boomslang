@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM python:3.14-bookworm AS builder
+FROM python:3.14.5-bookworm AS builder
 
 RUN set -eux; \
     for tool in gcc g++ make git curl xz tar python3 pip3; do \
@@ -25,7 +25,7 @@ ENV CC=/opt/wasi-sdk/bin/clang
 ENV AR=/opt/wasi-sdk/bin/llvm-ar
 ENV NM=/opt/wasi-sdk/bin/llvm-nm
 
-ARG CPYTHON_TAG=v3.14.0
+ARG CPYTHON_TAG=v3.14.5
 RUN git clone --depth 1 --branch ${CPYTHON_TAG} \
     https://github.com/python/cpython /build/cpython-src
 

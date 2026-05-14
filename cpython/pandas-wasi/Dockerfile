@@ -104,11 +104,11 @@ RUN git clone --depth 1 --branch ${PANDAS_TAG} https://github.com/pandas-dev/pan
 COPY _sysconfigdata__wasi_wasm32-wasi.py /build/_sysconfigdata__wasi_wasm32-wasi.py
 COPY pyconfig-wasi.h /build/pyconfig-wasi.h
 RUN mkdir -p /tmp/cpython-wasi/include/python3.14 /tmp/cpython-wasi/usr/local/lib/python3.14 \
-    && curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.0.tar.gz | tar xz -C /tmp \
-    && cp -r /tmp/cpython-3.14.0/Include/* /tmp/cpython-wasi/include/python3.14/ \
+    && curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.5.tar.gz | tar xz -C /tmp \
+    && cp -r /tmp/cpython-3.14.5/Include/* /tmp/cpython-wasi/include/python3.14/ \
     && cp /build/pyconfig-wasi.h /tmp/cpython-wasi/include/python3.14/pyconfig.h \
     && cp /build/_sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/usr/local/lib/python3.14/ \
-    && rm -rf /tmp/cpython-3.14.0 \
+    && rm -rf /tmp/cpython-3.14.5 \
     && test -f /tmp/cpython-wasi/include/python3.14/pyconfig.h \
     && test -f /tmp/cpython-wasi/usr/local/lib/python3.14/_sysconfigdata__wasi_wasm32-wasi.py
 
