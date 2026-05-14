@@ -58,7 +58,7 @@ public final class CopyOnWriteMemory implements Memory {
   private int copiedPageCount = 0;
 
   public CopyOnWriteMemory(byte[] goldenSnapshot, MemoryLimits limits) {
-    this(goldenSnapshot, limits, 0, null);
+    this(goldenSnapshot, limits, -1, null);
   }
 
   public CopyOnWriteMemory(
@@ -129,7 +129,7 @@ public final class CopyOnWriteMemory implements Memory {
   @Override
   public int maximumPages() {
     int moduleMax = min(limits.maximumPages(), RUNTIME_MAX_PAGES);
-    return callerMaxPages > 0 ? min(moduleMax, callerMaxPages) : moduleMax;
+    return callerMaxPages >= 0 ? min(moduleMax, callerMaxPages) : moduleMax;
   }
 
   @Override
