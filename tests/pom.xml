@@ -9,6 +9,7 @@
   </parent>
 
   <artifactId>boomslang-tests</artifactId>
+  <name>${project.groupId}:${project.artifactId}</name>
 
   <properties>
     <maven.deploy.skip>true</maven.deploy.skip>
@@ -44,5 +45,17 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <configuration>
+          <skipPublishing>true</skipPublishing>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 
 </project>

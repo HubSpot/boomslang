@@ -9,6 +9,7 @@
   </parent>
 
   <artifactId>boomslang-benchmarks</artifactId>
+  <name>${project.groupId}:${project.artifactId}</name>
 
   <properties>
     <maven.deploy.skip>true</maven.deploy.skip>
@@ -37,6 +38,13 @@
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <configuration>
+          <skipPublishing>true</skipPublishing>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
