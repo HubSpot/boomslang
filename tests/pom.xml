@@ -5,10 +5,14 @@
   <parent>
     <groupId>com.hubspot</groupId>
     <artifactId>boomslang-parent</artifactId>
-    <version>999-SNAPSHOT</version>
+    <version>0.1.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>boomslang-tests</artifactId>
+
+  <properties>
+    <maven.deploy.skip>true</maven.deploy.skip>
+  </properties>
 
   <dependencies>
     <dependency>
