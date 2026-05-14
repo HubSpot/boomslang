@@ -419,21 +419,19 @@ public class PythonInstance implements AutoCloseable {
     }
 
     long maxOutput = limits.maximumOutputBytes();
-    boolean truncated = stdoutLen > maxOutput;
-    int readLen = truncated ? Math.toIntExact(maxOutput) : stdoutLen;
+    if (stdoutLen > maxOutput) {
+      throw new PythonExecutionException(
+        "stdout size " + stdoutLen + " bytes exceeds limit of " + maxOutput + " bytes"
+      );
+    }
 
-    int outBufPtr = Math.toIntExact(allocFunc.apply(readLen)[0]);
+    int outBufPtr = Math.toIntExact(allocFunc.apply(stdoutLen)[0]);
     try {
-      getStdoutFunc.apply(outBufPtr, readLen);
-      byte[] stdoutBytes = wasmInstance.memory().readBytes(outBufPtr, readLen);
-      String result = new String(stdoutBytes, StandardCharsets.UTF_8);
-      if (truncated) {
-        LOG.warn("stdout truncated: {} bytes exceeds limit {}", stdoutLen, maxOutput);
-        return result + "\n[truncated: output exceeded " + maxOutput + " byte limit]";
-      }
-      return result;
+      getStdoutFunc.apply(outBufPtr, stdoutLen);
+      byte[] stdoutBytes = wasmInstance.memory().readBytes(outBufPtr, stdoutLen);
+      return new String(stdoutBytes, StandardCharsets.UTF_8);
     } finally {
-      deallocFunc.apply(outBufPtr, readLen);
+      deallocFunc.apply(outBufPtr, stdoutLen);
     }
   }
 
@@ -444,21 +442,19 @@ public class PythonInstance implements AutoCloseable {
     }
 
     long maxOutput = limits.maximumOutputBytes();
-    boolean truncated = stderrLen > maxOutput;
-    int readLen = truncated ? Math.toIntExact(maxOutput) : stderrLen;
+    if (stderrLen > maxOutput) {
+      throw new PythonExecutionException(
+        "stderr size " + stderrLen + " bytes exceeds limit of " + maxOutput + " bytes"
+      );
+    }
 
-    int errBufPtr = Math.toIntExact(allocFunc.apply(readLen)[0]);
+    int errBufPtr = Math.toIntExact(allocFunc.apply(stderrLen)[0]);
     try {
-      getStderrFunc.apply(errBufPtr, readLen);
-      byte[] stderrBytes = wasmInstance.memory().readBytes(errBufPtr, readLen);
-      String result = new String(stderrBytes, StandardCharsets.UTF_8);
-      if (truncated) {
-        LOG.warn("stderr truncated: {} bytes exceeds limit {}", stderrLen, maxOutput);
-        return result + "\n[truncated: output exceeded " + maxOutput + " byte limit]";
-      }
-      return result;
+      getStderrFunc.apply(errBufPtr, stderrLen);
+      byte[] stderrBytes = wasmInstance.memory().readBytes(errBufPtr, stderrLen);
+      return new String(stderrBytes, StandardCharsets.UTF_8);
     } finally {
-      deallocFunc.apply(errBufPtr, readLen);
+      deallocFunc.apply(errBufPtr, stderrLen);
     }
   }
 
