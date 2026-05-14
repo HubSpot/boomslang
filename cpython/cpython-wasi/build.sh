@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PYTHON_VERSION=3.14.0
-CPYTHON_TAG=v3.14.0
+PYTHON_VERSION=3.14.5
+CPYTHON_TAG=v3.14.5
 
 WASI_SDK_PATH="${WASI_SDK_PATH:-/opt/wasi-sdk}"
 BUILD_DIR="/build/staging"
@@ -66,6 +66,46 @@ CONFIG_SITE=./Tools/wasm/wasi/config.site-wasm32-wasi \
 # post-processing is simpler than patching the generator.
 log "Splitting add_ast_annotations for Chicory AOT..."
 python3 /build/split-ast-annotations.py
+
+python3 - <<'PY'
+from pathlib import Path
+path = Path('Python/ceval_macros.h')
+text = path.read_text()
+old = (
+    "#   if defined(__clang__) || defined(__GNUC__)\n"
+    "#       if !_Py__has_attribute(preserve_none) || !_Py__has_attribute(musttail)\n"
+    "#           error \"This compiler does not have support for efficient tail calling.\"\n"
+    "#       endif\n"
+    "#   elif defined(_MSC_VER)\n"
+    "#       error \"Tail calling not supported for MSVC.\"\n"
+    "#   endif\n"
+    "\n"
+    "    // Note: [[clang::musttail]] works for GCC 15, but not __attribute__((musttail)) at the moment.\n"
+    "#   define Py_MUSTTAIL [[clang::musttail]]\n"
+    "#   define Py_PRESERVE_NONE_CC __attribute__((preserve_none))"
+)
+new = (
+    "#   if defined(__wasm32__) && (defined(__clang__) || defined(__GNUC__))\n"
+    "#       if !_Py__has_attribute(musttail)\n"
+    "#           error \"This compiler does not have support for tail calling.\"\n"
+    "#       endif\n"
+    "#       define Py_PRESERVE_NONE_CC\n"
+    "#   elif defined(__clang__) || defined(__GNUC__)\n"
+    "#       if !_Py__has_attribute(preserve_none) || !_Py__has_attribute(musttail)\n"
+    "#           error \"This compiler does not have support for efficient tail calling.\"\n"
+    "#       endif\n"
+    "#       define Py_PRESERVE_NONE_CC __attribute__((preserve_none))\n"
+    "#   elif defined(_MSC_VER)\n"
+    "#       error \"Tail calling not supported for MSVC.\"\n"
+    "#   endif\n"
+    "\n"
+    "    // Note: [[clang::musttail]] works for GCC 15, but not __attribute__((musttail)) at the moment.\n"
+    "#   define Py_MUSTTAIL [[clang::musttail]]"
+)
+if old not in text:
+    raise SystemExit('Could not patch ceval_macros.h for WASI tail calls')
+path.write_text(text.replace(old, new))
+PY
 
 log "Building CPython..."
 # Pass -mtail-call at make time (not configure time) so the WASM tail-call
