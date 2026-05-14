@@ -79,14 +79,27 @@ public class HostBridge {
       }
 
       CallHandler handler = effectiveCallHandler;
-      return (name, args) -> handler.handle(name, args);
+      return (name, args) -> {
+        checkInterrupted();
+        return handler.handle(name, args);
+      };
     }
 
     private BoomslangHostHostFunctions.LogHandler effectiveLogHandler() {
       if (logHandler == null) {
-        return (level, message) -> {};
+        return (level, message) -> checkInterrupted();
       }
-      return (level, message) -> logHandler.handle(level, message);
+      return (level, message) -> {
+        checkInterrupted();
+        logHandler.handle(level, message);
+      };
+    }
+
+    private static void checkInterrupted() {
+      if (Thread.currentThread().isInterrupted()) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException("Thread interrupted during host function execution");
+      }
     }
   }
 }

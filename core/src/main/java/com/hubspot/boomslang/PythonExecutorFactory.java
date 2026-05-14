@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -32,6 +33,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import org.slf4j.Logger;
@@ -109,11 +111,58 @@ public class PythonExecutorFactory {
     );
   }
 
+  public PythonInstance createInstance(Path rootPath, ResourceLimits limits) {
+    return new PythonInstance(
+      runtimeImage,
+      hostFunctions,
+      rootPath,
+      pythonHome,
+      pythonPath,
+      limits
+    );
+  }
+
   public <T> T runOnWasmThread(Callable<T> task) {
     Future<T> future = executorService.submit(task);
     try {
       return future.get();
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException("Python execution interrupted", e);
+    } catch (ExecutionException e) {
+      Throwable cause = e.getCause();
+      if (cause instanceof RuntimeException runtimeException) {
+        throw runtimeException;
+      }
+      throw new RuntimeException("Python execution failed", cause);
+    }
+  }
+
+  public <T> T runOnWasmThread(Callable<T> task, Duration timeout) {
+    return runOnWasmThread(task, timeout, null);
+  }
+
+  public <T> T runOnWasmThread(
+    Callable<T> task,
+    Duration timeout,
+    PythonInstance instanceToPoison
+  ) {
+    Future<T> future = executorService.submit(task);
+    try {
+      return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+    } catch (TimeoutException e) {
+      future.cancel(true);
+      if (instanceToPoison != null) {
+        instanceToPoison.poison();
+      }
+      throw new PythonInstance.PythonTimeoutException(
+        "Python execution timed out after " + timeout.toMillis() + "ms"
+      );
+    } catch (InterruptedException e) {
+      future.cancel(true);
+      if (instanceToPoison != null) {
+        instanceToPoison.poison();
+      }
       Thread.currentThread().interrupt();
       throw new RuntimeException("Python execution interrupted", e);
     } catch (ExecutionException e) {

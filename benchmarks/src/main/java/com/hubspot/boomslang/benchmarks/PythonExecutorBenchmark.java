@@ -51,6 +51,7 @@ public class PythonExecutorBenchmark {
     factory =
       PythonExecutorFactory
         .builder()
+        .withStdlibPath(createRootPath())
         .addExtension(
           HostBridge
             .builder()
