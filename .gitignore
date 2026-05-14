@@ -22,7 +22,6 @@ __pycache__/
 
 # WASM build artifacts
 cpython/build/
-core/src/main/resources/python/bin/*.wasm
 core/src/main/resources/python/usr/
 
 # Docker build artifacts (produced by `just build-*`)

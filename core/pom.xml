@@ -75,26 +75,28 @@
 
   <profiles>
     <profile>
-      <id>embed-wasm</id>
+      <id>unpack-stdlib</id>
+      <activation>
+        <file>
+          <exists>${basedir}/src/main/resources/python/stdlib.zip</exists>
+        </file>
+      </activation>
       <build>
         <plugins>
           <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>exec-maven-plugin</artifactId>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
             <executions>
               <execution>
-                <id>extract-wasm-artifact</id>
+                <id>unzip-stdlib</id>
                 <goals>
-                  <goal>exec</goal>
+                  <goal>run</goal>
                 </goals>
-                <phase>initialize</phase>
+                <phase>generate-resources</phase>
                 <configuration>
-                  <executable>bash</executable>
-                  <workingDirectory>${project.basedir}</workingDirectory>
-                  <arguments>
-                    <argument>-c</argument>
-                    <argument>set -ex; rm -rf /tmp/cpython-staging; mkdir -p /tmp/cpython-staging src/main/resources/python/bin src/main/resources/python/usr/local/lib; tar xzf /tmp/cpython.tgz -C /tmp/cpython-staging; cp /tmp/cpython-staging/bin/boomslang.wasm src/main/resources/python/bin/; cp -r /tmp/cpython-staging/usr/local/lib/python3.14 src/main/resources/python/usr/local/lib/; ls -lh src/main/resources/python/bin/boomslang.wasm</argument>
-                  </arguments>
+                  <target>
+                    <unzip src="${basedir}/src/main/resources/python/stdlib.zip" dest="${basedir}/src/main/resources/python/" overwrite="false" />
+                  </target>
                 </configuration>
               </execution>
             </executions>
