@@ -10,7 +10,7 @@
 
   <groupId>com.hubspot</groupId>
   <artifactId>boomslang-parent</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <name>${project.groupId}:${project.artifactId}</name>
@@ -114,7 +114,7 @@
     <connection>scm:git:git@github.com:HubSpot/boomslang.git</connection>
     <developerConnection>scm:git:git@github.com:HubSpot/boomslang.git</developerConnection>
     <url>git@github.com:HubSpot/boomslang.git</url>
-    <tag>boomslang-parent-0.1.0</tag>
+    <tag>HEAD</tag>
   </scm>
 
 </project>
