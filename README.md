@@ -1,113 +1,145 @@
 # boomslang
 
-Run Python 3.14 from Java, safely sandboxed via WebAssembly.
+Run CPython 3.14 from Java through WebAssembly using Chicory. No JNI, native process, or system Python is required at runtime.
 
-boomslang compiles CPython to [WebAssembly](https://webassembly.org/) and executes it through [Chicory](https://github.com/dylibso/chicory), a pure-Java WASM runtime. No native code, no JNI, no subprocess — Python runs as JVM bytecode with full memory isolation.
+## What ships in the runtime
 
-## What's included
+- CPython 3.14 built for `wasm32-wasip1`
+- stdlib plus NumPy, Pandas, Matplotlib, Pydantic, ijson, and Jinja2
+- Chicory AOT classes for the bundled `boomslang.wasm`
+- Copy-on-write memory snapshots for fast `PythonInstance` creation
+- Built-in `boomslang_host` bridge for calling Java functions from Python
 
-- **CPython 3.14** compiled to `wasm32-wasip1`
-- **NumPy**, **Pandas**, **Matplotlib**, **Pydantic**, **ijson** statically linked
-- **Copy-on-write memory** for fast instance creation (<1ms)
-- **Wizer pre-initialization** — Python interpreter + all libraries pre-imported at build time
-- **AOT compilation** — WASM compiled to JVM bytecode via Chicory for near-native speed
+## Java usage
 
-## Usage
+Add the normal artifact when you want the bundled Python runtime:
+
+```xml
+<dependency>
+  <groupId>com.hubspot</groupId>
+  <artifactId>boomslang</artifactId>
+  <version>${boomslang.version}</version>
+</dependency>
+```
+
+Create a factory once, then create/reset instances for work. The stdlib path is a host directory where boomslang extracts packaged Python resources. The instance root is the filesystem visible to Python as `/`.
 
 ```java
-var factory = PythonExecutorFactory.builder().build();
+import com.hubspot.boomslang.PythonExecutorFactory;
+import com.hubspot.boomslang.PythonInstance;
+import com.hubspot.boomslang.PythonResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+Path pythonRoot = Files.createTempDirectory("boomslang-python");
+PythonExecutorFactory factory = PythonExecutorFactory
+  .builder()
+  .withStdlibPath(pythonRoot)
+  .build();
 
 PythonResult result = factory.runOnWasmThread(() -> {
-    PythonInstance instance = factory.createInstance();
-    return instance.execute("print('hello from Python')");
+  PythonInstance instance = factory.createInstance(pythonRoot);
+  return instance.execute("print('hello from Python')");
 });
 
-System.out.println(result.stdout()); // "hello from Python"
+System.out.println(result.stdout());
 ```
 
-### NumPy, Pandas, Pydantic, ijson — they just work
+Use `runOnWasmThread` for Python execution. It runs with a larger stack than a normal JVM thread and supports timeouts:
 
 ```java
-instance.execute("""
-    import io
-    import ijson
-    import numpy as np
-    import pandas as pd
-    from pydantic import BaseModel
-
-    total = sum(ijson.items(io.StringIO('{"items": [1, 2, 3]}'), 'items.item'))
-    data = np.random.randn(100)
-    df = pd.DataFrame({'values': data})
-    print(total, df.describe())
-    """);
+PythonInstance instance = factory.createInstance(pythonRoot);
+PythonResult result = factory.runOnWasmThread(
+  () -> instance.execute("print(sum(range(10)))"),
+  Duration.ofSeconds(5),
+  instance
+);
 ```
 
-### Compile once, run many times
+If a timeout fires, the instance is poisoned. Call `reset()` before reuse or discard it.
+
+## Supported Python libraries
+
+These imports are expected to work from the bundled runtime:
+
+```python
+import ijson
+import jinja2
+import matplotlib
+import numpy as np
+import pandas as pd
+from pydantic import BaseModel
+```
+
+## Reusing compiled Python code
+
+Use `compile` and `loadCode` when the same source runs many times:
 
 ```java
+PythonInstance instance = factory.createInstance(pythonRoot);
 byte[] bytecode = instance.compile(sourceCode);
 
-// Each call reuses the compiled bytecode — no re-parse overhead
-PythonResult r1 = instance.loadCode(bytecode);
+PythonResult first = instance.loadCode(bytecode);
 instance.reset();
-PythonResult r2 = instance.loadCode(bytecode);
+PythonResult second = instance.loadCode(bytecode);
 ```
 
-### Call Java from Python
+## Calling Java from Python
 
-boomslang includes a built-in host bridge for calling Java functions from Python:
+The stock host includes `boomslang_host.call(name, args)` and `boomslang_host.log(level, message)`.
 
 ```java
-var factory = PythonExecutorFactory.builder()
-    .addExtension(
-        HostBridge.builder()
-            .withFunction("lookup_user", args -> {
-                String userId = args;
-                return userService.findById(userId).toJson();
-            })
-            .withLogHandler((level, msg) -> LOG.info("[Python] {}", msg))
-            .buildExtension())
-    .build();
+PythonExecutorFactory factory = PythonExecutorFactory
+  .builder()
+  .withStdlibPath(pythonRoot)
+  .addExtension(
+    HostBridge
+      .builder()
+      .withFunction("lookup_user", userId -> userService.findById(userId).toJson())
+      .withLogHandler((level, message) -> LOG.info("[Python] {}", message))
+      .buildExtension()
+  )
+  .build();
 ```
 
 ```python
 from boomslang_host import call, log
 
 user_json = call("lookup_user", "12345")
-log(2, "got user data")
+log(2, "loaded user")
 ```
 
-## Building from source
+For typed WASM imports or custom Python modules, build a custom host. See `examples/custom-host/`.
 
-Requires: a container engine, Java 21+, Maven.
+## Adding pure-Python modules
 
-```bash
-# Full build from scratch (~1 hour first time, container caches subsequent runs)
-just everything
+Install small in-memory packages at factory creation:
 
-# To use Apple container instead of Docker:
-container system start
-BOOMSLANG_CONTAINER_CLI=container just everything
-
-# Or step by step:
-just build-pydantic-core-wasi   # Build pydantic-core static lib
-just build-numpy-wasi           # Build NumPy C extensions
-just build-pandas-wasi          # Build Pandas C extensions
-just build-matplotlib-wasi      # Build Matplotlib C extensions
-just build-ijson-wasi           # Build ijson C extension
-just build-cpython-wasi         # Compile CPython, merge all libraries
-just pip-packages               # Download Pydantic Python package
-just wasm                       # Build Rust host + Wizer pre-init
-just resources                  # Populate Java resources
-just build                      # Maven build with AOT compilation
-just test                       # Run tests
+```java
+PythonExecutorFactory factory = PythonExecutorFactory
+  .builder()
+  .withStdlibPath(pythonRoot)
+  .withModule("my_package", "helpers", "def double(x): return x * 2")
+  .build();
 ```
 
-All native compilation happens inside a container engine — no local Rust, WASI SDK, or C toolchain needed.
+For larger packages, build them into the WASM/Python resource pipeline instead.
 
-## Published artifacts
+## Runtime variants
 
-The default `com.hubspot:boomslang` JAR includes the Java API, `boomslang.wasm`, the Python runtime resources, and Chicory AOT classes. Builds also publish a `no-python-runtime` classifier that contains only the handwritten Java runtime classes. Use that classifier when another dependency provides its own Python WASM binary and stdlib resources:
+Use the default artifact for the stock runtime:
+
+```xml
+<dependency>
+  <groupId>com.hubspot</groupId>
+  <artifactId>boomslang</artifactId>
+  <version>${boomslang.version}</version>
+</dependency>
+```
+
+It includes the Java API, `python/bin/boomslang.wasm`, Python resources, and generated Chicory AOT classes.
+
+Use `no-python-runtime` when another artifact or application layer provides the Python runtime:
 
 ```xml
 <dependency>
@@ -118,49 +150,102 @@ The default `com.hubspot:boomslang` JAR includes the Java API, `boomslang.wasm`,
 </dependency>
 ```
 
-## How it works
+That classifier excludes `python/**` and `com/hubspot/boomslang/compiled/**`. It still gives you the Java API. Your app must provide:
 
-```
-Python source code
-        │
-        ▼
-┌─────────────────┐
-│  PythonInstance  │  Java API
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│    Chicory       │  Pure-Java WASM runtime (AOT-compiled to JVM bytecode)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  CPython 3.14   │  Full interpreter + stdlib + numpy/pandas/pydantic/ijson
-│  (wasm32-wasi)  │  Pre-initialized via Wizer snapshot
-└─────────────────┘
+- a WASM binary, usually at `python/bin/boomslang.wasm`
+- Python resources under `python/usr/local/lib/python3.14`
+- an AOT machine factory if you want AOT instead of interpreter fallback
+
+If your WASM is not at the default classpath location, set it with `withWasmResource(...)`.
+
+## Custom host builds
+
+Build a custom host when the stock `boomslang_host.call(...)` bridge is not enough. Common reasons:
+
+- typed WASM imports instead of string/JSON calls
+- custom host functions exposed as Python modules
+- extra Python modules prewarmed into the Wizer snapshot
+
+Start from `examples/custom-host/`. The flow is:
+
+1. Define an extension contract in `extension.toml`.
+2. Use `boomslang-hostgen` to generate Rust and Java bridge code.
+3. Compose the extension with `python-host-core` in a custom Rust host.
+4. Build the host to `wasm32-wasip1`.
+5. Package the custom `boomslang.wasm` and matching Python resources in your app or artifact.
+6. Depend on `com.hubspot:boomslang:no-python-runtime` for the Java API.
+
+Minimal build command from the example:
+
+```bash
+export CPYTHON_WASI_DIR=../../cpython/build/cpython-wasi
+cargo build --target wasm32-wasip1 --release
 ```
 
-Each `PythonInstance` starts from a memory snapshot of an already-initialized interpreter with all libraries imported. Instance creation costs <1ms thanks to copy-on-write memory pages — only pages that Python modifies during execution are allocated.
+For the stock repo build that produces the bundled runtime, use `just wasm` and `just resources`.
 
-## Project structure
+## Building this repo
 
+Requirements: Java 21, Maven, `just`, and either Docker or Apple `container`.
+
+```bash
+just everything
 ```
-boomslang/
-├── core/              Java runtime
-├── python-host/       Rust WASM host (PyO3 + CPython)
-├── cpython/           Native build infrastructure
-│   ├── cpython-wasi/      CPython → WASM
-│   ├── pydantic-core-wasi/
-│   ├── numpy-wasi/
-│   ├── pandas-wasi/
-│   ├── matplotlib-wasi/
-│   ├── ijson-wasi/
-│   └── builder/           Docker image with build tools
-├── extensions/        Host function extensions
-├── boomslang-hostgen/      Extension code generator
-├── tests/
-└── benchmarks/
+
+That builds the native WASM artifacts, Rust host, Python resources, Java AOT classes, and Maven packages. First runs take about an hour because the CPython and library builds are container-heavy.
+
+Use Apple container instead of Docker:
+
+```bash
+container system start
+BOOMSLANG_CONTAINER_CLI=container just everything
 ```
+
+Common local workflows:
+
+```bash
+just build     # Maven package with AOT, skips tests
+just test      # tests module
+mvn compile -pl core
+mvn test -pl tests
+```
+
+After Rust or host changes:
+
+```bash
+just wasm
+just resources
+just build
+just test
+```
+
+Full pipeline stages:
+
+```bash
+just build-pydantic-core-wasi
+just build-numpy-wasi
+just build-pandas-wasi
+just build-matplotlib-wasi
+just build-ijson-wasi
+just build-cpython-wasi
+just pip-packages
+just wasm
+just resources
+just build
+just test
+```
+
+## Repo map
+
+- `core/` — Java runtime API and bundled Python resources
+- `tests/` — integration tests
+- `benchmarks/` — JMH benchmarks
+- `python-host/` — stock Rust WASM host
+- `python-host-core/` — reusable Rust host core
+- `extensions/` — built-in host extensions
+- `boomslang-hostgen/` — extension code generator
+- `examples/custom-host/` — custom host example
+- `cpython/` — CPython, native library, and container build pipeline
 
 ## License
 
