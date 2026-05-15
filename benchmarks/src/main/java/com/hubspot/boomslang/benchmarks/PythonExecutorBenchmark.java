@@ -169,6 +169,26 @@ public class PythonExecutorBenchmark {
   }
 
   @Benchmark
+  public PythonResult pillowPngRoundTrip() {
+    return factory.runOnWasmThread(() ->
+      instance.execute(
+        String.join(
+          "\n",
+          "import io",
+          "from PIL import Image",
+          "buffer = io.BytesIO()",
+          "image = Image.new('RGBA', (64, 64), (10, 20, 30, 255))",
+          "image.save(buffer, format='PNG')",
+          "buffer.seek(0)",
+          "decoded = Image.open(buffer)",
+          "decoded.load()",
+          "print(decoded.mode, decoded.size, decoded.getpixel((0, 0)))"
+        )
+      )
+    );
+  }
+
+  @Benchmark
   public byte[] compile() {
     return factory.runOnWasmThread(() -> instance.compile("x = sum(range(1000))"));
   }

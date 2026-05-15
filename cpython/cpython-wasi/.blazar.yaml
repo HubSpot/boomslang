@@ -6,6 +6,7 @@ depends:
   - numpy-wasi
   - pandas-wasi
   - matplotlib-wasi
+  - pillow-wasi
   - ijson-wasi
 
 buildpack:
@@ -99,6 +100,25 @@ before:
             exit 1
         fi
         ls -lh vendor/matplotlib-wasi.tgz
+
+  - description: "Download pillow-wasi artifact"
+    commands:
+      - |
+        set -ex
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-pillow-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-pillow-wasi_amd64"
+        mkdir -p vendor
+        if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/pillow-wasi.tgz 2>/dev/null; then
+            echo "Downloaded pillow-wasi from same build"
+        elif download-artifact -n "$COORDS" -o vendor/pillow-wasi.tgz 2>/dev/null; then
+            echo "Downloaded pillow-wasi from branch"
+        elif download-artifact -n "$MAIN_COORDS" -o vendor/pillow-wasi.tgz 2>/dev/null; then
+            echo "Downloaded pillow-wasi from main"
+        else
+            echo "ERROR: Could not download pillow-wasi artifact"
+            exit 1
+        fi
+        ls -lh vendor/pillow-wasi.tgz
 
   - description: "Download ijson-wasi artifact"
     commands:
