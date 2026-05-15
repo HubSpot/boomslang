@@ -77,6 +77,10 @@ unsafe extern "C" {
     pub fn PyInit__image() -> *mut pyo3::ffi::PyObject;
     pub fn PyInit__backend_agg() -> *mut pyo3::ffi::PyObject;
 
+    pub fn PyInit__imaging() -> *mut pyo3::ffi::PyObject;
+    pub fn PyInit__imagingmath() -> *mut pyo3::ffi::PyObject;
+    pub fn PyInit__imagingmorph() -> *mut pyo3::ffi::PyObject;
+
     // ijson
     pub fn PyInit__yajl2() -> *mut pyo3::ffi::PyObject;
 }
@@ -157,6 +161,9 @@ pub(crate) fn register_all() {
             (b"matplotlib.ft2font\0".as_slice(), PyInit_ft2font as _),
             (b"matplotlib._image\0".as_slice(), PyInit__image as _),
             (b"matplotlib.backends._backend_agg\0".as_slice(), PyInit__backend_agg as _),
+            (b"PIL._imaging\0".as_slice(), PyInit__imaging as _),
+            (b"PIL._imagingmath\0".as_slice(), PyInit__imagingmath as _),
+            (b"PIL._imagingmorph\0".as_slice(), PyInit__imagingmorph as _),
             (b"ijson.backends._yajl2\0".as_slice(), PyInit__yajl2 as _),
         ] {
             PyImport_AppendInittab(name.as_ptr() as _, Some(init));

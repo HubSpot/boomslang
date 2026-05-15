@@ -123,6 +123,30 @@ class PythonExecutorTest {
   }
 
   @Test
+  void itWritesAndReadsPngWithPillow() {
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
+      return instance.execute(
+        String.join(
+          "\n",
+          "import io",
+          "from PIL import Image",
+          "buffer = io.BytesIO()",
+          "image = Image.new('RGBA', (2, 1), (10, 20, 30, 255))",
+          "image.save(buffer, format='PNG')",
+          "buffer.seek(0)",
+          "decoded = Image.open(buffer)",
+          "decoded.load()",
+          "print(decoded.mode, decoded.size, decoded.getpixel((0, 0)))"
+        )
+      );
+    });
+
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("RGBA (2, 1) (10, 20, 30, 255)");
+  }
+
+  @Test
   void itImportsIjson() {
     PythonResult result = factory.runOnWasmThread(() -> {
       PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());

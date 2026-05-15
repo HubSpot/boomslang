@@ -385,35 +385,29 @@ rm -rf usr/local/lib/python3.14/matplotlib/tests 2>/dev/null || true
 MATPLOTLIB_VER=$(sed 's/^v//' "${MATPLOTLIB_LIB}/version.txt" 2>/dev/null || echo "unknown")
 log "matplotlib-wasi artifact reports version: ${MATPLOTLIB_VER}"
 
-# PIL stub — matplotlib.colors imports `from PIL import Image` unconditionally.
-# Real Pillow has C extensions that don't work on wasm32-wasi. This minimal
-# stub satisfies the import; mpld3 never exercises actual image I/O.
-log "Writing PIL + kiwisolver stubs..."
-mkdir -p usr/local/lib/python3.14/PIL
-cat > usr/local/lib/python3.14/PIL/__init__.py <<'STUB'
-__version__ = "0.0.0-stub"
-STUB
-cat > usr/local/lib/python3.14/PIL/Image.py <<'STUB'
-NEAREST = 0; LANCZOS = 1; BILINEAR = 2; BICUBIC = 3; BOX = 4; HAMMING = 5
-class Resampling:
-    NEAREST = NEAREST; LANCZOS = LANCZOS; BILINEAR = BILINEAR; BICUBIC = BICUBIC; BOX = BOX; HAMMING = HAMMING
-class Image:
-    format = None; mode = None; size = (0, 0)
-    def __init__(self, *a, **k): pass
-    def save(self, *a, **k): raise NotImplementedError("PIL not available on wasi")
-    def convert(self, *a, **k): return self
-    def resize(self, *a, **k): return self
-def new(*a, **k): return Image()
-def open(*a, **k): raise NotImplementedError("PIL not available on wasi")
-def fromarray(*a, **k): raise NotImplementedError("PIL not available on wasi")
-STUB
-cat > usr/local/lib/python3.14/PIL/PngImagePlugin.py <<'STUB'
-class PngInfo:
-    def __init__(self): self.chunks = []
-    def add(self, *a, **k): pass
-    def add_text(self, *a, **k): pass
-_MODES = {}
-STUB
+PILLOW_LIB="${BUILD_DIR}/pillow-lib"
+
+log "Extracting Pillow from vendor artifact..."
+mkdir -p "${PILLOW_LIB}"
+if [ -f /build/vendor/pillow-wasi.tgz ]; then
+    tar xzf /build/vendor/pillow-wasi.tgz -C "${PILLOW_LIB}"
+else
+    log "ERROR: pillow artifact not found in /build/vendor/pillow-wasi.tgz"
+    ls -la /build/vendor/ 2>/dev/null || echo "vendor/ does not exist"
+    exit 1
+fi
+cp -r "${PILLOW_LIB}/python/PIL" usr/local/lib/python3.14/
+log "Pillow archives: $(ls ${PILLOW_LIB}/lib/wasm32-wasi/ | wc -l) files, $(du -sh ${PILLOW_LIB}/lib/wasm32-wasi/ | cut -f1) total"
+cat "${PILLOW_LIB}/manifest.txt"
+find usr/local/lib/python3.14/PIL -type f \( \
+        -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \
+    \) -delete
+rm -rf usr/local/lib/python3.14/PIL/tests 2>/dev/null || true
+
+PILLOW_VER=$(sed 's/^v//' "${PILLOW_LIB}/version.txt" 2>/dev/null || echo "unknown")
+log "pillow-wasi artifact reports version: ${PILLOW_VER}"
+
+log "Writing kiwisolver stub..."
 
 # kiwisolver stub — matplotlib's layout engine (constrained_layout).
 # Real kiwisolver is a C extension. mpld3 doesn't exercise layout.
@@ -559,6 +553,7 @@ addlib ${NUMPY_LIB}/lib/wasm32-wasi/lib_numpy_random_mtrand.a
 addlib ${NUMPY_LIB}/lib/wasm32-wasi/lib_numpy_internal.a
 $(for pa in ${PANDAS_LIB}/lib/wasm32-wasi/lib_pandas_*.a; do echo "addlib ${pa}"; done)
 $(for ma in ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_matplotlib_*.a; do echo "addlib ${ma}"; done)
+$(for pa in ${PILLOW_LIB}/lib/wasm32-wasi/lib_pillow_*.a; do echo "addlib ${pa}"; done)
 addlib ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_freetype.a
 addlib ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_png.a
 addlib ${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a
@@ -579,6 +574,7 @@ cp -v libpython3.14-aio.a "${OUTPUT_DIR}/lib/wasm32-wasi/libpython3.14.a"
 cp -v "${NUMPY_LIB}/lib/wasm32-wasi/"lib_numpy_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 cp -v "${PANDAS_LIB}/lib/wasm32-wasi/"lib_pandas_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 cp -v "${MATPLOTLIB_LIB}/lib/wasm32-wasi/"lib_matplotlib_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
+cp -v "${PILLOW_LIB}/lib/wasm32-wasi/"lib_pillow_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 cp -v "${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a" "${OUTPUT_DIR}/lib/wasm32-wasi/"
 
 log "Generating pkg-config file..."

@@ -12,7 +12,7 @@ default:
 # ============================================================
 
 # Build everything from scratch (takes a while — container builds are heavy)
-everything: builder-image build-pydantic-core-wasi build-numpy-wasi build-pandas-wasi build-matplotlib-wasi build-ijson-wasi build-cpython-wasi pip-packages wasm resources build
+everything: builder-image build-pydantic-core-wasi build-numpy-wasi build-pandas-wasi build-matplotlib-wasi build-pillow-wasi build-ijson-wasi build-cpython-wasi pip-packages wasm resources build
 
 # ============================================================
 # Container image builds (WASM artifact production)
@@ -118,6 +118,26 @@ build-matplotlib-wasi:
     fi
     echo "matplotlib-wasi artifact: $(ls -lh artifact.tgz)"
 
+build-pillow-wasi:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "=== Building pillow-wasi ==="
+    cd cpython/pillow-wasi
+    if [ "{{container_cli}}" = "container" ]; then
+        out_dir=$(mktemp -d)
+        trap "rm -rf $out_dir" EXIT
+        container build --progress plain -t boomslang-pillow-wasi -o type=local,dest="$out_dir" .
+        artifact=$(find "$out_dir" -type f -name artifact.tgz -print -quit)
+        [ -n "$artifact" ] || { echo "ERROR: artifact.tgz not found in container build output"; exit 1; }
+        cp "$artifact" artifact.tgz
+    else
+        DOCKER_BUILDKIT=1 docker build -t boomslang-pillow-wasi .
+        CID=$(docker create boomslang-pillow-wasi unused-cmd)
+        docker cp "$CID:/artifact.tgz" artifact.tgz
+        docker rm "$CID" > /dev/null
+    fi
+    echo "pillow-wasi artifact: $(ls -lh artifact.tgz)"
+
 # Build ijson C extension for wasm32-wasip1
 build-ijson-wasi:
     #!/usr/bin/env bash
@@ -140,7 +160,7 @@ build-ijson-wasi:
     echo "ijson-wasi artifact: $(ls -lh artifact.tgz)"
 
 # Build cpython-wasi (CPython + all libraries merged into libpython3.14.a)
-# Requires: pydantic-core-wasi, numpy-wasi, pandas-wasi, matplotlib-wasi, ijson-wasi artifacts
+# Requires: pydantic-core-wasi, numpy-wasi, pandas-wasi, matplotlib-wasi, pillow-wasi, ijson-wasi artifacts
 build-cpython-wasi:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -149,7 +169,7 @@ build-cpython-wasi:
 
     # Populate vendor/ from upstream artifact builds
     mkdir -p vendor
-    for mod in pydantic-core-wasi numpy-wasi pandas-wasi matplotlib-wasi ijson-wasi; do
+    for mod in pydantic-core-wasi numpy-wasi pandas-wasi matplotlib-wasi pillow-wasi ijson-wasi; do
         src="../${mod}/artifact.tgz"
         if [ ! -f "$src" ]; then
             echo "ERROR: ${mod}/artifact.tgz not found. Run 'just build-${mod}' first."
