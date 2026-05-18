@@ -96,7 +96,7 @@
                 <phase>generate-resources</phase>
                 <configuration>
                   <target>
-                    <unzip src="${basedir}/src/main/resources/python/stdlib.zip" dest="${basedir}/src/main/resources/python/" overwrite="false" />
+                    <unzip src="${basedir}/src/main/resources/python/stdlib.zip" dest="${basedir}/src/main/resources/python/" overwrite="true" />
                   </target>
                 </configuration>
               </execution>
