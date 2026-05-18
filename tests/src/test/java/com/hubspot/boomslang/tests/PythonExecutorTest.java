@@ -15,14 +15,16 @@ import org.junit.jupiter.api.Test;
 
 class PythonExecutorTest {
 
+  private static Path pythonRoot;
   private static PythonExecutorFactory factory;
 
   @BeforeAll
   static void setUp() {
+    pythonRoot = SharedTestSetup.createRootPath();
     factory =
       PythonExecutorFactory
         .builder()
-        .withStdlibPath(SharedTestSetup.createRootPath())
+        .withStdlibPath(pythonRoot)
         .addHostFunctions(SharedTestSetup.defaultHostFunctions())
         .build();
   }
@@ -132,7 +134,8 @@ class PythonExecutorTest {
           "import io",
           "from PIL import Image",
           "buffer = io.BytesIO()",
-          "image = Image.new('RGBA', (2, 1), (10, 20, 30, 255))",
+          "pixels = bytes([10, 20, 30, 255, 40, 50, 60, 255])",
+          "image = Image.frombuffer('RGBA', (2, 1), pixels, 'raw', 'RGBA', 0, 1)",
           "image.save(buffer, format='PNG')",
           "buffer.seek(0)",
           "decoded = Image.open(buffer)",
