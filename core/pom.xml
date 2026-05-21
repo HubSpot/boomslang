@@ -96,6 +96,9 @@
                 <phase>generate-resources</phase>
                 <configuration>
                   <target>
+                    <exec executable="${basedir}/../scripts/ensure-lfs-runtime-resources.sh" failonerror="true">
+                      <arg value="${basedir}" />
+                    </exec>
                     <unzip src="${basedir}/src/main/resources/python/stdlib.zip" dest="${basedir}/src/main/resources/python/" overwrite="true" />
                   </target>
                 </configuration>

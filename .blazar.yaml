@@ -1,6 +1,11 @@
 buildpack:
   name: Blazar-Buildpack-Java
 
+before:
+  - description: Fetch Git LFS runtime resources
+    commands:
+      - cd "$WORKSPACE" && ./scripts/ensure-lfs-runtime-resources.sh .
+
 depends:
   - name: cpython
 
