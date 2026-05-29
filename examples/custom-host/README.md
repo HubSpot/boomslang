@@ -92,4 +92,66 @@ var factory = PythonExecutorFactory.builder()
     .build();
 ```
 
+## Async extension functions
+
+Custom extensions can also expose Java `CompletionStage<String>` work as Python awaitables. Use `async = true` in the extension manifest. See `async-extension.toml` for a complete manifest example:
+
+```toml
+[extension]
+name = "my_async_ext"
+wasm_module = "my_async_ext"
+prewarm = ["_my_async_ext"]
+
+[[functions]]
+name = "lookup"
+async = true
+params = [
+  { name = "request", type = "string" },
+  { name = "shard", type = "int" },
+]
+returns = "string"
+```
+
+Generated async functions preserve the normal typed argument handling. The Java handler receives typed params and returns a `CompletionStage<String>`:
+
+```java
+AsyncHostRegistry asyncRegistry = new AsyncHostRegistry();
+
+var hostBridge = HostBridge.builder()
+    .withAsyncRegistry(asyncRegistry)
+    .buildExtension();
+
+var asyncExtension = MyAsyncExtHostFunctions.builder()
+    .withAsyncRegistry(asyncRegistry)
+    .withLookup((request, shard) -> rpcClient.lookup(request, shard))
+    .buildExtension();
+
+var factory = PythonExecutorFactory.builder()
+    .addExtension(hostBridge)
+    .addExtension(asyncExtension)
+    .build();
+```
+
+Python installs the Boomslang event loop, calls typed extension functions, and awaits them with standard asyncio APIs:
+
+```python
+import asyncio
+from boomslang_host.asyncio import install
+from my_async_ext import lookup
+
+install()
+
+async def main():
+    first = lookup('{"id": 1}', 0)
+    second = lookup('{"id": 2}', 1)
+    result = await asyncio.gather(first, second)
+    print(result)
+
+asyncio.run(main())
+```
+
+The `AsyncHostRegistry` is shared between `boomslang_host.asyncio` and generated async extensions. Java completion threads only queue results in that registry; Python/WASM is resumed by the Boomslang event loop polling completions on the WASM thread.
+
+Current generated async functions support typed parameters with a `string` return, represented as `CompletionStage<String>` on the Java side.
+
 5. Build and use.

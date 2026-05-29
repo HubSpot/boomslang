@@ -1,0 +1,13 @@
+[extension]
+name = "my_async_ext"
+wasm_module = "my_async_ext"
+prewarm = ["_my_async_ext"]
+
+[[functions]]
+name = "lookup"
+async = true
+params = [
+  { name = "request", type = "string" },
+  { name = "shard", type = "int" },
+]
+returns = "string"
