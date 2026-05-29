@@ -40,6 +40,9 @@ class BoomslangEventLoop(base_events.BaseEventLoop):
 
     def create_host_future(self, name, args=""):
         token = int(call("__async_start__", f"{name}\n{args}"))
+        return self.create_future_for_token(token)
+
+    def create_future_for_token(self, token):
         future = self.create_future()
         self._host_futures[token] = future
         future.add_done_callback(lambda done, token=token: self._cancel_host_future(token, done))
@@ -94,11 +97,19 @@ def install():
     asyncio.set_event_loop_policy(BoomslangEventLoopPolicy())
 
 
-def async_call(name, args=""):
+def _running_boomslang_loop():
     loop = asyncio.get_running_loop()
     if not isinstance(loop, BoomslangEventLoop):
         raise RuntimeError("boomslang_host.asyncio.install() must be called before asyncio.run()")
-    return loop.create_host_future(name, args)
+    return loop
+
+
+def async_call(name, args=""):
+    return _running_boomslang_loop().create_host_future(name, args)
+
+
+def from_host_token(token):
+    return _running_boomslang_loop().create_future_for_token(token)
 
 
 async def sleep(delay, result=None):
@@ -106,4 +117,4 @@ async def sleep(delay, result=None):
     return result
 
 
-__all__ = ["BoomslangEventLoop", "BoomslangEventLoopPolicy", "HostAsyncError", "async_call", "install", "sleep"]
+__all__ = ["BoomslangEventLoop", "BoomslangEventLoopPolicy", "HostAsyncError", "async_call", "from_host_token", "install", "sleep"]
