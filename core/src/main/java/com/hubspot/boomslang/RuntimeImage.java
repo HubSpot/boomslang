@@ -8,6 +8,7 @@ import com.dylibso.chicory.runtime.Store;
 import com.dylibso.chicory.wasi.WasiOptions;
 import com.dylibso.chicory.wasi.WasiPreview1;
 import com.dylibso.chicory.wasm.WasmModule;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.function.Function;
 import javax.annotation.Nullable;
@@ -17,6 +18,8 @@ import org.slf4j.LoggerFactory;
 public class RuntimeImage {
 
   private static final Logger LOG = LoggerFactory.getLogger(RuntimeImage.class);
+  private static final String INSTALL_ASYNCIO_SCRIPT =
+    "from boomslang_host.asyncio import install\ninstall()";
 
   private final WasmModule module;
   private final Function<Instance, Machine> machineFactory;
@@ -44,6 +47,7 @@ public class RuntimeImage {
     Path extractedPythonPath,
     String pythonHome,
     @Nullable String pythonPath,
+    boolean installAsyncio,
     HostFunction... hostFunctions
   ) {
     LOG.debug("Creating RuntimeImage with golden memory snapshot");
@@ -77,6 +81,10 @@ public class RuntimeImage {
       "python-init",
       imports -> instanceBuilder.build()
     );
+
+    if (installAsyncio) {
+      executeInitScript(initInstance, INSTALL_ASYNCIO_SCRIPT);
+    }
 
     int pages = getMemoryPages(initInstance);
     byte[] goldenMemory = initInstance.memory().readBytes(0, pages * 65536);
@@ -116,6 +124,25 @@ public class RuntimeImage {
 
   public int getGoldenMemoryPages() {
     return goldenMemoryPages;
+  }
+
+  private static void executeInitScript(Instance instance, String script) {
+    byte[] scriptBytes = script.getBytes(StandardCharsets.UTF_8);
+    ExportFunction allocFunc = instance.export("alloc");
+    ExportFunction executeFunc = instance.export("execute");
+    ExportFunction deallocFunc = instance.export("dealloc");
+    int scriptPtr = Math.toIntExact(allocFunc.apply(scriptBytes.length)[0]);
+    try {
+      instance.memory().write(scriptPtr, scriptBytes);
+      long[] result = executeFunc.apply(scriptPtr, scriptBytes.length);
+      if (result[0] != 0) {
+        throw new IllegalStateException(
+          "Failed to install Boomslang asyncio event loop policy"
+        );
+      }
+    } finally {
+      deallocFunc.apply(scriptPtr, scriptBytes.length);
+    }
   }
 
   private static int getMemoryPages(Instance instance) {

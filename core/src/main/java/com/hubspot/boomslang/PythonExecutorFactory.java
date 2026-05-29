@@ -81,13 +81,16 @@ public class PythonExecutorFactory {
     this.aotAvailable = machineFactory != null;
 
     this.runtimeImage =
-      RuntimeImage.create(
-        module,
-        machineFactory,
-        extractedPythonPath,
-        builder.pythonHome,
-        builder.pythonPath,
-        hostFunctions
+      runOnWasmThread(() ->
+        RuntimeImage.create(
+          module,
+          machineFactory,
+          extractedPythonPath,
+          builder.pythonHome,
+          builder.pythonPath,
+          builder.asyncioSupport,
+          hostFunctions
+        )
       );
 
     LOG.info(
@@ -462,6 +465,7 @@ public class PythonExecutorFactory {
     private Path stdlibPath;
     private String pythonHome = "/usr/local";
     private String pythonPath;
+    private boolean asyncioSupport;
 
     private Builder() {}
 
@@ -515,6 +519,15 @@ public class PythonExecutorFactory {
      */
     public Builder withPythonPath(String pythonPath) {
       this.pythonPath = pythonPath;
+      return this;
+    }
+
+    public Builder withAsyncioSupport() {
+      return withAsyncioSupport(true);
+    }
+
+    public Builder withAsyncioSupport(boolean enabled) {
+      this.asyncioSupport = enabled;
       return this;
     }
 
