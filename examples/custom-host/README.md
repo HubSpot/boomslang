@@ -127,17 +127,19 @@ var asyncExtension = MyAsyncExtHostFunctions.builder()
     .buildExtension();
 
 var factory = PythonExecutorFactory.builder()
-    .withAsyncioSupport()
     .addExtension(hostBridge)
     .addExtension(asyncExtension)
     .build();
 ```
 
-With `.withAsyncioSupport()` enabled, the runtime image installs the Boomslang event loop policy up front. Python can call typed extension functions and await them with standard asyncio APIs:
+Python installs the Boomslang event loop, calls typed extension functions, and awaits them with standard asyncio APIs:
 
 ```python
 import asyncio
+from boomslang_host.asyncio import install
 from my_async_ext import lookup
+
+install()
 
 async def main():
     first = lookup('{"id": 1}', 0)

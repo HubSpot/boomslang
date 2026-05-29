@@ -89,7 +89,6 @@ class HostBridgeTest {
     PythonExecutorFactory asyncFactory = PythonExecutorFactory
       .builder()
       .withStdlibPath(asyncRoot)
-      .withAsyncioSupport()
       .addExtension(
         HostBridge
           .builder()
@@ -129,7 +128,8 @@ class HostBridgeTest {
           String.join(
             "\n",
             "import asyncio",
-            "from boomslang_host.asyncio import async_call",
+            "from boomslang_host.asyncio import async_call, install",
+            "install()",
             "async def main():",
             "    first = async_call('rpc', 'first')",
             "    second = async_call('rpc', 'second')",
