@@ -1,6 +1,8 @@
 package com.hubspot.boomslang;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -103,15 +105,11 @@ public class AsyncHostRegistry {
       throw new RuntimeException("Thread interrupted while polling async completions", e);
     }
 
-    StringBuilder json = new StringBuilder("[");
-    for (int i = 0; i < drained.size(); i++) {
-      if (i > 0) {
-        json.append(',');
-      }
-      json.append(drained.get(i).toJson());
+    StringBuilder encoded = new StringBuilder();
+    for (Completion completion : drained) {
+      encoded.append(completion.toLine()).append('\n');
     }
-    json.append(']');
-    return json.toString();
+    return encoded.toString();
   }
 
   private record Completion(long token, boolean ok, String value) {
@@ -126,46 +124,11 @@ public class AsyncHostRegistry {
       return new Completion(token, false, unwrapped.toString());
     }
 
-    String toJson() {
-      String field = ok ? "result" : "error";
-      return (
-        "{\"token\":" +
-        token +
-        ",\"ok\":" +
-        ok +
-        ",\"" +
-        field +
-        "\":\"" +
-        escapeJson(value) +
-        "\"}"
-      );
-    }
-
-    private static String escapeJson(String value) {
-      if (value == null) {
-        return "";
-      }
-      StringBuilder escaped = new StringBuilder(value.length());
-      for (int i = 0; i < value.length(); i++) {
-        char c = value.charAt(i);
-        switch (c) {
-          case '"' -> escaped.append("\\\"");
-          case '\\' -> escaped.append("\\\\");
-          case '\b' -> escaped.append("\\b");
-          case '\f' -> escaped.append("\\f");
-          case '\n' -> escaped.append("\\n");
-          case '\r' -> escaped.append("\\r");
-          case '\t' -> escaped.append("\\t");
-          default -> {
-            if (c < 0x20) {
-              escaped.append(String.format("\\u%04x", (int) c));
-            } else {
-              escaped.append(c);
-            }
-          }
-        }
-      }
-      return escaped.toString();
+    String toLine() {
+      String encodedValue = Base64
+        .getEncoder()
+        .encodeToString((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+      return token + "\t" + (ok ? "1" : "0") + "\t" + encodedValue;
     }
   }
 }

@@ -1,5 +1,5 @@
 import asyncio
-import json
+import base64
 
 from asyncio import base_events, events
 from boomslang_host import call
@@ -15,8 +15,8 @@ class _HostSelector:
 
     def select(self, timeout=None):
         timeout_ms = self._timeout_ms(timeout)
-        completions = json.loads(call("__async_poll__", str(timeout_ms)))
-        for completion in completions:
+        completions = call("__async_poll__", str(timeout_ms))
+        for completion in _decode_completions(completions):
             self._loop._complete_host_future(completion)
         return []
 
@@ -30,6 +30,20 @@ class _HostSelector:
         if timeout <= 0:
             return 0
         return max(1, int(timeout * 1000))
+
+
+def _decode_completions(completions):
+    decoded = []
+    for line in completions.splitlines():
+        token, ok, value = line.split("\t", 2)
+        decoded.append(
+            {
+                "token": int(token),
+                "ok": ok == "1",
+                "value": base64.b64decode(value).decode("utf-8"),
+            }
+        )
+    return decoded
 
 
 class BoomslangEventLoop(base_events.BaseEventLoop):
@@ -49,14 +63,14 @@ class BoomslangEventLoop(base_events.BaseEventLoop):
         return future
 
     def _complete_host_future(self, completion):
-        token = int(completion["token"])
+        token = completion["token"]
         future = self._host_futures.pop(token, None)
         if future is None or future.done():
             return
         if completion["ok"]:
-            future.set_result(completion.get("result", ""))
+            future.set_result(completion["value"])
         else:
-            future.set_exception(HostAsyncError(completion.get("error", "host async call failed")))
+            future.set_exception(HostAsyncError(completion["value"] or "host async call failed"))
 
     def _cancel_host_future(self, token, future):
         if future.cancelled() and self._host_futures.pop(token, None) is not None:
