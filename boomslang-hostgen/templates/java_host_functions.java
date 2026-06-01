@@ -88,8 +88,8 @@ public final class {{ class_name }} {
           List.of({{ function.wasm_params }}),
           List.of({{ function.wasm_returns }}),
           (Instance instance, long... wasmArgs) -> {
-            Memory memory = instance.memory();
-{{ function.param_reads }}
+{% if function.needs_memory %}            Memory memory = instance.memory();
+{% endif %}{{ function.param_reads }}
             try {
               if ({{ function.field }} == null) {
                 throw missingHandler("{{ function.name }}");

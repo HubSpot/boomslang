@@ -107,7 +107,13 @@ public class HostBridge {
       CallHandler handler = effectiveCallHandler;
       return (name, args) -> {
         checkInterrupted();
-        if (asyncRegistry.hasHandlers() && asyncRegistry.isControlCall(name)) {
+        // Route the reserved async control calls (__async_start__ / __async_poll__ /
+        // __async_cancel__) to the registry whenever the name matches, even if no named
+        // async handlers were registered via withAsyncFunction. Generated extension async
+        // functions (e.g. call_rpc_async) call asyncRegistry.start(stage) directly from
+        // their WASM import and never populate the handler map, so gating on hasHandlers()
+        // would leave the event loop unable to poll/cancel their tokens through this bridge.
+        if (asyncRegistry.isControlCall(name)) {
           return asyncRegistry.handleControlCall(name, args);
         }
         return handler.handle(name, args);

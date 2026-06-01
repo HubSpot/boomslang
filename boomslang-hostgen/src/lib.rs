@@ -363,6 +363,7 @@ struct JavaFunctionTemplate {
     error_handling: &'static str,
     #[allow(dead_code)]
     is_async: bool,
+    needs_memory: bool,
 }
 
 pub fn generate_java_code(m: &Manifest, package: &str) -> String {
@@ -401,7 +402,21 @@ fn java_function_template(f: &Function) -> JavaFunctionTemplate {
         return_handling: java_return_handling(f, &field),
         error_handling: java_error_handling(f),
         is_async: f.r#async,
+        needs_memory: java_needs_memory(f),
     }
+}
+
+/// Whether the generated host function body touches WASM linear memory: true when it reads any
+/// string/bytes argument, or writes a string/bytes result back into a caller-provided buffer.
+/// Functions with only scalar params and no buffer return (e.g. `add`) must NOT declare the
+/// `Memory` local, otherwise error-prone's UnusedLocalVariable check fails downstream.
+fn java_needs_memory(f: &Function) -> bool {
+    let reads_buffer = f
+        .params
+        .iter()
+        .any(|p| p.ty == "string" || p.ty == "bytes");
+    let writes_buffer = !f.r#async && is_buffer_return(f.returns.as_deref());
+    reads_buffer || writes_buffer
 }
 
 fn java_interface_params(f: &Function) -> String {
