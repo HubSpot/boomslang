@@ -283,6 +283,12 @@ fn generate_rust_async_pyo3_wrapper(f: &Function) -> String {
         }
     }
     out.push_str("        );\n");
+    // Defense in depth: tokens are always positive, so a negative return means the host could not
+    // even register the call. Fail loudly here rather than handing a bogus token to the event loop
+    // (boomslang_host.asyncio also rejects non-positive tokens).
+    out.push_str("        if token < 0 {\n");
+    out.push_str("            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(\"async host call failed\"));\n");
+    out.push_str("        }\n");
     out.push_str("        let asyncio = py.import(\"boomslang_host.asyncio\")?;\n");
     out.push_str("        let from_host_token = asyncio.getattr(\"from_host_token\")?;\n");
     out.push_str("        let future = from_host_token.call1((token,))?;\n");
@@ -562,7 +568,12 @@ fn java_handler_call(f: &Function, field: &str) -> String {
 }
 
 fn java_error_handling(f: &Function) -> &'static str {
-    if is_buffer_return(f.returns.as_deref()) {
+    if f.r#async {
+        // Deliver the failure through the normal completion path so the awaiting coroutine raises,
+        // instead of returning a sentinel token the event loop would wait on forever. Fall back to
+        // -1 only when there is no registry to record the failure (the client rejects token <= 0).
+        "              if (asyncRegistry == null) {\n                return new long[] { -1 };\n              }\n              return new long[] { asyncRegistry.startFailed(e) };"
+    } else if is_buffer_return(f.returns.as_deref()) {
         "              return new long[] { -1 };"
     } else {
         "              throw e;"
@@ -643,6 +654,7 @@ returns = "string"
         assert!(code.contains("int param1 = Math.toIntExact(wasmArgs[2]);"));
         assert!(code.contains("CompletionStage<String> stage = lookup.handle(param0, param1);"));
         assert!(code.contains("return new long[] { asyncRegistry.start(stage) };"));
+        assert!(code.contains("return new long[] { asyncRegistry.startFailed(e) };"));
         assert!(code.contains("functions.add(createEchoFunction());"));
     }
 
@@ -655,6 +667,7 @@ returns = "string"
         ));
         assert!(code.contains("py.import(\"boomslang_host.asyncio\")?"));
         assert!(code.contains("let token = lookup("));
+        assert!(code.contains("if token < 0"));
         assert!(code.contains("request_bytes.as_ptr()"));
         assert!(code.contains("count,"));
         assert!(code.contains("from_host_token.call1((token,))?"));

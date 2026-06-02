@@ -154,4 +154,34 @@ The `AsyncHostRegistry` is shared between `boomslang_host.asyncio` and generated
 
 Current generated async functions support typed parameters with a `string` return, represented as `CompletionStage<String>` on the Java side.
 
+### Async wire protocol (v1)
+
+`boomslang_host.asyncio` and `AsyncHostRegistry` talk over a small, versioned protocol invoked
+through the stock `boomslang_host.call(name, args)` function. The `__async_*` names are a
+**reserved control namespace** — do not define extension host functions with these names:
+
+| Control call | Args | Returns |
+|---|---|---|
+| `__async_protocol__` | — | integer protocol version (currently `1`) |
+| `__async_start__` | `name\npayload` | decimal token for a registered named async handler |
+| `__async_poll__` | timeout ms (`<0` blocks, `0` polls) | one header line per ready completion: `token\t{1\|0}\t<valueByteLength>` |
+| `__async_result__` | token | base64 of that completion's value bytes (consumes it) |
+| `__async_cancel__` | token | cancels the in-flight future |
+
+Why this shape matters:
+
+- **Versioned.** The Python client is frozen into each consumer's WASM Wizer snapshot, so the Java
+  host must stay compatible with already-shipped clients. `__async_protocol__` lets a client refuse
+  a host older than the protocol it was built against; bump `AsyncHostRegistry.PROTOCOL_VERSION`
+  only for breaking wire changes.
+- **Poll and result are decoupled.** `__async_poll__` returns only headers (token, ok, length);
+  values are fetched one at a time via `__async_result__`. A batch of completions therefore never
+  exceeds the single host-call result buffer. (A single value larger than that buffer is still a
+  limitation — chunked retrieval is a future protocol addition.)
+- **Failures never hang.** Synchronous handler errors are recorded via `AsyncHostRegistry.startFailed`
+  and surface as a failed completion (the coroutine raises `HostAsyncError`); the client also rejects
+  any non-positive token immediately.
+- **Binary-safe value channel.** Completion values are carried as base64 of raw bytes, so extending
+  async returns to `bytes` later needs no wire change.
+
 5. Build and use.

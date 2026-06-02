@@ -2,6 +2,7 @@ package com.hubspot.boomslang.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.hubspot.boomslang.AsyncHostRegistry;
 import com.hubspot.boomslang.HostBridge;
 import com.hubspot.boomslang.PythonExecutorFactory;
 import com.hubspot.boomslang.PythonInstance;
@@ -14,6 +15,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -147,6 +149,202 @@ class HostBridgeTest {
     } finally {
       rpcExecutor.shutdownNow();
     }
+  }
+
+  @Test
+  void itReportsAsyncProtocolVersion() {
+    // Routed by HostBridge to the AsyncHostRegistry regardless of registered handlers; only uses
+    // the generic call() bridge, so it validates the version handshake the client negotiates on.
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
+      return instance.execute(
+        "from boomslang_host import call; print(call('__async_protocol__', ''))"
+      );
+    });
+
+    assertThat(result.stderr()).as("stderr").isEmpty();
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("1");
+  }
+
+  @Test
+  void itAwaitsSharedRegistryTokensWithoutGenericAsyncHandlers() {
+    // Mirrors how generated extension async functions work: a token is created directly on the
+    // shared registry and awaited via from_host_token, with no named async handler registered.
+    Path asyncRoot = SharedTestSetup.createRootPath();
+    AsyncHostRegistry asyncRegistry = new AsyncHostRegistry();
+    PythonExecutorFactory asyncFactory = PythonExecutorFactory
+      .builder()
+      .withStdlibPath(asyncRoot)
+      .addExtension(
+        HostBridge
+          .builder()
+          .withAsyncRegistry(asyncRegistry)
+          .withFunction(
+            "make_token",
+            args ->
+              Long.toString(
+                asyncRegistry.start(CompletableFuture.completedFuture("typed-result"))
+              )
+          )
+          .withLogHandler((level, message) -> {})
+          .buildExtension()
+      )
+      .build();
+
+    PythonResult result = asyncFactory.runOnWasmThread(() -> {
+      PythonInstance instance = asyncFactory.createInstance(asyncRoot);
+      return instance.execute(
+        String.join(
+          "\n",
+          "import asyncio",
+          "from boomslang_host import call",
+          "from boomslang_host.asyncio import from_host_token, install",
+          "install()",
+          "async def main():",
+          "    token = int(call('make_token', ''))",
+          "    print(await from_host_token(token))",
+          "asyncio.run(main())"
+        )
+      );
+    });
+
+    assertThat(result.stderr()).as("stderr").isEmpty();
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("typed-result");
+  }
+
+  @Test
+  void itPropagatesFailedAsyncHostCalls() {
+    Path asyncRoot = SharedTestSetup.createRootPath();
+    PythonExecutorFactory asyncFactory = PythonExecutorFactory
+      .builder()
+      .withStdlibPath(asyncRoot)
+      .addExtension(
+        HostBridge
+          .builder()
+          .withAsyncFunction(
+            "fail",
+            args -> CompletableFuture.failedFuture(new IllegalStateException("boom"))
+          )
+          .withLogHandler((level, message) -> {})
+          .buildExtension()
+      )
+      .build();
+
+    PythonResult result = asyncFactory.runOnWasmThread(() -> {
+      PythonInstance instance = asyncFactory.createInstance(asyncRoot);
+      return instance.execute(
+        String.join(
+          "\n",
+          "import asyncio",
+          "from boomslang_host.asyncio import HostAsyncError, async_call, install",
+          "install()",
+          "async def main():",
+          "    try:",
+          "        await async_call('fail', '')",
+          "    except HostAsyncError as err:",
+          "        print(str(err))",
+          "asyncio.run(main())"
+        )
+      );
+    });
+
+    assertThat(result.stderr()).as("stderr").isEmpty();
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout()).contains("boom");
+  }
+
+  @Test
+  void itCancelsAsyncHostCallOnWaitForTimeout() {
+    Path asyncRoot = SharedTestSetup.createRootPath();
+    AtomicBoolean cancelled = new AtomicBoolean(false);
+    CompletableFuture<String> future = new CompletableFuture<>() {
+      @Override
+      public boolean cancel(boolean mayInterruptIfRunning) {
+        cancelled.set(true);
+        return super.cancel(mayInterruptIfRunning);
+      }
+    };
+    PythonExecutorFactory asyncFactory = PythonExecutorFactory
+      .builder()
+      .withStdlibPath(asyncRoot)
+      .addExtension(
+        HostBridge
+          .builder()
+          .withAsyncFunction("never", args -> future)
+          .withLogHandler((level, message) -> {})
+          .buildExtension()
+      )
+      .build();
+
+    PythonResult result = asyncFactory.runOnWasmThread(() -> {
+      PythonInstance instance = asyncFactory.createInstance(asyncRoot);
+      return instance.execute(
+        String.join(
+          "\n",
+          "import asyncio",
+          "from boomslang_host.asyncio import async_call, install",
+          "install()",
+          "async def main():",
+          "    try:",
+          "        await asyncio.wait_for(async_call('never', ''), 0.01)",
+          "    except TimeoutError:",
+          "        print('timed out')",
+          "asyncio.run(main())"
+        )
+      );
+    });
+
+    assertThat(result.stderr()).as("stderr").isEmpty();
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("timed out");
+    assertThat(cancelled.get()).isTrue();
+  }
+
+  @Test
+  void itGathersManyLargeResultsWithoutExceedingHostBuffer() {
+    // Four ~400 KB results complete together (~1.6 MB total). With values inlined into the poll
+    // response this would blow the 1 MB host-call buffer; fetching each result separately keeps
+    // every transfer bounded.
+    int chunk = 400_000;
+    int count = 4;
+    Path asyncRoot = SharedTestSetup.createRootPath();
+    PythonExecutorFactory asyncFactory = PythonExecutorFactory
+      .builder()
+      .withStdlibPath(asyncRoot)
+      .addExtension(
+        HostBridge
+          .builder()
+          .withAsyncFunction(
+            "big",
+            args -> CompletableFuture.completedFuture("x".repeat(chunk))
+          )
+          .withLogHandler((level, message) -> {})
+          .buildExtension()
+      )
+      .build();
+
+    PythonResult result = asyncFactory.runOnWasmThread(() -> {
+      PythonInstance instance = asyncFactory.createInstance(asyncRoot);
+      return instance.execute(
+        String.join(
+          "\n",
+          "import asyncio",
+          "from boomslang_host.asyncio import async_call, install",
+          "install()",
+          "async def main():",
+          "    calls = [async_call('big', str(i)) for i in range(" + count + ")]",
+          "    results = await asyncio.gather(*calls)",
+          "    print(sum(len(r) for r in results))",
+          "asyncio.run(main())"
+        )
+      );
+    });
+
+    assertThat(result.stderr()).as("stderr").isEmpty();
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo(Integer.toString(chunk * count));
   }
 
   @Test

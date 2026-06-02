@@ -19,11 +19,6 @@ public class HostBridge {
     void handle(int level, String message);
   }
 
-  @FunctionalInterface
-  public interface AsyncCallHandler {
-    CompletionStage<String> handle(String name, String args);
-  }
-
   public static Builder builder() {
     return new Builder();
   }
@@ -64,8 +59,11 @@ public class HostBridge {
       return this;
     }
 
-    public Builder withAsyncCallHandler(String name, AsyncCallHandler handler) {
-      this.asyncRegistry.register(name, handler::handle);
+    public Builder withAsyncCallHandler(
+      String name,
+      AsyncHostRegistry.AsyncCallHandler handler
+    ) {
+      this.asyncRegistry.register(name, handler);
       return this;
     }
 
@@ -107,12 +105,12 @@ public class HostBridge {
       CallHandler handler = effectiveCallHandler;
       return (name, args) -> {
         checkInterrupted();
-        // Route the reserved async control calls (__async_start__ / __async_poll__ /
-        // __async_cancel__) to the registry whenever the name matches, even if no named
-        // async handlers were registered via withAsyncFunction. Generated extension async
-        // functions (e.g. call_rpc_async) call asyncRegistry.start(stage) directly from
-        // their WASM import and never populate the handler map, so gating on hasHandlers()
-        // would leave the event loop unable to poll/cancel their tokens through this bridge.
+        // Always route the reserved async control calls (__async_protocol__ / __async_start__ /
+        // __async_poll__ / __async_result__ / __async_cancel__) to the registry, regardless of
+        // whether any named async handlers were registered. Generated extension async functions
+        // (e.g. call_rpc_async) call asyncRegistry.start(stage) directly from their WASM import and
+        // never populate the handler map, so the event loop must still be able to poll/cancel
+        // their tokens through this bridge.
         if (asyncRegistry.isControlCall(name)) {
           return asyncRegistry.handleControlCall(name, args);
         }
