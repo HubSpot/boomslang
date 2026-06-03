@@ -65,6 +65,7 @@
               <classifier>no-python-runtime</classifier>
               <excludes>
                 <exclude>python/**</exclude>
+                <exclude>python-overlay/**</exclude>
                 <exclude>com/hubspot/boomslang/compiled/**</exclude>
               </excludes>
             </configuration>

@@ -2,7 +2,10 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "boomslang-hostgen", about = "Generate host function bindings from extension.toml")]
+#[command(
+    name = "boomslang-hostgen",
+    about = "Generate host function bindings from extension.toml"
+)]
 struct Cli {
     #[arg(help = "Path to extension.toml")]
     manifest: PathBuf,

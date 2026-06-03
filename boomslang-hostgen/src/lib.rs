@@ -27,6 +27,8 @@ pub struct Function {
     pub params: Vec<Param>,
     #[serde(default)]
     pub returns: Option<String>,
+    #[serde(default)]
+    pub r#async: bool,
 }
 
 #[derive(Deserialize)]
@@ -39,8 +41,7 @@ pub struct Param {
 pub fn parse_manifest(path: &Path) -> Manifest {
     let content = fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {}", path.display(), e));
-    toml::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {}", path.display(), e))
+    toml::from_str(&content).unwrap_or_else(|e| panic!("Failed to parse {}: {}", path.display(), e))
 }
 
 /// Call from your extension crate's build.rs.
@@ -86,26 +87,27 @@ pub fn generate_rust_code(m: &Manifest) -> String {
     out.push_str("use pyo3::prelude::*;\n\n");
 
     // WASM import declarations
-    out.push_str(&format!(
-        "#[link(wasm_import_module = \"{}\")]\n",
-        wasm_mod
-    ));
-    out.push_str("unsafe extern \"C\" {\n");
-    for f in &m.functions {
-        out.push_str(&format!("    fn {}(\n", wasm_import_name(f)));
-        for p in &f.params {
-            for (wn, wt) in wasm_params(&p.name, &p.ty) {
-                out.push_str(&format!("        {}: {},\n", wn, wt));
+    if !m.functions.is_empty() {
+        out.push_str(&format!("#[link(wasm_import_module = \"{}\")]\n", wasm_mod));
+        out.push_str("unsafe extern \"C\" {\n");
+        for f in &m.functions {
+            out.push_str(&format!("    fn {}(\n", wasm_import_name(f)));
+            for p in &f.params {
+                for (wn, wt) in wasm_params(&p.name, &p.ty) {
+                    out.push_str(&format!("        {}: {},\n", wn, wt));
+                }
             }
+            if !f.r#async
+                && (f.returns.as_deref() == Some("string") || f.returns.as_deref() == Some("bytes"))
+            {
+                out.push_str("        result_ptr: *mut u8,\n");
+                out.push_str("        result_max_len: i32,\n");
+            }
+            let ret = wasm_return_type(f);
+            out.push_str(&format!("    ) -> {};\n", ret));
         }
-        if f.returns.as_deref() == Some("string") || f.returns.as_deref() == Some("bytes") {
-            out.push_str("        result_ptr: *mut u8,\n");
-            out.push_str("        result_max_len: i32,\n");
-        }
-        let ret = wasm_return_type(f.returns.as_deref());
-        out.push_str(&format!("    ) -> {};\n", ret));
+        out.push_str("}\n\n");
     }
-    out.push_str("}\n\n");
 
     out.push_str("const MAX_RESULT: i32 = 1024 * 1024;\n\n");
 
@@ -150,12 +152,13 @@ pub fn generate_rust_code(m: &Manifest) -> String {
 }
 
 fn generate_rust_pyo3_wrapper(f: &Function) -> String {
+    if f.r#async {
+        return generate_rust_async_pyo3_wrapper(f);
+    }
+
     let mut out = String::new();
 
-    out.push_str(&format!(
-        "#[pyfunction]\n#[pyo3(name = \"{}\")]\n",
-        f.name
-    ));
+    out.push_str(&format!("#[pyfunction]\n#[pyo3(name = \"{}\")]\n", f.name));
     let ret_type = match f.returns.as_deref() {
         Some("string") => "PyResult<String>",
         Some("int") => "PyResult<i32>",
@@ -222,7 +225,9 @@ fn generate_rust_pyo3_wrapper(f: &Function) -> String {
             out.push_str("        if ret < 0 {\n");
             out.push_str("            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(\"host call failed\"));\n");
             out.push_str("        }\n");
-            out.push_str("        Ok(String::from_utf8_lossy(&result_buf[..ret as usize]).into_owned())\n");
+            out.push_str(
+                "        Ok(String::from_utf8_lossy(&result_buf[..ret as usize]).into_owned())\n",
+            );
         }
         Some("bytes") => {
             out.push_str("        if ret < 0 {\n");
@@ -237,6 +242,65 @@ fn generate_rust_pyo3_wrapper(f: &Function) -> String {
 
     out.push_str("    }\n}\n");
     out
+}
+
+fn generate_rust_async_pyo3_wrapper(f: &Function) -> String {
+    validate_async_function(f);
+    let mut out = String::new();
+    out.push_str(&format!("#[pyfunction]\n#[pyo3(name = \"{}\")]\n", f.name));
+    out.push_str(&format!("fn py_{}(py: Python", f.name));
+    for p in &f.params {
+        out.push_str(&format!(", {}: {}", p.name, rust_py_type(&p.ty)));
+    }
+    out.push_str(") -> PyResult<Py<PyAny>> {\n");
+    out.push_str("    unsafe {\n");
+    for p in &f.params {
+        if p.ty == "string" {
+            out.push_str(&format!(
+                "        let {name}_bytes = {name}.as_bytes();\n",
+                name = p.name
+            ));
+        } else if p.ty == "bytes" {
+            out.push_str(&format!(
+                "        let {name}_bytes = {name};\n",
+                name = p.name
+            ));
+        }
+    }
+    out.push_str(&format!("        let token = {}(\n", wasm_import_name(f)));
+    for p in &f.params {
+        match p.ty.as_str() {
+            "string" | "bytes" => {
+                out.push_str(&format!(
+                    "            {name}_bytes.as_ptr(),\n            {name}_bytes.len() as i32,\n",
+                    name = p.name
+                ));
+            }
+            "int" | "float" => {
+                out.push_str(&format!("            {},\n", p.name));
+            }
+            _ => {}
+        }
+    }
+    out.push_str("        );\n");
+    // Defense in depth: tokens are always positive, so a negative return means the host could not
+    // even register the call. Fail loudly here rather than handing a bogus token to the event loop
+    // (boomslang_host.asyncio also rejects non-positive tokens).
+    out.push_str("        if token < 0 {\n");
+    out.push_str("            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(\"async host call failed\"));\n");
+    out.push_str("        }\n");
+    out.push_str("        let asyncio = py.import(\"boomslang_host.asyncio\")?;\n");
+    out.push_str("        let from_host_token = asyncio.getattr(\"from_host_token\")?;\n");
+    out.push_str("        let future = from_host_token.call1((token,))?;\n");
+    out.push_str("        Ok(future.unbind())\n");
+    out.push_str("    }\n}\n");
+    out
+}
+
+fn validate_async_function(f: &Function) {
+    if f.returns.as_deref() != Some("string") {
+        panic!("Async function '{}' must currently return string", f.name);
+    }
 }
 
 fn wasm_import_name(f: &Function) -> String {
@@ -255,8 +319,12 @@ fn wasm_params(name: &str, ty: &str) -> Vec<(String, &'static str)> {
     }
 }
 
-fn wasm_return_type(ty: Option<&str>) -> &'static str {
-    match ty {
+fn wasm_return_type(f: &Function) -> &'static str {
+    if f.r#async {
+        validate_async_function(f);
+        return "i64";
+    }
+    match f.returns.as_deref() {
         Some("string") | Some("bytes") | Some("int") => "i32",
         Some("float") => "f64",
         None => "()",
@@ -292,13 +360,16 @@ struct JavaFunctionTemplate {
     field: String,
     handler_type: String,
     with_method: String,
-    return_type: &'static str,
+    return_type: String,
     interface_params: String,
     wasm_params: String,
     wasm_returns: String,
     param_reads: String,
     return_handling: String,
     error_handling: &'static str,
+    #[allow(dead_code)]
+    is_async: bool,
+    needs_memory: bool,
 }
 
 pub fn generate_java_code(m: &Manifest, package: &str) -> String {
@@ -307,11 +378,18 @@ pub fn generate_java_code(m: &Manifest, package: &str) -> String {
         package: package.to_string(),
         class_name: format!("{}HostFunctions", ext_name.to_upper_camel_case()),
         extension_name: ext_name.to_string(),
-        wasm_module: m.extension.wasm_module.as_deref().unwrap_or(ext_name).to_string(),
+        wasm_module: m
+            .extension
+            .wasm_module
+            .as_deref()
+            .unwrap_or(ext_name)
+            .to_string(),
         functions: m.functions.iter().map(java_function_template).collect(),
     };
 
-    template.render().expect("failed to render Java host functions template")
+    template
+        .render()
+        .expect("failed to render Java host functions template")
 }
 
 fn java_function_template(f: &Function) -> JavaFunctionTemplate {
@@ -322,14 +400,29 @@ fn java_function_template(f: &Function) -> JavaFunctionTemplate {
         field: field.clone(),
         handler_type: format!("{}Handler", f.name.to_upper_camel_case()),
         with_method: format!("with{}", f.name.to_upper_camel_case()),
-        return_type: java_return_type(f.returns.as_deref()),
+        return_type: java_handler_return_type(f),
         interface_params: java_interface_params(f),
         wasm_params: java_wasm_params(f).join(", "),
         wasm_returns: java_wasm_returns(f).join(", "),
         param_reads: java_param_reads(f),
         return_handling: java_return_handling(f, &field),
         error_handling: java_error_handling(f),
+        is_async: f.r#async,
+        needs_memory: java_needs_memory(f),
     }
+}
+
+/// Whether the generated host function body touches WASM linear memory: true when it reads any
+/// string/bytes argument, or writes a string/bytes result back into a caller-provided buffer.
+/// Functions with only scalar params and no buffer return (e.g. `add`) must NOT declare the
+/// `Memory` local, otherwise error-prone's UnusedLocalVariable check fails downstream.
+fn java_needs_memory(f: &Function) -> bool {
+    let reads_buffer = f
+        .params
+        .iter()
+        .any(|p| p.ty == "string" || p.ty == "bytes");
+    let writes_buffer = !f.r#async && is_buffer_return(f.returns.as_deref());
+    reads_buffer || writes_buffer
 }
 
 fn java_interface_params(f: &Function) -> String {
@@ -353,7 +446,7 @@ fn java_wasm_params(f: &Function) -> Vec<&'static str> {
             other => panic!("Unsupported Java parameter type '{}' for {}", other, f.name),
         }
     }
-    if is_buffer_return(f.returns.as_deref()) {
+    if !f.r#async && is_buffer_return(f.returns.as_deref()) {
         params.push("ValueType.I32");
         params.push("ValueType.I32");
     }
@@ -361,6 +454,10 @@ fn java_wasm_params(f: &Function) -> Vec<&'static str> {
 }
 
 fn java_wasm_returns(f: &Function) -> Vec<&'static str> {
+    if f.r#async {
+        validate_async_function(f);
+        return vec!["ValueType.I64"];
+    }
     match f.returns.as_deref() {
         Some("string") | Some("bytes") | Some("int") => vec!["ValueType.I32"],
         Some("float") => vec!["ValueType.F64"],
@@ -411,7 +508,7 @@ fn java_param_reads(f: &Function) -> String {
         }
     }
 
-    if is_buffer_return(f.returns.as_deref()) {
+    if !f.r#async && is_buffer_return(f.returns.as_deref()) {
         out.push_str(&format!(
             "            int resultPtr = Math.toIntExact(wasmArgs[{}]);\n            int resultMaxLen = Math.toIntExact(wasmArgs[{}]);\n",
             arg_idx,
@@ -424,6 +521,14 @@ fn java_param_reads(f: &Function) -> String {
 
 fn java_return_handling(f: &Function, field: &str) -> String {
     let call_expr = java_handler_call(f, field);
+    if f.r#async {
+        validate_async_function(f);
+        return format!(
+            "              if (asyncRegistry == null) {{\n                throw new IllegalStateException(\"AsyncHostRegistry is required for async host function \" + MODULE + \"::{name}\");\n              }}\n              CompletionStage<String> stage = {call_expr};\n              if (stage == null) {{\n                throw new IllegalStateException(\"Host function returned null: \" + MODULE + \"::{name}\");\n              }}\n              return new long[] {{ asyncRegistry.start(stage) }};",
+            call_expr = call_expr,
+            name = f.name
+        );
+    }
     match f.returns.as_deref() {
         Some("string") => format!(
             "              String result = {call_expr};\n              if (result == null) {{\n                throw new IllegalStateException(\"Host function returned null: \" + MODULE + \"::{name}\");\n              }}\n              byte[] resultBytes = result.getBytes(StandardCharsets.UTF_8);\n              if (resultBytes.length > resultMaxLen) {{\n                return new long[] {{ -2 }};\n              }}\n              memory.write(resultPtr, resultBytes);\n              return new long[] {{ resultBytes.length }};",
@@ -463,7 +568,12 @@ fn java_handler_call(f: &Function, field: &str) -> String {
 }
 
 fn java_error_handling(f: &Function) -> &'static str {
-    if is_buffer_return(f.returns.as_deref()) {
+    if f.r#async {
+        // Deliver the failure through the normal completion path so the awaiting coroutine raises,
+        // instead of returning a sentinel token the event loop would wait on forever. Fall back to
+        // -1 only when there is no registry to record the failure (the client rejects token <= 0).
+        "              if (asyncRegistry == null) {\n                return new long[] { -1 };\n              }\n              return new long[] { asyncRegistry.startFailed(e) };"
+    } else if is_buffer_return(f.returns.as_deref()) {
         "              return new long[] { -1 };"
     } else {
         "              throw e;"
@@ -484,6 +594,15 @@ fn java_type(ty: &str) -> &'static str {
     }
 }
 
+fn java_handler_return_type(f: &Function) -> String {
+    if f.r#async {
+        validate_async_function(f);
+        "CompletionStage<String>".to_string()
+    } else {
+        java_return_type(f.returns.as_deref()).to_string()
+    }
+}
+
 fn java_return_type(ty: Option<&str>) -> &'static str {
     match ty {
         Some("string") => "String",
@@ -492,5 +611,67 @@ fn java_return_type(ty: Option<&str>) -> &'static str {
         Some("bytes") => "byte[]",
         None => "void",
         Some(other) => panic!("Unsupported Java return type '{}'", other),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn async_manifest() -> Manifest {
+        toml::from_str(
+            r#"
+[extension]
+name = "demo_async"
+wasm_module = "demo"
+
+[[functions]]
+name = "lookup"
+async = true
+params = [
+  { name = "request", type = "string" },
+  { name = "count", type = "int" },
+]
+returns = "string"
+
+[[functions]]
+name = "echo"
+params = [{ name = "request", type = "string" }]
+returns = "string"
+"#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn it_generates_async_java_handlers_with_typed_args() {
+        let code = generate_java_code(&async_manifest(), "com.example");
+
+        assert!(code.contains("import com.hubspot.boomslang.AsyncHostRegistry;"));
+        assert!(code.contains("CompletionStage<String> handle(String request, int count);"));
+        assert!(code.contains("public Builder withAsyncRegistry(AsyncHostRegistry asyncRegistry)"));
+        assert!(code.contains("functions.add(createLookupFunction());"));
+        assert!(code.contains("int param1 = Math.toIntExact(wasmArgs[2]);"));
+        assert!(code.contains("CompletionStage<String> stage = lookup.handle(param0, param1);"));
+        assert!(code.contains("return new long[] { asyncRegistry.start(stage) };"));
+        assert!(code.contains("return new long[] { asyncRegistry.startFailed(e) };"));
+        assert!(code.contains("functions.add(createEchoFunction());"));
+    }
+
+    #[test]
+    fn it_generates_async_rust_wrapper_using_boomslang_asyncio() {
+        let code = generate_rust_code(&async_manifest());
+
+        assert!(code.contains(
+            "fn py_lookup(py: Python, request: &str, count: i32) -> PyResult<Py<PyAny>>"
+        ));
+        assert!(code.contains("py.import(\"boomslang_host.asyncio\")?"));
+        assert!(code.contains("let token = lookup("));
+        assert!(code.contains("if token < 0"));
+        assert!(code.contains("request_bytes.as_ptr()"));
+        assert!(code.contains("count,"));
+        assert!(code.contains("from_host_token.call1((token,))?"));
+        assert!(code.contains("fn echo("));
+        assert!(code.contains("fn lookup(\n"));
     }
 }

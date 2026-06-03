@@ -4,10 +4,12 @@ import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.Memory;
 import com.dylibso.chicory.wasm.types.ValueType;
+import com.hubspot.boomslang.AsyncHostRegistry;
 import com.hubspot.boomslang.BoomslangExtension;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletionStage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +38,7 @@ public final class {{ class_name }} {
 {% for function in functions %}
     private {{ function.handler_type }} {{ function.field }};
 {% endfor %}
+    private AsyncHostRegistry asyncRegistry;
 {% for function in functions %}
 
     public Builder {{ function.with_method }}({{ function.handler_type }} handler) {
@@ -43,6 +46,11 @@ public final class {{ class_name }} {
       return this;
     }
 {% endfor %}
+
+    public Builder withAsyncRegistry(AsyncHostRegistry asyncRegistry) {
+      this.asyncRegistry = asyncRegistry;
+      return this;
+    }
 
     /** Builds all WASM imports for this extension. Missing handlers fail when invoked. */
     public HostFunction[] build() {
@@ -80,8 +88,8 @@ public final class {{ class_name }} {
           List.of({{ function.wasm_params }}),
           List.of({{ function.wasm_returns }}),
           (Instance instance, long... wasmArgs) -> {
-            Memory memory = instance.memory();
-{{ function.param_reads }}
+{% if function.needs_memory %}            Memory memory = instance.memory();
+{% endif %}{{ function.param_reads }}
             try {
               if ({{ function.field }} == null) {
                 throw missingHandler("{{ function.name }}");

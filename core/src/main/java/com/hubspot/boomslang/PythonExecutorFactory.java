@@ -45,6 +45,7 @@ public class PythonExecutorFactory {
   private static final Object JAR_EXTRACTION_LOCK = new Object();
   private static final String DEFAULT_WASM_RESOURCE = "python/bin/boomslang.wasm";
   private static final String PYTHON_RESOURCE_PREFIX = "python/";
+  private static final String PYTHON_OVERLAY_RESOURCE_PREFIX = "/python-overlay";
   private static final String AOT_CLASS_NAME =
     "com.hubspot.boomslang.compiled.PythonWasmMachine";
   private static final String PYTHON_LIB_DIR = "usr/local/lib/python3.14";
@@ -277,6 +278,7 @@ public class PythonExecutorFactory {
       extractResource(stdlibPath, wasmResource);
 
       extractPythonStdlib(stdlibPath);
+      extractPythonOverlay(stdlibPath);
       extractLibDynload(stdlibPath);
 
       return stdlibPath;
@@ -317,12 +319,42 @@ public class PythonExecutorFactory {
 
     LOG.debug("Extracting stdlib from JAR: {} path: {}", jarPath, resourcePath);
 
+    extractDirectoryFromJar(jarPath, resourcePath, targetDir);
+    LOG.debug("Extracted stdlib from JAR to: {}", targetDir);
+  }
+
+  private void extractPythonOverlay(Path tempDir) throws IOException {
+    URL resourceUrl = getClass().getResource(PYTHON_OVERLAY_RESOURCE_PREFIX);
+    if (resourceUrl == null) {
+      return;
+    }
+
+    if ("file".equals(resourceUrl.getProtocol())) {
+      try {
+        copyDirectory(Paths.get(resourceUrl.toURI()), tempDir);
+      } catch (URISyntaxException e) {
+        throw new IOException("Invalid URI for Python overlay resource", e);
+      }
+    } else if ("jar".equals(resourceUrl.getProtocol())) {
+      String urlString = resourceUrl.toString();
+      int separator = urlString.indexOf("!");
+      String jarPath = urlString.substring(0, separator);
+      String resourcePath = urlString.substring(separator + 1);
+      extractDirectoryFromJar(jarPath, resourcePath, tempDir);
+    } else {
+      LOG.warn("Python overlay resource has unsupported protocol: {}", resourceUrl);
+    }
+  }
+
+  private void extractDirectoryFromJar(
+    String jarPath,
+    String resourcePath,
+    Path targetDir
+  ) throws IOException {
     URI jarUri = URI.create(jarPath);
     synchronized (JAR_EXTRACTION_LOCK) {
       try (FileSystem jarFs = FileSystems.newFileSystem(jarUri, Collections.emptyMap())) {
-        Path jarResourcePath = jarFs.getPath(resourcePath);
-        copyDirectory(jarResourcePath, targetDir);
-        LOG.debug("Extracted stdlib from JAR to: {}", targetDir);
+        copyDirectory(jarFs.getPath(resourcePath), targetDir);
       }
     }
   }

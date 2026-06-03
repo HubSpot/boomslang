@@ -3,6 +3,7 @@ package com.hubspot.boomslang;
 import com.dylibso.chicory.runtime.HostFunction;
 import com.hubspot.boomslang.generated.BoomslangHostHostFunctions;
 import java.util.Map;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
@@ -28,6 +29,7 @@ public class HostBridge {
     private LogHandler logHandler;
     private final Map<String, Function<String, String>> handlers =
       new ConcurrentHashMap<>();
+    private AsyncHostRegistry asyncRegistry = new AsyncHostRegistry();
 
     public Builder withCallHandler(CallHandler handler) {
       this.callHandler = handler;
@@ -41,6 +43,27 @@ public class HostBridge {
 
     public Builder withFunction(String name, Function<String, String> handler) {
       this.handlers.put(name, handler);
+      return this;
+    }
+
+    public Builder withAsyncRegistry(AsyncHostRegistry asyncRegistry) {
+      this.asyncRegistry = asyncRegistry;
+      return this;
+    }
+
+    public Builder withAsyncFunction(
+      String name,
+      Function<String, CompletionStage<String>> handler
+    ) {
+      this.asyncRegistry.register(name, (ignoredName, args) -> handler.apply(args));
+      return this;
+    }
+
+    public Builder withAsyncCallHandler(
+      String name,
+      AsyncHostRegistry.AsyncCallHandler handler
+    ) {
+      this.asyncRegistry.register(name, handler);
       return this;
     }
 
@@ -73,14 +96,24 @@ public class HostBridge {
       }
 
       if (effectiveCallHandler == null) {
-        return (name, args) -> {
-          throw new RuntimeException("No handler registered for: " + name);
-        };
+        effectiveCallHandler =
+          (name, args) -> {
+            throw new RuntimeException("No handler registered for: " + name);
+          };
       }
 
       CallHandler handler = effectiveCallHandler;
       return (name, args) -> {
         checkInterrupted();
+        // Always route the reserved async control calls (__async_protocol__ / __async_start__ /
+        // __async_poll__ / __async_result__ / __async_cancel__) to the registry, regardless of
+        // whether any named async handlers were registered. Generated extension async functions
+        // (e.g. call_rpc_async) call asyncRegistry.start(stage) directly from their WASM import and
+        // never populate the handler map, so the event loop must still be able to poll/cancel
+        // their tokens through this bridge.
+        if (asyncRegistry.isControlCall(name)) {
+          return asyncRegistry.handleControlCall(name, args);
+        }
         return handler.handle(name, args);
       };
     }
