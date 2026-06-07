@@ -1,0 +1,594 @@
+//| mill-version: 1.1.6-88-655739
+
+package build
+
+import mill.*
+import mill.api.BuildCtx
+
+private final case class CopySpec(src: String, dest: String)
+
+private def pathUnder(root: os.Path, rel: String): os.Path =
+  rel.split('/').filter(_.nonEmpty).foldLeft(root)(_ / _)
+
+private def copyPath(src: os.Path, dest: os.Path): Unit = {
+  os.makeDir.all(dest / os.up)
+  if (os.isDir(src)) {
+    os.remove.all(dest)
+    os.copy.over(src, dest, createFolders = true)
+  }
+  else os.copy.over(src, dest, createFolders = true)
+}
+
+private def copyPathMerge(src: os.Path, dest: os.Path): Unit = {
+  if (os.isDir(src)) {
+    os.makeDir.all(dest)
+    for (child <- os.list(src)) copyPathMerge(child, dest / child.last)
+  } else {
+    copyPath(src, dest)
+  }
+}
+
+private def specs(base: String, entries: Seq[String]): Seq[CopySpec] =
+  entries.map(entry => CopySpec(s"$base/$entry", entry))
+
+private def stageSpecs(dest: os.Path, entries: Seq[CopySpec], refs: Seq[PathRef]): Unit = {
+  os.remove.all(dest)
+  os.makeDir.all(dest)
+  for ((spec, ref) <- entries.zip(refs)) copyPath(ref.path, pathUnder(dest, spec.dest))
+}
+
+private def installCopy(src: os.Path, relDest: String): Unit =
+  BuildCtx.withFilesystemCheckerDisabled {
+    copyPath(src, pathUnder(BuildCtx.workspaceRoot, relDest))
+  }
+
+private def runLogged(cmd: os.Shellable, cwd: os.Path = os.pwd, env: Map[String, String] = Map.empty): Unit =
+  os.call(cmd, cwd = cwd, env = env, stdout = os.Inherit, stderr = os.Inherit)
+
+private def runLoggedSeq(cmd: Seq[String], cwd: os.Path = os.pwd, env: Map[String, String] = Map.empty): Unit =
+  os.proc(cmd).call(cwd = cwd, env = env, stdout = os.Inherit, stderr = os.Inherit)
+
+private def mavenCommand(args: String*): Seq[String] =
+  Seq("mvn") ++ sys.env.get("MAVEN_TOOLCHAINS_FILE").toSeq.flatMap(path => Seq("--toolchains", path)) ++ args
+
+private val dockerBuildEnv = Map("DOCKER_BUILDKIT" -> "1")
+
+private def isAppleContainerCli(cli: String): Boolean = cli == "container"
+
+private def requireContainerCli(cli: String): Unit =
+  if (!isAppleContainerCli(cli) && cli != "docker") {
+    sys.error(s"Unsupported BOOMSLANG_CONTAINER_CLI=$cli; expected docker or container")
+  }
+
+private def dockerBuild(cli: String, image: String, ctx: os.Path): Unit =
+  runLogged((cli, "build", "--progress=plain", "-t", image, "."), cwd = ctx, env = dockerBuildEnv)
+
+private def dockerCopyFromImage(cli: String, image: String, src: String, dest: os.Path): Unit = {
+  val cid = os.proc(cli, "create", image, "unused-cmd").call().out.text().trim
+  try runLogged((cli, "cp", s"$cid:$src", dest))
+  finally runLogged((cli, "rm", cid))
+}
+
+private val runtimeResources = "core/src/main/resources/python"
+private val defaultPython = "/usr/bin/python3"
+
+object artifacts extends Module {
+  override def moduleDir: os.Path = BuildCtx.workspaceRoot
+
+  private val pydanticCoreWasiEntries = Seq(
+    "_sysconfigdata__wasi_wasm32-wasi.py",
+    "wheels",
+    "build-local.sh",
+    "hubspot.build.json",
+    "Dockerfile",
+    "Cargo.toml"
+  )
+  private val numpyWasiEntries = Seq(
+    "_sysconfigdata__wasi_wasm32-wasi.py",
+    "shim-include",
+    "cross-wasi.ini",
+    "hubspot.build.json",
+    "pyconfig-wasi.h",
+    "Dockerfile",
+    "harvest.sh",
+    "patch.py"
+  )
+  private val pandasWasiEntries = Seq(
+    "_sysconfigdata__wasi_wasm32-wasi.py",
+    "cross-wasi.ini",
+    "hubspot.build.json",
+    "pyconfig-wasi.h",
+    "Dockerfile",
+    "harvest.sh",
+    "patch.py"
+  )
+  private val matplotlibWasiEntries = Seq(
+    "_sysconfigdata__wasi_wasm32-wasi.py",
+    "shim-include",
+    "cross-wasi.ini",
+    "hubspot.build.json",
+    "pyconfig-wasi.h",
+    "Dockerfile",
+    "harvest.sh",
+    "patch.py"
+  )
+  private val pillowWasiEntries = Seq(
+    "_sysconfigdata__wasi_wasm32-wasi.py",
+    "hubspot.build.json",
+    "pyconfig-wasi.h",
+    "Dockerfile",
+    "harvest.sh"
+  )
+  private val ijsonWasiEntries = Seq(
+    "harvest.sh",
+    "Dockerfile",
+    "hubspot.build.json",
+    "pyconfig-wasi.h"
+  )
+  private val cpythonWasiEntries = Seq(
+    "main.c",
+    "build.sh",
+    "split-ast-annotations.py",
+    "hubspot.build.json",
+    "Dockerfile"
+  )
+  private val builderImageEntries = Seq("Dockerfile")
+
+  private val pydanticCoreWasiSpecs = specs("cpython/pydantic-core-wasi", pydanticCoreWasiEntries)
+  private val numpyWasiSpecs = specs("cpython/numpy-wasi", numpyWasiEntries)
+  private val pandasWasiSpecs = specs("cpython/pandas-wasi", pandasWasiEntries)
+  private val matplotlibWasiSpecs = specs("cpython/matplotlib-wasi", matplotlibWasiEntries)
+  private val pillowWasiSpecs = specs("cpython/pillow-wasi", pillowWasiEntries)
+  private val ijsonWasiSpecs = specs("cpython/ijson-wasi", ijsonWasiEntries)
+  private val cpythonWasiSpecs = specs("cpython/cpython-wasi", cpythonWasiEntries)
+  private val builderImageSpecs = specs("cpython/builder", builderImageEntries)
+
+  private val wasmSpecs = Seq(
+    CopySpec("python-host/Cargo.toml", "python-host/Cargo.toml"),
+    CopySpec("python-host/Cargo.lock", "python-host/Cargo.lock"),
+    CopySpec("python-host/build.rs", "python-host/build.rs"),
+    CopySpec("python-host/build-wasm.sh", "python-host/build-wasm.sh"),
+    CopySpec("python-host/src", "python-host/src"),
+    CopySpec("python-host-core/Cargo.toml", "python-host-core/Cargo.toml"),
+    CopySpec("python-host-core/build.rs", "python-host-core/build.rs"),
+    CopySpec("python-host-core/src", "python-host-core/src"),
+    CopySpec("extensions/host-bridge/Cargo.toml", "extensions/host-bridge/Cargo.toml"),
+    CopySpec("extensions/host-bridge/build.rs", "extensions/host-bridge/build.rs"),
+    CopySpec("extensions/host-bridge/extension.toml", "extensions/host-bridge/extension.toml"),
+    CopySpec("extensions/host-bridge/src", "extensions/host-bridge/src"),
+    CopySpec("extensions/host-bridge/lib", "extensions/host-bridge/lib"),
+    CopySpec("boomslang-hostgen/Cargo.toml", "boomslang-hostgen/Cargo.toml"),
+    CopySpec("boomslang-hostgen/Cargo.lock", "boomslang-hostgen/Cargo.lock"),
+    CopySpec("boomslang-hostgen/src", "boomslang-hostgen/src"),
+    CopySpec("boomslang-hostgen/templates", "boomslang-hostgen/templates")
+  )
+
+  def containerCli = Task.Input {
+    sys.env.getOrElse("BOOMSLANG_CONTAINER_CLI", "docker")
+  }
+
+  def pydanticCoreWasiContext = Task.Sources(
+    "cpython/pydantic-core-wasi/_sysconfigdata__wasi_wasm32-wasi.py",
+    "cpython/pydantic-core-wasi/wheels",
+    "cpython/pydantic-core-wasi/build-local.sh",
+    "cpython/pydantic-core-wasi/hubspot.build.json",
+    "cpython/pydantic-core-wasi/Dockerfile",
+    "cpython/pydantic-core-wasi/Cargo.toml"
+  )
+  def numpyWasiContext = Task.Sources(
+    "cpython/numpy-wasi/_sysconfigdata__wasi_wasm32-wasi.py",
+    "cpython/numpy-wasi/shim-include",
+    "cpython/numpy-wasi/cross-wasi.ini",
+    "cpython/numpy-wasi/hubspot.build.json",
+    "cpython/numpy-wasi/pyconfig-wasi.h",
+    "cpython/numpy-wasi/Dockerfile",
+    "cpython/numpy-wasi/harvest.sh",
+    "cpython/numpy-wasi/patch.py"
+  )
+  def pandasWasiContext = Task.Sources(
+    "cpython/pandas-wasi/_sysconfigdata__wasi_wasm32-wasi.py",
+    "cpython/pandas-wasi/cross-wasi.ini",
+    "cpython/pandas-wasi/hubspot.build.json",
+    "cpython/pandas-wasi/pyconfig-wasi.h",
+    "cpython/pandas-wasi/Dockerfile",
+    "cpython/pandas-wasi/harvest.sh",
+    "cpython/pandas-wasi/patch.py"
+  )
+  def matplotlibWasiContext = Task.Sources(
+    "cpython/matplotlib-wasi/_sysconfigdata__wasi_wasm32-wasi.py",
+    "cpython/matplotlib-wasi/shim-include",
+    "cpython/matplotlib-wasi/cross-wasi.ini",
+    "cpython/matplotlib-wasi/hubspot.build.json",
+    "cpython/matplotlib-wasi/pyconfig-wasi.h",
+    "cpython/matplotlib-wasi/Dockerfile",
+    "cpython/matplotlib-wasi/harvest.sh",
+    "cpython/matplotlib-wasi/patch.py"
+  )
+  def pillowWasiContext = Task.Sources(
+    "cpython/pillow-wasi/_sysconfigdata__wasi_wasm32-wasi.py",
+    "cpython/pillow-wasi/hubspot.build.json",
+    "cpython/pillow-wasi/pyconfig-wasi.h",
+    "cpython/pillow-wasi/Dockerfile",
+    "cpython/pillow-wasi/harvest.sh"
+  )
+  def ijsonWasiContext = Task.Sources(
+    "cpython/ijson-wasi/harvest.sh",
+    "cpython/ijson-wasi/Dockerfile",
+    "cpython/ijson-wasi/hubspot.build.json",
+    "cpython/ijson-wasi/pyconfig-wasi.h"
+  )
+  def cpythonWasiContext = Task.Sources(
+    "cpython/cpython-wasi/main.c",
+    "cpython/cpython-wasi/build.sh",
+    "cpython/cpython-wasi/split-ast-annotations.py",
+    "cpython/cpython-wasi/hubspot.build.json",
+    "cpython/cpython-wasi/Dockerfile"
+  )
+  def builderImageContext = Task.Sources("cpython/builder/Dockerfile")
+  def wasmContext = Task.Sources(
+    "python-host/Cargo.toml",
+    "python-host/Cargo.lock",
+    "python-host/build.rs",
+    "python-host/build-wasm.sh",
+    "python-host/src",
+    "python-host-core/Cargo.toml",
+    "python-host-core/build.rs",
+    "python-host-core/src",
+    "extensions/host-bridge/Cargo.toml",
+    "extensions/host-bridge/build.rs",
+    "extensions/host-bridge/extension.toml",
+    "extensions/host-bridge/src",
+    "extensions/host-bridge/lib",
+    "boomslang-hostgen/Cargo.toml",
+    "boomslang-hostgen/Cargo.lock",
+    "boomslang-hostgen/src",
+    "boomslang-hostgen/templates"
+  )
+  def pydanticCorePython = Task.Source("cpython/lib/pydantic_core")
+  def hostBridgePython = Task.Source("extensions/host-bridge/lib")
+
+  private def buildContainerArtifact(
+      name: String,
+      image: String,
+      contextSpecs: Seq[CopySpec],
+      contextRefs: Seq[PathRef],
+      cli: String,
+      dest: os.Path,
+      vendorTgzs: Map[String, PathRef] = Map.empty
+  ): PathRef = {
+    val ctx = dest / "context"
+    stageSpecs(ctx, contextSpecs, contextRefs)
+
+    os.remove.all(ctx / "vendor")
+    os.makeDir.all(ctx / "vendor")
+    for ((vendorName, tgz) <- vendorTgzs) {
+      os.copy.over(tgz.path, ctx / "vendor" / vendorName, createFolders = true)
+    }
+
+    val out = dest / "out"
+    os.remove.all(out)
+    os.makeDir.all(out)
+
+    requireContainerCli(cli)
+    if (isAppleContainerCli(cli)) {
+      runLogged((
+        "container", "build",
+        "--progress", "plain",
+        "-t", image,
+        "-o", s"type=local,dest=$out",
+        "."
+      ), cwd = ctx)
+      val artifact = os.walk(out).find(_.last == "artifact.tgz")
+        .getOrElse(sys.error(s"$name did not produce artifact.tgz"))
+      os.copy.over(artifact, dest / "artifact.tgz")
+    } else {
+      dockerBuild(cli, image, ctx)
+      dockerCopyFromImage(cli, image, "/artifact.tgz", dest / "artifact.tgz")
+    }
+
+    PathRef(dest / "artifact.tgz")
+  }
+
+  def pydanticCoreWasi = Task {
+    buildContainerArtifact(
+      "pydantic-core-wasi",
+      "boomslang-pydantic-core-wasi",
+      pydanticCoreWasiSpecs,
+      pydanticCoreWasiContext(),
+      containerCli(),
+      Task.dest
+    )
+  }
+
+  def numpyWasi = Task {
+    buildContainerArtifact(
+      "numpy-wasi",
+      "boomslang-numpy-wasi",
+      numpyWasiSpecs,
+      numpyWasiContext(),
+      containerCli(),
+      Task.dest
+    )
+  }
+
+  def pandasWasi = Task {
+    buildContainerArtifact(
+      "pandas-wasi",
+      "boomslang-pandas-wasi",
+      pandasWasiSpecs,
+      pandasWasiContext(),
+      containerCli(),
+      Task.dest,
+      Map("numpy-wasi.tgz" -> numpyWasi())
+    )
+  }
+
+  def matplotlibWasi = Task {
+    buildContainerArtifact(
+      "matplotlib-wasi",
+      "boomslang-matplotlib-wasi",
+      matplotlibWasiSpecs,
+      matplotlibWasiContext(),
+      containerCli(),
+      Task.dest,
+      Map("numpy-wasi.tgz" -> numpyWasi())
+    )
+  }
+
+  def pillowWasi = Task {
+    buildContainerArtifact(
+      "pillow-wasi",
+      "boomslang-pillow-wasi",
+      pillowWasiSpecs,
+      pillowWasiContext(),
+      containerCli(),
+      Task.dest
+    )
+  }
+
+  def ijsonWasi = Task {
+    buildContainerArtifact(
+      "ijson-wasi",
+      "boomslang-ijson-wasi",
+      ijsonWasiSpecs,
+      ijsonWasiContext(),
+      containerCli(),
+      Task.dest
+    )
+  }
+
+  def cpythonWasiTgz = Task {
+    buildContainerArtifact(
+      "cpython-wasi",
+      "boomslang-cpython-wasi",
+      cpythonWasiSpecs,
+      cpythonWasiContext(),
+      containerCli(),
+      Task.dest,
+      Map(
+        "pydantic-core-wasi.tgz" -> pydanticCoreWasi(),
+        "numpy-wasi.tgz" -> numpyWasi(),
+        "pandas-wasi.tgz" -> pandasWasi(),
+        "matplotlib-wasi.tgz" -> matplotlibWasi(),
+        "pillow-wasi.tgz" -> pillowWasi(),
+        "ijson-wasi.tgz" -> ijsonWasi()
+      )
+    )
+  }
+
+  def cpythonWasi = Task {
+    val extracted = Task.dest / "extracted"
+    os.makeDir.all(extracted)
+    runLogged(("tar", "xzf", cpythonWasiTgz().path, "-C", extracted))
+    PathRef(extracted)
+  }
+
+  def pipPackages = Task {
+    val downloadDir = Task.dest / "downloads"
+    val extractedDir = Task.dest / "extracted"
+    val packagesDir = Task.dest / "pip-packages"
+    os.makeDir.all(downloadDir)
+    os.makeDir.all(extractedDir)
+    os.makeDir.all(packagesDir)
+
+    runLogged((
+      defaultPython, "-m", "pip", "download",
+      "pydantic==2.12.5",
+      "annotated-types>=0.6.0",
+      "typing-extensions>=4.14.1",
+      "typing-inspection>=0.4.2",
+      "--no-deps",
+      "-d", downloadDir,
+      "--quiet"
+    ), env = Map("PIP_DISABLE_PIP_VERSION_CHECK" -> "1"))
+
+    for (wheel <- os.list(downloadDir) if wheel.ext == "whl") {
+      runLogged((defaultPython, "-m", "zipfile", "-e", wheel, extractedDir))
+    }
+
+    for (pkg <- Seq("pydantic", "annotated_types", "typing_inspection")) {
+      val src = extractedDir / pkg
+      if (os.exists(src)) copyPath(src, packagesDir / pkg)
+    }
+    val typingExtensions = extractedDir / "typing_extensions.py"
+    if (os.exists(typingExtensions)) os.copy.over(typingExtensions, packagesDir / "typing_extensions.py")
+
+    PathRef(packagesDir)
+  }
+
+  def builderImage = Task {
+    val ctx = Task.dest / "context"
+    stageSpecs(ctx, builderImageSpecs, builderImageContext())
+    val cli = containerCli()
+
+    requireContainerCli(cli)
+    if (isAppleContainerCli(cli)) {
+      runLogged(("container", "build", "--progress", "plain", "-t", "boomslang-builder", "."), cwd = ctx)
+    } else {
+      dockerBuild(cli, "boomslang-builder", ctx)
+    }
+
+    os.write.over(Task.dest / "image.txt", "boomslang-builder\n")
+    PathRef(Task.dest / "image.txt")
+  }
+
+  def wasm = Task {
+    builderImage()
+
+    val ctx = Task.dest / "context"
+    stageSpecs(ctx, wasmSpecs, wasmContext())
+    copyPath(cpythonWasi().path, ctx / "cpython-wasi")
+    os.makeDir.all(ctx / "lib")
+    copyPath(pydanticCorePython().path, ctx / "lib" / "pydantic_core")
+    copyPath(pipPackages().path, ctx / "pip-packages")
+    os.write.over(
+      ctx / "Dockerfile",
+      """ARG BUILDER_IMAGE=boomslang-builder
+        |FROM ${BUILDER_IMAGE}
+        |WORKDIR /build
+        |
+        |COPY cpython-wasi/ cpython/build/cpython-wasi/
+        |COPY lib/ cpython/lib/
+        |COPY pip-packages/ cpython/lib/pip-packages/
+        |COPY python-host/ python-host/
+        |COPY python-host-core/ python-host-core/
+        |COPY extensions/ extensions/
+        |COPY boomslang-hostgen/ boomslang-hostgen/
+        |
+        |RUN cd python-host && chmod +x build-wasm.sh && ./build-wasm.sh all
+        |
+        |FROM scratch
+        |COPY --from=0 /build/cpython/build/output/boomslang.wasm /boomslang.wasm
+        |""".stripMargin
+    )
+
+    val out = Task.dest / "out"
+    os.makeDir.all(out)
+    val cli = containerCli()
+    requireContainerCli(cli)
+    if (isAppleContainerCli(cli)) {
+      runLogged(("container", "build", "--progress", "plain", "-t", "boomslang-wasm", "-o", s"type=local,dest=$out", "."), cwd = ctx)
+      val wasmArtifact = os.walk(out).find(_.last == "boomslang.wasm")
+        .getOrElse(sys.error("boomslang-wasm did not produce boomslang.wasm"))
+      os.copy.over(wasmArtifact, Task.dest / "boomslang.wasm")
+    } else {
+      dockerBuild(cli, "boomslang-wasm", ctx)
+      dockerCopyFromImage(cli, "boomslang-wasm", "/boomslang.wasm", Task.dest / "boomslang.wasm")
+    }
+
+    PathRef(Task.dest / "boomslang.wasm")
+  }
+
+  def resources = Task {
+    val pythonRoot = Task.dest / "python"
+    val libRoot = pythonRoot / "usr" / "local" / "lib"
+    val siteRoot = libRoot / "python3.14"
+    os.makeDir.all(libRoot)
+    copyPath(cpythonWasi().path / "usr" / "local" / "lib" / "python3.14", siteRoot)
+    copyPath(pydanticCorePython().path, siteRoot / "pydantic_core")
+
+    for (pkg <- Seq("pydantic", "annotated_types", "typing_inspection")) {
+      val src = pipPackages().path / pkg
+      if (os.exists(src)) copyPath(src, siteRoot / pkg)
+    }
+    val typingExtensions = pipPackages().path / "typing_extensions.py"
+    if (os.exists(typingExtensions)) os.copy.over(typingExtensions, siteRoot / "typing_extensions.py")
+
+    copyPathMerge(hostBridgePython().path, siteRoot)
+    PathRef(pythonRoot)
+  }
+
+  def installPydanticCoreWasi() = Task.Command {
+    installCopy(pydanticCoreWasi().path, "cpython/pydantic-core-wasi/artifact.tgz")
+  }
+
+  def installNumpyWasi() = Task.Command {
+    installCopy(numpyWasi().path, "cpython/numpy-wasi/artifact.tgz")
+  }
+
+  def installPandasWasi() = Task.Command {
+    installCopy(pandasWasi().path, "cpython/pandas-wasi/artifact.tgz")
+  }
+
+  def installMatplotlibWasi() = Task.Command {
+    installCopy(matplotlibWasi().path, "cpython/matplotlib-wasi/artifact.tgz")
+  }
+
+  def installPillowWasi() = Task.Command {
+    installCopy(pillowWasi().path, "cpython/pillow-wasi/artifact.tgz")
+  }
+
+  def installIjsonWasi() = Task.Command {
+    installCopy(ijsonWasi().path, "cpython/ijson-wasi/artifact.tgz")
+  }
+
+  def installNativeTgzs() = Task.Command {
+    installCopy(pydanticCoreWasi().path, "cpython/pydantic-core-wasi/artifact.tgz")
+    installCopy(numpyWasi().path, "cpython/numpy-wasi/artifact.tgz")
+    installCopy(pandasWasi().path, "cpython/pandas-wasi/artifact.tgz")
+    installCopy(matplotlibWasi().path, "cpython/matplotlib-wasi/artifact.tgz")
+    installCopy(pillowWasi().path, "cpython/pillow-wasi/artifact.tgz")
+    installCopy(ijsonWasi().path, "cpython/ijson-wasi/artifact.tgz")
+  }
+
+  def installCpythonWasi() = Task.Command {
+    installCopy(cpythonWasiTgz().path, "cpython/cpython-wasi/artifact.tgz")
+    BuildCtx.withFilesystemCheckerDisabled {
+      val dest = BuildCtx.workspaceRoot / "cpython" / "build" / "cpython-wasi"
+      os.remove.all(dest)
+      copyPath(cpythonWasi().path, dest)
+    }
+  }
+
+  def installPipPackages() = Task.Command {
+    BuildCtx.withFilesystemCheckerDisabled {
+      val dest = BuildCtx.workspaceRoot / "cpython" / "lib" / "pip-packages"
+      os.remove.all(dest)
+      copyPath(pipPackages().path, dest)
+    }
+  }
+
+  def installWasm() = Task.Command {
+    installCopy(wasm().path, s"$runtimeResources/bin/boomslang.wasm")
+  }
+
+  def installResources() = Task.Command {
+    BuildCtx.withFilesystemCheckerDisabled {
+      val dest = pathUnder(BuildCtx.workspaceRoot, runtimeResources) / "usr"
+      os.remove.all(dest)
+      copyPath(resources().path / "usr", dest)
+    }
+  }
+
+  def installAll() = Task.Command {
+    installCopy(pydanticCoreWasi().path, "cpython/pydantic-core-wasi/artifact.tgz")
+    installCopy(numpyWasi().path, "cpython/numpy-wasi/artifact.tgz")
+    installCopy(pandasWasi().path, "cpython/pandas-wasi/artifact.tgz")
+    installCopy(matplotlibWasi().path, "cpython/matplotlib-wasi/artifact.tgz")
+    installCopy(pillowWasi().path, "cpython/pillow-wasi/artifact.tgz")
+    installCopy(ijsonWasi().path, "cpython/ijson-wasi/artifact.tgz")
+    installCopy(cpythonWasiTgz().path, "cpython/cpython-wasi/artifact.tgz")
+    BuildCtx.withFilesystemCheckerDisabled {
+      val cpythonDest = BuildCtx.workspaceRoot / "cpython" / "build" / "cpython-wasi"
+      os.remove.all(cpythonDest)
+      copyPath(cpythonWasi().path, cpythonDest)
+
+      val pipDest = BuildCtx.workspaceRoot / "cpython" / "lib" / "pip-packages"
+      os.remove.all(pipDest)
+      copyPath(pipPackages().path, pipDest)
+
+      val resourcesDest = pathUnder(BuildCtx.workspaceRoot, runtimeResources) / "usr"
+      os.remove.all(resourcesDest)
+      copyPath(resources().path / "usr", resourcesDest)
+    }
+    installCopy(wasm().path, s"$runtimeResources/bin/boomslang.wasm")
+  }
+}
+
+def build() = Task.Command {
+  runLoggedSeq(mavenCommand("clean", "package", "-DskipTests"), cwd = BuildCtx.workspaceRoot)
+}
+
+def test() = Task.Command {
+  runLoggedSeq(mavenCommand("test", "-pl", "tests"), cwd = BuildCtx.workspaceRoot)
+}

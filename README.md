@@ -209,13 +209,19 @@ For the stock repo build that produces the bundled runtime, use `just wasm` and 
 
 ## Building this repo
 
-Requirements: Java 21, Maven, `just`, and either Docker or Apple `container`.
+Requirements: Java 21, Maven, `just`, and Docker on Linux. Apple `container` is also supported on macOS.
 
 ```bash
 just everything
 ```
 
 That builds the native WASM artifacts, Rust host, Python resources, Java AOT classes, and Maven packages. First runs take about an hour because the CPython and library builds are container-heavy.
+
+Docker is the default container engine. To be explicit on Linux:
+
+```bash
+BOOMSLANG_CONTAINER_CLI=docker just everything
+```
 
 Use Apple container instead of Docker:
 
@@ -249,6 +255,7 @@ just build-pydantic-core-wasi
 just build-numpy-wasi
 just build-pandas-wasi
 just build-matplotlib-wasi
+just build-pillow-wasi
 just build-ijson-wasi
 just build-cpython-wasi
 just pip-packages

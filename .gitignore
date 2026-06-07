@@ -1,4 +1,5 @@
 # Java / Maven
+out/
 target/
 *.class
 *.jar
