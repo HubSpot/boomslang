@@ -187,6 +187,13 @@ if [ "$1" = "--bsp" ] || [ "${1#"-i"}" != "$1" ] || [ "$1" = "--interactive" ] |
   shift
 fi
 
+# This build reads BOOMSLANG_CONTAINER_CLI to choose between Docker and Apple
+# container. The Mill daemon keeps the environment from the server process, so
+# default to no-daemon unless explicitly requested.
+if [ -z "${MILL_USE_DAEMON}" ] && [ -z "$MILL_FIRST_ARG" ] ; then
+  MILL_FIRST_ARG="--no-daemon"
+fi
+
 unset MILL_FINAL_DOWNLOAD_FOLDER
 unset MILL_OLD_DOWNLOAD_PATH
 unset OLD_MILL
