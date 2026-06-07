@@ -4,11 +4,11 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(
     name = "boomslang-hostgen",
-    about = "Generate host function bindings from extension.toml"
+    about = "Generate host function bindings from boomslang ABI JSON"
 )]
 struct Cli {
-    #[arg(help = "Path to extension.toml")]
-    manifest: PathBuf,
+    #[arg(help = "Path to extension ABI JSON")]
+    abi: PathBuf,
 
     #[arg(long, help = "Output directory for generated Java code")]
     java_out: Option<PathBuf>,
@@ -17,16 +17,18 @@ struct Cli {
     java_package: Option<String>,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let manifest_path = cli.manifest.to_str().unwrap();
+    let abi_path = cli.abi.to_str().unwrap();
 
     if let Some(java_out) = &cli.java_out {
         let package = cli
             .java_package
             .as_deref()
             .unwrap_or("com.hubspot.boomslang.extensions");
-        boomslang_hostgen::generate_java(manifest_path, java_out.to_str().unwrap(), package);
+        boomslang_hostgen::generate_java(abi_path, java_out.to_str().unwrap(), package)?;
         eprintln!("Generated Java to {}", java_out.display());
     }
+
+    Ok(())
 }

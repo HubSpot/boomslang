@@ -28,23 +28,26 @@ cargo build --target wasm32-wasip1 --release
 1. Create an extension crate using `boomslang-hostgen`:
 
 ```bash
-# Define your extension contract
-cat > my-ext/extension.toml <<EOF
-[extension]
-name = "myext"
-wasm_module = "myext"
-prewarm = ["_myext"]
-
-[[functions]]
-name = "do_thing"
-params = [{ name = "input", type = "string" }]
-returns = "string"
-EOF
-
 # Create the crate
 mkdir -p my-ext/src
 cat > my-ext/build.rs <<EOF
-fn main() { boomslang_hostgen::generate_rust("extension.toml"); }
+fn main() {
+    let ext = boomslang_hostgen::ExtensionSpec::new("myext")
+        .wasm_module("myext")
+        .prewarm(["_myext"])
+        .function("do_thing", |f| {
+            f.param("input", boomslang_hostgen::Type::String)
+                .returns(boomslang_hostgen::Type::String)
+        });
+
+    boomslang_hostgen::Build::new(ext)
+        .emit_rust_guest()
+        .emit_abi_json()
+        .generate()
+        .expect("generate myext");
+
+    println!("cargo:rerun-if-changed=build.rs");
+}
 EOF
 cat > my-ext/src/lib.rs <<EOF
 include!(concat!(env!("OUT_DIR"), "/ext_myext.rs"));
@@ -75,10 +78,14 @@ boomslang_host_core::init(
 
 ```bash
 cargo run --manifest-path ../../boomslang-hostgen/Cargo.toml -- \
-  ../my-ext/extension.toml \
+  ../my-ext/target/wasm32-wasip1/release/build/my-ext-*/out/myext.abi.json \
   --java-out ../../core/src/main/java \
   --java-package com.hubspot.boomslang.generated
 ```
+
+For build systems that want Java generation during the Rust extension build, call
+`emit_java_host("../../core/src/main/java", "com.hubspot.boomslang.generated")` on the
+`Build` value instead of running the CLI later.
 
 The generated class exposes typed functional interfaces and a builder, so Java users only fill in the host implementations:
 
@@ -94,22 +101,26 @@ var factory = PythonExecutorFactory.builder()
 
 ## Async extension functions
 
-Custom extensions can also expose Java `CompletionStage<String>` work as Python awaitables. Use `async = true` in the extension manifest. See `async-extension.toml` for a complete manifest example:
+Custom extensions can also expose Java `CompletionStage<String>` work as Python awaitables. Use `r#async()` in the extension DSL:
 
-```toml
-[extension]
-name = "my_async_ext"
-wasm_module = "my_async_ext"
-prewarm = ["_my_async_ext"]
+```rust
+fn main() {
+    let ext = boomslang_hostgen::ExtensionSpec::new("my_async_ext")
+        .wasm_module("my_async_ext")
+        .prewarm(["_my_async_ext"])
+        .function("lookup", |f| {
+            f.r#async()
+                .param("request", boomslang_hostgen::Type::String)
+                .param("shard", boomslang_hostgen::Type::Int)
+                .returns(boomslang_hostgen::Type::String)
+        });
 
-[[functions]]
-name = "lookup"
-async = true
-params = [
-  { name = "request", type = "string" },
-  { name = "shard", type = "int" },
-]
-returns = "string"
+    boomslang_hostgen::Build::new(ext)
+        .emit_rust_guest()
+        .emit_abi_json()
+        .generate()
+        .expect("generate my_async_ext");
+}
 ```
 
 Generated async functions preserve the normal typed argument handling. The Java handler receives typed params and returns a `CompletionStage<String>`:

@@ -190,13 +190,14 @@ Use a custom host for:
 
 Start from `examples/custom-host/`. The flow is:
 
-1. Define an extension contract in `extension.toml`.
-2. Use `boomslang-hostgen` to generate Rust and Java bridge code.
-3. Compose the extension with `python-host-core` in a custom Rust host.
-4. Add any required native libraries to the WASI build as static libraries.
-5. Build the host to `wasm32-wasip1`.
-6. Package the custom `boomslang.wasm` and matching Python resources in your app or artifact.
-7. Depend on `com.hubspot:boomslang:no-python-runtime` for the Java API.
+1. Define an extension contract in the extension crate's `build.rs` with the `boomslang-hostgen` Rust DSL.
+2. Have `boomslang-hostgen` emit Rust guest code and an ABI JSON file.
+3. Generate Java bridge code from that ABI JSON when Java needs typed host adapters.
+4. Compose the extension with `python-host-core` in a custom Rust host.
+5. Add any required native libraries to the WASI build as static libraries.
+6. Build the host to `wasm32-wasip1`.
+7. Package the custom `boomslang.wasm` and matching Python resources in your app or artifact.
+8. Depend on `com.hubspot:boomslang:no-python-runtime` for the Java API.
 
 Minimal build command from the example:
 
