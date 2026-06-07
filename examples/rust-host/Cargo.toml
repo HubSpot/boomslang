@@ -7,7 +7,7 @@ description = "Example: wiring boomslang ABI JSON into a Rust WASM runtime host.
 
 [dependencies]
 anyhow = "1"
-wasmtime = "43"
+wasmtime = { version = "36", default-features = false, features = ["cranelift", "runtime", "std"] }
 
 [build-dependencies]
 boomslang-hostgen = { path = "../../boomslang-hostgen", default-features = false }
