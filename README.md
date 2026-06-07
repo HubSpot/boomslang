@@ -211,6 +211,14 @@ For the stock repo build that produces the bundled runtime, use `just wasm` and 
 
 Requirements: Java 21, Maven, `just`, and Docker on Linux. Apple `container` is also supported on macOS.
 
+With Nix, use the project dev shell:
+
+```bash
+nix develop
+```
+
+The dev shell provides Java 21, Maven, `just`, Python 3, Git LFS, and the Maven JDK toolchain configuration required by basepom. Docker or Apple `container` still needs to be installed and running on the host for the full WASM pipeline.
+
 ```bash
 ./mill artifacts.installAll
 ./mill build

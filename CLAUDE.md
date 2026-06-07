@@ -18,6 +18,14 @@ cpython/
 
 ### Full build from scratch
 
+Enter the Nix dev shell before running local build commands:
+
+```bash
+nix develop
+```
+
+The shell provides Java 21, Maven, `just`, Python 3, Git LFS, and the Maven toolchain file required by basepom.
+
 ```bash
 just everything
 ```

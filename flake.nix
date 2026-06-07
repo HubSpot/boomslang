@@ -25,6 +25,24 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
+          jdk = pkgs.jdk21;
+          jdkHome = jdk.home;
+
+          mavenToolchains = pkgs.writeText "maven-toolchains.xml" ''
+            <toolchains xmlns="http://maven.apache.org/TOOLCHAINS/1.1.0"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://maven.apache.org/TOOLCHAINS/1.1.0 https://maven.apache.org/xsd/toolchains-1.1.0.xsd">
+              <toolchain>
+                <type>jdk</type>
+                <provides>
+                  <version>21</version>
+                </provides>
+                <configuration>
+                  <jdkHome>${jdkHome}</jdkHome>
+                </configuration>
+              </toolchain>
+            </toolchains>
+          '';
 
           python = pkgs.python3.withPackages (
             ps: with ps; [
@@ -69,10 +87,11 @@
               pkgs.findutils
               pkgs.gh
               pkgs.git
+              pkgs.git-lfs
               pkgs.gnumake
               pkgs.gnutar
               pkgs.gzip
-              pkgs.jdk21
+              jdk
               pkgs.just
               pkgs.maven
               pkgs.pkg-config
@@ -86,7 +105,7 @@
               wasiSdk
             ];
 
-            JAVA_HOME = pkgs.jdk21.home;
+            JAVA_HOME = jdkHome;
             WASI_SDK_PATH = wasiSdk;
             CARGO_TARGET_WASM32_WASIP1_LINKER = "${wasiSdk}/bin/clang";
             CC_wasm32_wasip1 = "${wasiSdk}/bin/clang";
@@ -95,8 +114,13 @@
             CFLAGS_wasm32_wasip1 = "--sysroot=${wasiSdk}/share/wasi-sysroot";
 
             shellHook = ''
-              export PATH="${wasiSdk}/bin:$PATH"
+              export PATH="${wasiSdk}/bin:$JAVA_HOME/bin:$PATH"
               export BOOMSLANG_CONTAINER_CLI="''${BOOMSLANG_CONTAINER_CLI:-docker}"
+              if [ -n "''${MAVEN_ARGS:-}" ]; then
+                export MAVEN_ARGS="--toolchains ${mavenToolchains} $MAVEN_ARGS"
+              else
+                export MAVEN_ARGS="--toolchains ${mavenToolchains}"
+              fi
 
               echo "boomslang devshell"
               echo "  Java: $JAVA_HOME"
