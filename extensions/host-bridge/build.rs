@@ -17,8 +17,7 @@ fn main() {
         });
 
     boomslang_hostgen::Build::new(ext)
-        .emit_rust_guest()
-        .emit_abi_json()
+        .emit()
         .generate()
         .expect("generate boomslang host extension");
 

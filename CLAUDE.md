@@ -92,5 +92,6 @@ mvn test -pl tests
   - `builder/` — container builder image (WASI SDK + Wizer + Binaryen + Rust)
 - `boomslang-hostgen/` — Extension code generator (Rust CLI + library)
 - `extensions/` — Extension crates (demo included)
+- `examples/rust-host/` — Rust runtime host example for ABI JSON imports
 - `tests/` — Integration tests
 - `benchmarks/` — JMH benchmarks

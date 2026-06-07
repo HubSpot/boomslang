@@ -208,6 +208,9 @@ cargo build --target wasm32-wasip1 --release
 
 For the stock repo build that produces the bundled runtime, use `just wasm` and `just resources`.
 
+For a Rust embedder that consumes ABI JSON and wires host imports into a WASM runtime, see
+`examples/rust-host/`.
+
 ## Building this repo
 
 Requirements: Java 21, Maven, `just`, and Docker on Linux. Apple `container` is also supported on macOS.
@@ -314,6 +317,7 @@ just test
 - `extensions/`: built-in host extensions
 - `boomslang-hostgen/`: extension code generator
 - `examples/custom-host/`: custom host example
+- `examples/rust-host/`: Rust runtime host example for ABI JSON imports
 - `cpython/`: CPython, native library, and container build pipeline
 
 ## License

@@ -41,8 +41,7 @@ fn main() {
         });
 
     boomslang_hostgen::Build::new(ext)
-        .emit_rust_guest()
-        .emit_abi_json()
+        .emit()
         .generate()
         .expect("generate myext");
 
@@ -116,8 +115,7 @@ fn main() {
         });
 
     boomslang_hostgen::Build::new(ext)
-        .emit_rust_guest()
-        .emit_abi_json()
+        .emit()
         .generate()
         .expect("generate my_async_ext");
 }
