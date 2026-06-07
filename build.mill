@@ -167,6 +167,10 @@ object artifacts extends Module {
     sys.env.getOrElse("BOOMSLANG_CONTAINER_CLI", "docker")
   }
 
+  def showContainerCli() = Task.Command {
+    println(containerCli())
+  }
+
   def pydanticCoreWasiContext = Task.Sources(
     "cpython/pydantic-core-wasi/_sysconfigdata__wasi_wasm32-wasi.py",
     "cpython/pydantic-core-wasi/wheels",
@@ -270,6 +274,7 @@ object artifacts extends Module {
     os.makeDir.all(out)
 
     requireContainerCli(cli)
+    println(s"$name: using container engine $cli")
     if (isAppleContainerCli(cli)) {
       runLogged((
         "container", "build",
@@ -422,6 +427,7 @@ object artifacts extends Module {
     val cli = containerCli()
 
     requireContainerCli(cli)
+    println(s"builder-image: using container engine $cli")
     if (isAppleContainerCli(cli)) {
       runLogged(("container", "build", "--progress", "plain", "-t", "boomslang-builder", "."), cwd = ctx)
     } else {
@@ -466,6 +472,7 @@ object artifacts extends Module {
     os.makeDir.all(out)
     val cli = containerCli()
     requireContainerCli(cli)
+    println(s"boomslang-wasm: using container engine $cli")
     if (isAppleContainerCli(cli)) {
       runLogged(("container", "build", "--progress", "plain", "-t", "boomslang-wasm", "-o", s"type=local,dest=$out", "."), cwd = ctx)
       val wasmArtifact = os.walk(out).find(_.last == "boomslang.wasm")

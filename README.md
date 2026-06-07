@@ -212,7 +212,8 @@ For the stock repo build that produces the bundled runtime, use `just wasm` and 
 Requirements: Java 21, Maven, `just`, and Docker on Linux. Apple `container` is also supported on macOS.
 
 ```bash
-just everything
+./mill --no-daemon artifacts.installAll
+./mill --no-daemon build
 ```
 
 That builds the native WASM artifacts, Rust host, Python resources, Java AOT classes, and Maven packages. First runs take about an hour because the CPython and library builds are container-heavy.
@@ -220,20 +221,26 @@ That builds the native WASM artifacts, Rust host, Python resources, Java AOT cla
 Docker is the default container engine. To be explicit on Linux:
 
 ```bash
-BOOMSLANG_CONTAINER_CLI=docker just everything
+BOOMSLANG_CONTAINER_CLI=docker ./mill --no-daemon artifacts.showContainerCli
+BOOMSLANG_CONTAINER_CLI=docker ./mill --no-daemon artifacts.installAll
+./mill --no-daemon build
 ```
+
+Docker builds require BuildKit/buildx because the Dockerfiles use BuildKit syntax and automatic target architecture args.
 
 Use Apple container instead of Docker:
 
 ```bash
 container system start
-BOOMSLANG_CONTAINER_CLI=container just everything
+BOOMSLANG_CONTAINER_CLI=container ./mill --no-daemon artifacts.showContainerCli
+BOOMSLANG_CONTAINER_CLI=container ./mill --no-daemon artifacts.installAll
+./mill --no-daemon build
 ```
 
 Common local workflows:
 
 ```bash
-just build     # Maven package with AOT, skips tests
+just build     # package with AOT, skips tests
 just test      # tests module
 mvn compile -pl core
 mvn test -pl tests
