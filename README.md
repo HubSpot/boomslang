@@ -1,6 +1,6 @@
 # boomslang
 
-boomslang embeds CPython 3.14 in Java by running a WASI build with Chicory. Python execution stays inside the JVM, so callers do not need JNI, subprocess management, or a system Python install.
+boomslang runs CPython 3.14 from a WASI build. The default distribution embeds it in Java with Chicory, so Python execution stays inside the JVM and callers do not need JNI, subprocess management, or a system Python install.
 
 ## Bundled runtime
 
@@ -11,9 +11,23 @@ The default artifact includes:
 - `python/bin/boomslang.wasm`
 - generated Chicory AOT classes for the bundled WASM
 - copy-on-write memory snapshots for fast `PythonInstance` creation
-- `boomslang_host`, a small bridge for calling Java functions from Python
+- `boomslang_host`, a small bridge for calling host functions from Python
 
-## Java usage
+## Supported host languages
+
+A host language is the language embedding `boomslang.wasm`, providing a WASM runtime, and implementing any imported host functions. This is separate from the Rust/WASI code that builds the Python runtime that runs inside WASM.
+
+The extension ABI is language-neutral: an extension crate defines its contract with the `boomslang-hostgen` Rust DSL, emits ABI JSON, and host-language adapters are generated from that ABI JSON.
+
+| Host language | Status | Runtime | Host adapter support |
+| --- | --- | --- | --- |
+| Java | Primary supported host | Chicory | Stock runtime API, `HostBridge`, generated Java adapters with `--java-out` or `emit_java_host(...)` |
+| Rust | Supported example host | Wasmtime | Generated Rust adapters with `--rust-host-out` or `emit_rust_host(...)`; see `examples/rust-host/` |
+| Other languages | ABI target only | Any WASM runtime with compatible imports | Use the ABI JSON to implement the same pointer/length lowering and return-buffer protocol |
+
+The default Maven artifact is Java-first and includes the bundled runtime. Rust runtime-host support is useful for embedders that want to run the same Boomslang WASM runtime from a Rust process.
+
+## Java host usage
 
 Use the default artifact when you want the bundled Python runtime:
 
@@ -87,7 +101,7 @@ instance.reset();
 PythonResult second = instance.loadCode(bytecode);
 ```
 
-## Calling Java from Python
+## Calling Java host functions from Python
 
 The stock host exposes `boomslang_host.call(name, args)` and `boomslang_host.log(level, message)`.
 
@@ -112,7 +126,7 @@ user_json = call("lookup_user", "12345")
 log(2, "loaded user")
 ```
 
-Use a custom host if you need typed WASM imports or custom Python modules. See `examples/custom-host/`.
+Use a custom extension if you need typed WASM imports or custom Python modules. See `examples/custom-host/`.
 
 ## Adding pure-Python modules
 
@@ -175,13 +189,15 @@ Your app must provide:
 
 If your WASM is not at the default classpath location, set it with `withWasmResource(...)`.
 
-## Custom host builds
+## Custom WASM host builds
 
-Build a custom host when the stock `boomslang_host.call(...)` bridge is not enough. Custom hosts let you change the Rust host, add extensions, prewarm modules, and statically link additional native libraries into the WASI binary.
+Build a custom WASM host when the stock `boomslang_host.call(...)` bridge is not enough. This changes the Rust/WASI Python runtime that runs inside WASM. It is independent of whether the outside runtime host is Java, Rust, or another language.
+
+Custom WASM hosts let you change the Rust host crate, add guest extensions, prewarm modules, and statically link additional native libraries into the WASI binary.
 
 WASI does not support dynamic linking in this runtime. Any native code needed by Python extensions must be statically linked into the host build.
 
-Use a custom host for:
+Use a custom WASM host for:
 
 - typed WASM imports instead of string/JSON calls
 - host functions exposed as custom Python modules
@@ -192,12 +208,12 @@ Start from `examples/custom-host/`. The flow is:
 
 1. Define an extension contract in the extension crate's `build.rs` with the `boomslang-hostgen` Rust DSL.
 2. Have `boomslang-hostgen` emit Rust guest code and an ABI JSON file.
-3. Generate Java or Rust bridge code from that ABI JSON when the runtime host needs typed adapters.
+3. Generate host-language bridge code from that ABI JSON when the runtime host needs typed adapters.
 4. Compose the extension with `python-host-core` in a custom Rust host.
 5. Add any required native libraries to the WASI build as static libraries.
 6. Build the host to `wasm32-wasip1`.
 7. Package the custom `boomslang.wasm` and matching Python resources in your app or artifact.
-8. Depend on `com.hubspot:boomslang:no-python-runtime` for the Java API.
+8. For Java packaging, depend on `com.hubspot:boomslang:no-python-runtime`.
 
 Minimal build command from the example:
 
