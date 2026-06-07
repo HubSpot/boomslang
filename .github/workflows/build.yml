@@ -57,24 +57,23 @@ jobs:
           docker system prune -af || true
           df -h
 
-      - name: Install build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes just
+      - name: Cache Mill outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            out
+            ~/.cache/mill
+          key: ${{ runner.os }}-mill-${{ hashFiles('build.mill', 'mill', 'pom.xml', 'core/pom.xml', 'tests/pom.xml', 'benchmarks/pom.xml', 'cpython/**', 'python-host/**', 'python-host-core/**', 'extensions/**', 'boomslang-hostgen/**') }}
+          restore-keys: |
+            ${{ runner.os }}-mill-
 
       - name: Build runtime from source
         run: |
-          just builder-image
-          just build-pydantic-core-wasi
-          just build-numpy-wasi
-          just build-pandas-wasi
-          just build-matplotlib-wasi
-          just build-pillow-wasi
-          just build-ijson-wasi
-          just build-cpython-wasi
-          just pip-packages
-          just wasm
-          just resources
+          ./mill artifacts.setContainerCli --cli docker
+          ./mill artifacts.cacheStatus
+          docker build --progress=plain -t boomslang-builder cpython/builder/
+          ./mill --jobs 0 artifacts.installAll
+          ./mill artifacts.cacheStatus
 
       - name: Validate generated runtime resources
         run: |
@@ -92,14 +91,14 @@ jobs:
               raise SystemExit("Python stdlib resource tree was not generated")
           PY
 
-      - name: Remove LFS stdlib zip before Maven packaging
+      - name: Remove LFS stdlib zip before Mill packaging
         run: rm -f core/src/main/resources/python/stdlib.zip
 
-      - name: Maven package
-        run: mvn -B clean package -DskipTests
+      - name: Mill package
+        run: ./mill --jobs 0 build
 
-      - name: Maven integration tests
-        run: mvn -B test -pl tests -am
+      - name: Mill integration tests
+        run: ./mill --jobs 0 test
 
       - name: Package runtime artifacts
         run: |
