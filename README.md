@@ -259,6 +259,17 @@ just build
 just test
 ```
 
+Artifact DAG and cache inspection:
+
+```bash
+./mill artifacts.dag
+./mill artifacts.dagDot
+./mill artifacts.cacheStatus
+./mill path artifacts.installAll artifacts.wasm
+```
+
+`./mill plan artifacts.installAll` prints execution order only. To check caching behavior, run `./mill artifacts.installAll` twice; the second run should skip task bodies and finish much faster.
+
 Full pipeline stages:
 
 ```bash

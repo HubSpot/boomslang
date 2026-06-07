@@ -25,6 +25,18 @@ show-container-cli:
     ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
     ./mill artifacts.showContainerCli
 
+# Print the artifact dependency graph as readable edges
+dag:
+    ./mill artifacts.dag
+
+# Print the artifact dependency graph as Graphviz DOT
+dag-dot:
+    ./mill artifacts.dagDot
+
+# Print expected cached output files for artifact tasks
+cache-status:
+    ./mill artifacts.cacheStatus
+
 # Persist Docker as the Mill container engine for this checkout
 use-docker:
     ./mill artifacts.setContainerCli --cli docker

@@ -6,6 +6,8 @@ import mill.*
 import mill.api.BuildCtx
 
 private final case class CopySpec(src: String, dest: String)
+private final case class DagNode(name: String, deps: Seq[String])
+private final case class CacheEntry(name: String, rel: String)
 
 private def pathUnder(root: os.Path, rel: String): os.Path =
   rel.split('/').filter(_.nonEmpty).foldLeft(root)(_ / _)
@@ -30,6 +32,26 @@ private def copyPathMerge(src: os.Path, dest: os.Path): Unit = {
 
 private def specs(base: String, entries: Seq[String]): Seq[CopySpec] =
   entries.map(entry => CopySpec(s"$base/$entry", entry))
+
+private def humanBytes(bytes: Long): String = {
+  val units = Seq("B", "KB", "MB", "GB")
+  var value = bytes.toDouble
+  var unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value = value / 1024
+    unit += 1
+  }
+  if (unit == 0) s"${bytes}B" else f"$value%.1f${units(unit)}"
+}
+
+private def describePath(path: os.Path): String =
+  if (!os.exists(path)) {
+    "missing"
+  } else if (os.isDir(path)) {
+    s"dir, ${os.walk(path).size} paths"
+  } else {
+    s"file, ${humanBytes(os.size(path))}"
+  }
 
 private def stageSpecs(dest: os.Path, entries: Seq[CopySpec], refs: Seq[PathRef]): Unit = {
   os.remove.all(dest)
@@ -84,6 +106,69 @@ private val defaultPython = "/usr/bin/python3"
 
 object artifacts extends Module {
   override def moduleDir: os.Path = BuildCtx.workspaceRoot
+
+  private val dagNodes = Seq(
+    DagNode("pydanticCoreWasi", Seq("containerCli", "pydanticCoreWasiContext")),
+    DagNode("numpyWasi", Seq("containerCli", "numpyWasiContext")),
+    DagNode("pandasWasi", Seq("containerCli", "pandasWasiContext", "numpyWasi")),
+    DagNode("matplotlibWasi", Seq("containerCli", "matplotlibWasiContext", "numpyWasi")),
+    DagNode("pillowWasi", Seq("containerCli", "pillowWasiContext")),
+    DagNode("ijsonWasi", Seq("containerCli", "ijsonWasiContext")),
+    DagNode(
+      "cpythonWasiTgz",
+      Seq(
+        "containerCli",
+        "cpythonWasiContext",
+        "pydanticCoreWasi",
+        "numpyWasi",
+        "pandasWasi",
+        "matplotlibWasi",
+        "pillowWasi",
+        "ijsonWasi"
+      )
+    ),
+    DagNode("cpythonWasi", Seq("cpythonWasiTgz")),
+    DagNode("pipPackages", Seq.empty),
+    DagNode("resources", Seq("cpythonWasi", "pydanticCorePython", "hostBridgePython", "pipPackages")),
+    DagNode("builderImage", Seq("containerCli", "builderImageContext")),
+    DagNode(
+      "wasm",
+      Seq("builderImage", "wasmContext", "cpythonWasi", "pydanticCorePython", "pipPackages")
+    ),
+    DagNode(
+      "installAll",
+      Seq(
+        "pydanticCoreWasi",
+        "numpyWasi",
+        "pandasWasi",
+        "matplotlibWasi",
+        "pillowWasi",
+        "ijsonWasi",
+        "cpythonWasiTgz",
+        "cpythonWasi",
+        "pipPackages",
+        "resources",
+        "wasm"
+      )
+    )
+  )
+
+  private val cacheEntries = Seq(
+    CacheEntry("containerCli", "out/artifacts/containerCli.json"),
+    CacheEntry("pydanticCoreWasi", "out/artifacts/pydanticCoreWasi.dest/artifact.tgz"),
+    CacheEntry("numpyWasi", "out/artifacts/numpyWasi.dest/artifact.tgz"),
+    CacheEntry("pandasWasi", "out/artifacts/pandasWasi.dest/artifact.tgz"),
+    CacheEntry("matplotlibWasi", "out/artifacts/matplotlibWasi.dest/artifact.tgz"),
+    CacheEntry("pillowWasi", "out/artifacts/pillowWasi.dest/artifact.tgz"),
+    CacheEntry("ijsonWasi", "out/artifacts/ijsonWasi.dest/artifact.tgz"),
+    CacheEntry("cpythonWasiTgz", "out/artifacts/cpythonWasiTgz.dest/artifact.tgz"),
+    CacheEntry("cpythonWasi", "out/artifacts/cpythonWasi.dest/extracted"),
+    CacheEntry("pipPackages", "out/artifacts/pipPackages.dest/pip-packages"),
+    CacheEntry("resources", "out/artifacts/resources.dest/python"),
+    CacheEntry("builderImage", "out/artifacts/builderImage.dest/image.txt"),
+    CacheEntry("wasm", "out/artifacts/wasm.dest/boomslang.wasm"),
+    CacheEntry("installAll", "out/artifacts/installAll.json")
+  )
 
   private val pydanticCoreWasiEntries = Seq(
     "_sysconfigdata__wasi_wasm32-wasi.py",
@@ -183,6 +268,34 @@ object artifacts extends Module {
 
   def showContainerCli() = Task.Command {
     println(containerCli())
+  }
+
+  def dag() = Task.Command {
+    println("Artifact DAG")
+    for (node <- dagNodes) {
+      val deps = if (node.deps.isEmpty) "(no task deps)" else node.deps.mkString(", ")
+      println(s"${node.name} <- $deps")
+    }
+  }
+
+  def dagDot() = Task.Command {
+    println("digraph boomslang_artifacts {")
+    println("  rankdir=LR;")
+    for (node <- dagNodes) {
+      if (node.deps.isEmpty) println(s"""  "${node.name}";""")
+      else for (dep <- node.deps) println(s"""  "$dep" -> "${node.name}";""")
+    }
+    println("}")
+  }
+
+  def cacheStatus() = Task.Command {
+    println("Artifact cache outputs")
+    for (entry <- cacheEntries) {
+      val path = pathUnder(BuildCtx.workspaceRoot, entry.rel)
+      println(s"${entry.name}: ${describePath(path)}")
+    }
+    println()
+    println("Run artifacts.installAll twice; the second run should skip task bodies and finish quickly.")
   }
 
   def setContainerCli(cli: String) = Task.Command {
