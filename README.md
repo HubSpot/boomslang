@@ -209,7 +209,7 @@ For the stock repo build that produces the bundled runtime, use `just wasm` and 
 
 ## Building this repo
 
-Requirements: Java 21, Maven, `just`, and either Docker or Apple `container`.
+Requirements: Java 21, Maven, `just`, and Docker on Linux. Apple `container` is also supported on macOS.
 
 With Nix, use the project dev shell:
 
@@ -220,22 +220,39 @@ nix develop
 The dev shell provides Java 21, Maven, `just`, Python 3, Git LFS, and the Maven JDK toolchain configuration required by basepom. Docker or Apple `container` still needs to be installed and running on the host for the full WASM pipeline.
 
 ```bash
-just everything
+./mill artifacts.installAll
+./mill build
 ```
 
 That builds the native WASM artifacts, Rust host, Python resources, Java AOT classes, and Maven packages. First runs take about an hour because the CPython and library builds are container-heavy.
+
+The selected container engine is stored in the ignored `.boomslang-container-cli` file so Mill daemon builds see a stable input. The `./mill` wrapper also writes that file when `BOOMSLANG_CONTAINER_CLI` is set.
+
+Docker is the default container engine. To be explicit on Linux:
+
+```bash
+./mill artifacts.setContainerCli --cli docker
+./mill artifacts.showContainerCli
+./mill artifacts.installAll
+./mill build
+```
+
+Docker builds require BuildKit/buildx because the Dockerfiles use BuildKit syntax and automatic target architecture args.
 
 Use Apple container instead of Docker:
 
 ```bash
 container system start
-BOOMSLANG_CONTAINER_CLI=container just everything
+./mill artifacts.setContainerCli --cli container
+./mill artifacts.showContainerCli
+./mill artifacts.installAll
+./mill build
 ```
 
 Common local workflows:
 
 ```bash
-just build     # Maven package with AOT, skips tests
+just build     # package with AOT, skips tests
 just test      # tests module
 mvn compile -pl core
 mvn test -pl tests
@@ -250,6 +267,17 @@ just build
 just test
 ```
 
+Artifact DAG and cache inspection:
+
+```bash
+./mill artifacts.dag
+./mill artifacts.dagDot
+./mill artifacts.cacheStatus
+./mill path artifacts.installAll artifacts.wasm
+```
+
+`./mill plan artifacts.installAll` prints execution order only. To check caching behavior, run `./mill artifacts.installAll` twice; the second run should skip task bodies and finish much faster.
+
 Full pipeline stages:
 
 ```bash
@@ -257,6 +285,7 @@ just build-pydantic-core-wasi
 just build-numpy-wasi
 just build-pandas-wasi
 just build-matplotlib-wasi
+just build-pillow-wasi
 just build-ijson-wasi
 just build-cpython-wasi
 just pip-packages

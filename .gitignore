@@ -1,4 +1,6 @@
 # Java / Maven
+out/
+.boomslang-container-cli
 target/
 *.class
 *.jar

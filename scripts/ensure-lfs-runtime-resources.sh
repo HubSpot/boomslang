@@ -16,23 +16,34 @@ ensure_git_lfs() {
     return
   fi
 
+  version="3.7.0"
   case "$(uname -s)-$(uname -m)" in
-    Linux-x86_64)
-      tmp_dir=$(mktemp -d)
-      trap 'rm -rf "$tmp_dir"' EXIT
-      curl --fail --location --retry 3 https://github.com/git-lfs/git-lfs/releases/download/v3.7.0/git-lfs-linux-amd64-v3.7.0.tar.gz | tar xz -C "$tmp_dir"
-      export PATH="$tmp_dir/git-lfs-3.7.0:$PATH"
+    Darwin-arm64 | Darwin-aarch64)
+      archive="git-lfs-darwin-arm64-v${version}.tar.gz"
+      ;;
+    Darwin-x86_64)
+      archive="git-lfs-darwin-amd64-v${version}.tar.gz"
+      ;;
+    Linux-aarch64 | Linux-arm64)
+      archive="git-lfs-linux-arm64-v${version}.tar.gz"
+      ;;
+    Linux-x86_64 | Linux-amd64)
+      archive="git-lfs-linux-amd64-v${version}.tar.gz"
       ;;
     *)
-      echo "ERROR: git-lfs is required to fetch runtime resources. Install it or enter the Nix dev shell with 'nix develop'." >&2
-      exit 1
+      echo "git-lfs is required but was not found on PATH for $(uname -s)-$(uname -m)" >&2
+      return 1
       ;;
   esac
+
+  tmp_dir=$(mktemp -d)
+  trap 'rm -rf "$tmp_dir"' EXIT
+  curl --fail --location --retry 3 "https://github.com/git-lfs/git-lfs/releases/download/v${version}/${archive}" | tar xz -C "$tmp_dir"
+  export PATH="$tmp_dir/git-lfs-${version}:$PATH"
 }
 
 if is_lfs_pointer "$stdlib" || is_lfs_pointer "$wasm"; then
   ensure_git_lfs
-  git lfs install --local
   git lfs fetch origin --include="$stdlib,$wasm"
   git lfs checkout "$stdlib" "$wasm"
 fi
