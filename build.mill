@@ -739,5 +739,5 @@ def build() = Task.Command {
 }
 
 def test() = Task.Command {
-  runLoggedSeq(mavenCommand("test", "-pl", "tests"), cwd = BuildCtx.workspaceRoot)
+  runLoggedSeq(mavenCommand("test", "-pl", "tests", "-am"), cwd = BuildCtx.workspaceRoot)
 }
