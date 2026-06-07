@@ -158,6 +158,24 @@ fn it_serializes_stock_abi_json() {
 }
 
 #[test]
+fn it_generates_stock_rust_host_from_abi() {
+    let code = generate_rust_host_code(&stock_manifest());
+
+    assert!(code.contains("pub struct BoomslangHostHostFunctions"));
+    assert!(code.contains("pub fn with_call<F>(mut self, handler: F) -> Self"));
+    assert!(code.contains("F: Fn(String, String) -> Result<String> + Send + Sync + 'static"));
+    assert!(code.contains("pub fn with_log<F>(mut self, handler: F) -> Self"));
+    assert!(code.contains("F: Fn(i32, String) -> Result<()> + Send + Sync + 'static"));
+    assert!(code.contains("linker.func_new(Self::MODULE, \"call\""));
+    assert!(code.contains(
+        "vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32]"
+    ));
+    assert!(code.contains("write_buffer_result(&mut caller, memory, result_ptr, result_max_len, result.as_bytes(), results)?;"));
+    assert!(code.contains("linker.func_new(Self::MODULE, \"log\""));
+    assert!(code.contains("Ok(vec![\"boomslang::call\", \"boomslang::log\"])"));
+}
+
+#[test]
 fn it_generates_async_java_handlers_with_typed_args() {
     let code = generate_java_code(&async_manifest(), "com.example");
 

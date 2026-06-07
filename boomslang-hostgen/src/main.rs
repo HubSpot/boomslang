@@ -15,6 +15,9 @@ struct Cli {
 
     #[arg(long, help = "Java package for generated code")]
     java_package: Option<String>,
+
+    #[arg(long, help = "Output directory for generated Rust Wasmtime host code")]
+    rust_host_out: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,6 +31,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or("com.hubspot.boomslang.extensions");
         boomslang_hostgen::generate_java(abi_path, java_out.to_str().unwrap(), package)?;
         eprintln!("Generated Java to {}", java_out.display());
+    }
+
+    if let Some(rust_host_out) = &cli.rust_host_out {
+        boomslang_hostgen::generate_rust_host(abi_path, rust_host_out.to_str().unwrap())?;
+        eprintln!("Generated Rust host to {}", rust_host_out.display());
     }
 
     Ok(())

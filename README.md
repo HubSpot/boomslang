@@ -192,7 +192,7 @@ Start from `examples/custom-host/`. The flow is:
 
 1. Define an extension contract in the extension crate's `build.rs` with the `boomslang-hostgen` Rust DSL.
 2. Have `boomslang-hostgen` emit Rust guest code and an ABI JSON file.
-3. Generate Java bridge code from that ABI JSON when Java needs typed host adapters.
+3. Generate Java or Rust bridge code from that ABI JSON when the runtime host needs typed adapters.
 4. Compose the extension with `python-host-core` in a custom Rust host.
 5. Add any required native libraries to the WASI build as static libraries.
 6. Build the host to `wasm32-wasip1`.
@@ -208,8 +208,7 @@ cargo build --target wasm32-wasip1 --release
 
 For the stock repo build that produces the bundled runtime, use `just wasm` and `just resources`.
 
-For a Rust embedder that consumes ABI JSON and wires host imports into a WASM runtime, see
-`examples/rust-host/`.
+For a Rust embedder that generates Wasmtime host bindings from ABI JSON, see `examples/rust-host/`.
 
 ## Building this repo
 
@@ -317,7 +316,7 @@ just test
 - `extensions/`: built-in host extensions
 - `boomslang-hostgen/`: extension code generator
 - `examples/custom-host/`: custom host example
-- `examples/rust-host/`: Rust runtime host example for ABI JSON imports
+- `examples/rust-host/`: Rust runtime host example with ABI JSON to Wasmtime hostgen
 - `cpython/`: CPython, native library, and container build pipeline
 
 ## License

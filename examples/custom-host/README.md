@@ -73,7 +73,9 @@ boomslang_host_core::init(
 );
 ```
 
-4. Generate the typed Java host-function bridge for the extension:
+4. Generate typed host-function bridges for the extension.
+
+For Java hosts:
 
 ```bash
 cargo run --manifest-path ../../boomslang-hostgen/Cargo.toml -- \
@@ -85,6 +87,17 @@ cargo run --manifest-path ../../boomslang-hostgen/Cargo.toml -- \
 For build systems that want Java generation during the Rust extension build, call
 `emit_java_host("../../core/src/main/java", "com.hubspot.boomslang.generated")` on the
 `Build` value instead of running the CLI later.
+
+For Rust/Wasmtime hosts:
+
+```bash
+cargo run --manifest-path ../../boomslang-hostgen/Cargo.toml -- \
+  ../my-ext/target/wasm32-wasip1/release/build/my-ext-*/out/myext.abi.json \
+  --rust-host-out ./src/generated
+```
+
+That writes `host_myext.rs`, a typed builder plus `register(&mut wasmtime::Linker<_>)`
+method. See `examples/rust-host/` for a complete runnable example.
 
 The generated class exposes typed functional interfaces and a builder, so Java users only fill in the host implementations:
 
