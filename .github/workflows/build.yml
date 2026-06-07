@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - main
+      - master
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -23,6 +26,8 @@ jobs:
     name: Full source build
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    permissions:
+      contents: read
     env:
       CI: true
       DOCKER_BUILDKIT: "1"
@@ -96,8 +101,83 @@ jobs:
       - name: Maven integration tests
         run: mvn -B test -pl tests -am
 
+      - name: Package runtime artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p dist/stage/python
+          cp core/src/main/resources/python/bin/boomslang.wasm "dist/boomslang-${GITHUB_SHA}.wasm"
+          cp -R core/src/main/resources/python/bin dist/stage/python/
+          cp -R core/src/main/resources/python/usr dist/stage/python/
+          cp -R core/src/main/resources/python-overlay dist/stage/python-overlay
+          tar -C dist/stage -czf "dist/boomslang-runtime-${GITHUB_SHA}.tar.gz" python python-overlay
+          sha256sum \
+            "dist/boomslang-${GITHUB_SHA}.wasm" \
+            "dist/boomslang-runtime-${GITHUB_SHA}.tar.gz" \
+            > "dist/boomslang-${GITHUB_SHA}.sha256"
+          rm -rf dist/stage
+
+      - name: Upload runtime artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: boomslang-runtime-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Report final disk usage
         if: always()
         run: |
           df -h
           docker system df || true
+
+  release:
+    name: Publish runtime release
+    needs: build
+    if: |
+      github.event_name == 'push' &&
+      (
+        startsWith(github.ref, 'refs/tags/v') ||
+        github.ref == 'refs/heads/main' ||
+        github.ref == 'refs/heads/master'
+      )
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Download runtime artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: boomslang-runtime-${{ github.sha }}
+          path: dist
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            release_tag="$GITHUB_REF_NAME"
+            release_title="Boomslang ${GITHUB_REF_NAME}"
+            release_notes="Boomslang runtime assets for ${GITHUB_REF_NAME}."
+            prerelease_args=()
+            target_args=()
+          else
+            release_tag="build-${GITHUB_SHA}"
+            release_title="Boomslang ${GITHUB_SHA}"
+            release_notes="Per-commit Boomslang runtime assets for ${GITHUB_SHA} from ${GITHUB_REF_NAME}."
+            prerelease_args=(--prerelease)
+            target_args=(--target "$GITHUB_SHA")
+          fi
+
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" dist/* --clobber
+          else
+            gh release create "$release_tag" dist/* \
+              "${target_args[@]}" \
+              "${prerelease_args[@]}" \
+              --title "$release_title" \
+              --notes "$release_notes"
+          fi
