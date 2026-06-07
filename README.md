@@ -1,10 +1,10 @@
 # boomslang
 
-boomslang runs CPython 3.14 from a WASI build. The default distribution embeds it in Java with Chicory, so Python execution stays inside the JVM and callers do not need JNI, subprocess management, or a system Python install.
+boomslang runs CPython 3.14 from a WASI build. The default artifact embeds that runtime in Java through Chicory, so Python runs inside the JVM without JNI, subprocesses, or a system Python install.
 
 ## Bundled runtime
 
-The default artifact includes:
+The default artifact ships with:
 
 - CPython 3.14 built for `wasm32-wasip1`
 - Python stdlib plus NumPy, Pandas, Matplotlib, Pydantic, ijson, and Jinja2
@@ -15,21 +15,21 @@ The default artifact includes:
 
 ## Supported host languages
 
-A host language is the language embedding `boomslang.wasm`, providing a WASM runtime, and implementing any imported host functions. This is separate from the Rust/WASI code that builds the Python runtime that runs inside WASM.
+In boomslang, a host is the outside process embedding `boomslang.wasm`: it supplies the WASM runtime and implements imported host functions. That is separate from the Rust/WASI code that builds the Python runtime inside the module.
 
-The extension ABI is language-neutral: an extension crate defines its contract with the `boomslang-hostgen` Rust DSL, emits ABI JSON, and host-language adapters are generated from that ABI JSON.
+The extension ABI is not tied to Java. An extension crate declares its contract in `build.rs` with the `boomslang-hostgen` Rust DSL, emits ABI JSON, and host-language adapters are generated from that JSON.
 
 | Host language | Status | Runtime | Host adapter support |
 | --- | --- | --- | --- |
-| Java | Primary supported host | Chicory | Stock runtime API, `HostBridge`, generated Java adapters with `--java-out` or `emit_java_host(...)` |
+| Java | Primary host | Chicory | Stock runtime API, `HostBridge`, generated Java adapters with `--java-out` or `emit_java_host(...)` |
 | Rust | Supported example host | Wasmtime | Generated Rust adapters with `--rust-host-out` or `emit_rust_host(...)`; see `examples/rust-host/` |
 | Other languages | ABI target only | Any WASM runtime with compatible imports | Use the ABI JSON to implement the same pointer/length lowering and return-buffer protocol |
 
-The default Maven artifact is Java-first and includes the bundled runtime. Rust runtime-host support is useful for embedders that want to run the same Boomslang WASM runtime from a Rust process.
+The Maven artifact is still Java-first and includes the bundled runtime. Rust hosting is there for embedders that want to run the same Boomslang WASM from a Rust process.
 
 ## Java host usage
 
-Use the default artifact when you want the bundled Python runtime:
+Use the default artifact for the bundled Python runtime:
 
 ```xml
 <dependency>
@@ -39,7 +39,7 @@ Use the default artifact when you want the bundled Python runtime:
 </dependency>
 ```
 
-Create one factory and reuse it. The stdlib path is a host directory where boomslang extracts packaged Python resources. The instance root is the filesystem visible to Python as `/`.
+Create one factory and reuse it. The stdlib path is a host directory where boomslang extracts packaged Python resources. The instance root is what Python sees as `/`.
 
 ```java
 import com.hubspot.boomslang.PythonExecutorFactory;
@@ -62,7 +62,7 @@ PythonResult result = factory.runOnWasmThread(() -> {
 System.out.println(result.stdout());
 ```
 
-Run Python work through `runOnWasmThread`. It uses a larger JVM stack and supports timeouts:
+Run Python work through `runOnWasmThread`. It gives the WASM call a larger JVM stack and lets you set a timeout:
 
 ```java
 PythonInstance instance = factory.createInstance(pythonRoot);
@@ -73,7 +73,7 @@ PythonResult result = factory.runOnWasmThread(
 );
 ```
 
-If execution times out, the instance is poisoned. Call `reset()` before reusing it, or discard it.
+If execution times out, the instance is poisoned. Reset it before reuse, or discard it.
 
 ## Supported Python libraries
 
@@ -103,7 +103,7 @@ PythonResult second = instance.loadCode(bytecode);
 
 ## Calling Java host functions from Python
 
-The stock host exposes `boomslang_host.call(name, args)` and `boomslang_host.log(level, message)`.
+The stock host exposes `boomslang_host.call(name, args)` and `boomslang_host.log(level, message)`:
 
 ```java
 PythonExecutorFactory factory = PythonExecutorFactory
@@ -126,11 +126,11 @@ user_json = call("lookup_user", "12345")
 log(2, "loaded user")
 ```
 
-Use a custom extension if you need typed WASM imports or custom Python modules. See `examples/custom-host/`.
+Use a custom extension when you need typed WASM imports or custom Python modules. Start with `examples/custom-host/`.
 
 ## Adding pure-Python modules
 
-Install small in-memory packages at factory creation:
+Install small in-memory packages when you create the factory:
 
 ```java
 PythonExecutorFactory factory = PythonExecutorFactory
@@ -144,9 +144,9 @@ Build larger packages into the WASM/Python resource pipeline instead.
 
 ## Python resource overlay
 
-Most packaged Python runtime files under `core/src/main/resources/python/bin/` and `core/src/main/resources/python/usr/` are generated by the WASM/CPython resource pipeline and are intentionally ignored by Git. Small source-controlled Python additions that should ship with the stock runtime live under `core/src/main/resources/python-overlay/` instead.
+Most packaged Python runtime files under `core/src/main/resources/python/bin/` and `core/src/main/resources/python/usr/` are generated by the WASM/CPython resource pipeline and are ignored by Git. Small source-controlled Python additions for the stock runtime live under `core/src/main/resources/python-overlay/`.
 
-The overlay mirrors the final guest filesystem layout. During `PythonExecutorFactory` creation, boomslang extracts the generated `python/` resources first, then copies `python-overlay/` on top of that tree. For example:
+The overlay mirrors the final guest filesystem layout. During `PythonExecutorFactory` creation, boomslang extracts the generated `python/` resources first, then copies `python-overlay/` on top. For example:
 
 ```text
 core/src/main/resources/python-overlay/usr/local/lib/python3.14/boomslang_host/asyncio.py
@@ -158,7 +158,7 @@ is copied to:
 <stdlibPath>/usr/local/lib/python3.14/boomslang_host/asyncio.py
 ```
 
-Use the overlay for small tracked Python helper modules or patches that should not require rebuilding the generated CPython resource tree. Larger third-party packages should still go through the WASM/Python resource pipeline.
+Use the overlay for small tracked helper modules or patches that should not require rebuilding the generated CPython tree. Larger third-party packages still belong in the WASM/Python resource pipeline.
 
 ## Runtime variants
 
@@ -168,7 +168,7 @@ Use `com.hubspot:boomslang` for the stock runtime. It includes the Java API, bun
 
 ### `no-python-runtime`
 
-Use the `no-python-runtime` classifier when your app or another artifact provides the Python runtime:
+Use the `no-python-runtime` classifier when your app, or another artifact, provides the Python runtime:
 
 ```xml
 <dependency>
@@ -179,9 +179,9 @@ Use the `no-python-runtime` classifier when your app or another artifact provide
 </dependency>
 ```
 
-This classifier excludes `python/**` and `com/hubspot/boomslang/compiled/**`. It still includes the Java API.
+This classifier excludes `python/**` and `com/hubspot/boomslang/compiled/**`. The Java API stays in the artifact.
 
-Your app must provide:
+Your app then needs to provide:
 
 - a WASM binary, usually at `python/bin/boomslang.wasm`
 - Python resources under `python/usr/local/lib/python3.14`
@@ -191,11 +191,11 @@ If your WASM is not at the default classpath location, set it with `withWasmReso
 
 ## Custom WASM host builds
 
-Build a custom WASM host when the stock `boomslang_host.call(...)` bridge is not enough. This changes the Rust/WASI Python runtime that runs inside WASM. It is independent of whether the outside runtime host is Java, Rust, or another language.
+Build a custom WASM host when the stock `boomslang_host.call(...)` bridge is too blunt. This changes the Rust/WASI Python runtime inside `boomslang.wasm`; it is independent of whether the outside host is Java, Rust, or another language.
 
-Custom WASM hosts let you change the Rust host crate, add guest extensions, prewarm modules, and statically link additional native libraries into the WASI binary.
+Custom WASM hosts can change the Rust host crate, add guest extensions, prewarm modules, and statically link native libraries into the WASI binary.
 
-WASI does not support dynamic linking in this runtime. Any native code needed by Python extensions must be statically linked into the host build.
+This runtime does not support WASI dynamic linking. Native code needed by Python extensions must be statically linked into the host build.
 
 Use a custom WASM host for:
 
@@ -204,11 +204,11 @@ Use a custom WASM host for:
 - extra Python modules prewarmed into the Wizer snapshot
 - native libraries required by Python extensions
 
-Start from `examples/custom-host/`. The flow is:
+Start from `examples/custom-host/`. The build flow is:
 
 1. Define an extension contract in the extension crate's `build.rs` with the `boomslang-hostgen` Rust DSL.
 2. Have `boomslang-hostgen` emit Rust guest code and an ABI JSON file.
-3. Generate host-language bridge code from that ABI JSON when the runtime host needs typed adapters.
+3. Generate host-language bridge code from that ABI JSON when the outside host needs typed adapters.
 4. Compose the extension with `python-host-core` in a custom Rust host.
 5. Add any required native libraries to the WASI build as static libraries.
 6. Build the host to `wasm32-wasip1`.
@@ -224,7 +224,7 @@ cargo build --target wasm32-wasip1 --release
 
 For the stock repo build that produces the bundled runtime, use `just wasm` and `just resources`.
 
-For a Rust embedder that generates Wasmtime host bindings from ABI JSON, see `examples/rust-host/`.
+For a Rust embedder that generates Wasmtime bindings from ABI JSON, see `examples/rust-host/`.
 
 ## Building this repo
 
@@ -243,7 +243,7 @@ The dev shell provides Java 21, Maven, `just`, Python 3, and the Maven JDK toolc
 ./mill build
 ```
 
-That builds the native WASM artifacts, Rust host, Python resources, Java AOT classes, and Maven packages. First runs take about an hour because the CPython and library builds are container-heavy.
+That builds the native WASM artifacts, Rust host, Python resources, Java AOT classes, and Maven packages. First runs can take about an hour because the CPython and library builds happen in containers.
 
 The selected container engine is stored in the ignored `.boomslang-container-cli` file so Mill daemon builds see a stable input. The `./mill` wrapper also writes that file when `BOOMSLANG_CONTAINER_CLI` is set.
 
@@ -268,7 +268,7 @@ container system start
 ./mill build
 ```
 
-Common local workflows:
+Common local loops:
 
 ```bash
 just fetch-main-wasm  # download latest main runtime resources from GitHub release assets
