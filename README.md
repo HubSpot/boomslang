@@ -98,6 +98,7 @@ These imports are expected to work with the bundled runtime:
 import ijson
 import jinja2
 import matplotlib
+import micropip
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel
@@ -156,6 +157,49 @@ PythonExecutorFactory factory = PythonExecutorFactory
 ```
 
 Build larger packages into the WASM/Python resource pipeline instead.
+
+## Installing pure-Python wheels at runtime
+
+The stock runtime includes `micropip` for installing pure-Python wheels from
+Python code. Remote installs are host-mediated: add a `MicropipResolver` to the
+default `HostBridge` before running code that downloads packages.
+
+```java
+PythonExecutorFactory factory = PythonExecutorFactory
+  .builder()
+  .withStdlibPath(pythonRoot)
+  .addExtension(
+    HostBridge
+      .builder()
+      .withMicropipResolver(MicropipResolvers.pypi())
+      .withLogHandler((level, message) -> LOG.info("[Python] {}", message))
+      .buildExtension()
+  )
+  .build();
+```
+
+```python
+import asyncio
+import micropip
+
+async def main():
+    await micropip.install("snowballstemmer")
+    import snowballstemmer
+    print(snowballstemmer.stemmer("english").stemWord("running"))
+
+asyncio.run(main())
+```
+
+`micropip.install(...)` is async, so use `asyncio.run(...)` inside Boomslang
+scripts instead of Pyodide-style top-level `await`. Local wheels can be installed
+with `file:` or `emfs:` URLs without a resolver. Remote installs fail unless a
+resolver is configured; applications can provide their own resolver for mirrors,
+allowlists, caching, or offline artifacts.
+
+This support is intentionally limited to pure-Python wheels such as
+`py3-none-any.whl`. Native wheels are not dynamically loaded by Boomslang; build
+native packages into the WASI runtime image instead. Pyodide lockfile semantics
+are not implemented, so `micropip.freeze()` is not meaningful for Boomslang.
 
 ## Python resource overlay
 
