@@ -1,0 +1,103 @@
+name: Full Source Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Full source build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      CI: true
+      DOCKER_BUILDKIT: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Report initial disk usage
+        run: |
+          df -h
+          docker system df || true
+
+      - name: Free hosted runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/.ghcup
+          docker system prune -af || true
+          df -h
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes just
+
+      - name: Build runtime from source
+        run: |
+          just builder-image
+          just build-pydantic-core-wasi
+          just build-numpy-wasi
+          just build-pandas-wasi
+          just build-matplotlib-wasi
+          just build-pillow-wasi
+          just build-ijson-wasi
+          just build-cpython-wasi
+          just pip-packages
+          just wasm
+          just resources
+
+      - name: Validate generated runtime resources
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          wasm = Path("core/src/main/resources/python/bin/boomslang.wasm")
+          stdlib = Path("core/src/main/resources/python/usr/local/lib/python3.14")
+
+          if not wasm.is_file():
+              raise SystemExit("boomslang.wasm was not generated")
+          if wasm.read_bytes()[:4] != b"\0asm":
+              raise SystemExit("boomslang.wasm is not a WASM binary")
+          if not stdlib.is_dir():
+              raise SystemExit("Python stdlib resource tree was not generated")
+          PY
+
+      - name: Remove LFS stdlib zip before Maven packaging
+        run: rm -f core/src/main/resources/python/stdlib.zip
+
+      - name: Maven package
+        run: mvn -B clean package -DskipTests
+
+      - name: Maven integration tests
+        run: mvn -B test -pl tests -am
+
+      - name: Report final disk usage
+        if: always()
+        run: |
+          df -h
+          docker system df || true
