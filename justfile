@@ -11,16 +11,27 @@ default:
 
 # Build everything from source through the Mill artifact DAG
 everything:
-    ./mill --no-daemon --jobs "$${JOBS:-0}" artifacts.installAll
-    ./mill --no-daemon --jobs "$${JOBS:-0}" build
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill --jobs "$${JOBS:-0}" artifacts.installAll
+    ./mill --jobs "$${JOBS:-0}" build
 
 # Install all Mill-built artifacts into the legacy Maven/Cargo locations
 install-artifacts:
-    ./mill --no-daemon --jobs "$${JOBS:-0}" artifacts.installAll
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill --jobs "$${JOBS:-0}" artifacts.installAll
 
 # Print the container engine Mill will use
 show-container-cli:
-    ./mill --no-daemon artifacts.showContainerCli
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.showContainerCli
+
+# Persist Docker as the Mill container engine for this checkout
+use-docker:
+    ./mill artifacts.setContainerCli --cli docker
+
+# Persist Apple container as the Mill container engine for this checkout
+use-container:
+    ./mill artifacts.setContainerCli --cli container
 
 # ============================================================
 # Container artifact builds
@@ -28,35 +39,43 @@ show-container-cli:
 
 # Build pydantic-core as static library for wasm32-wasip1
 build-pydantic-core-wasi:
-    ./mill --no-daemon artifacts.installPydanticCoreWasi
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.installPydanticCoreWasi
 
 # Build numpy C extensions for wasm32-wasip1
 build-numpy-wasi:
-    ./mill --no-daemon artifacts.installNumpyWasi
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.installNumpyWasi
 
 # Build pandas C extensions for wasm32-wasip1
 build-pandas-wasi:
-    ./mill --no-daemon artifacts.installPandasWasi
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.installPandasWasi
 
 # Build matplotlib C extensions for wasm32-wasip1
 build-matplotlib-wasi:
-    ./mill --no-daemon artifacts.installMatplotlibWasi
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.installMatplotlibWasi
 
 # Build Pillow C extensions for wasm32-wasip1
 build-pillow-wasi:
-    ./mill --no-daemon artifacts.installPillowWasi
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.installPillowWasi
 
 # Build ijson C extension for wasm32-wasip1
 build-ijson-wasi:
-    ./mill --no-daemon artifacts.installIjsonWasi
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.installIjsonWasi
 
 # Build cpython-wasi and extract it to cpython/build/cpython-wasi
 build-cpython-wasi:
-    ./mill --no-daemon artifacts.installCpythonWasi
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.installCpythonWasi
 
 # Build the container image used for the final Rust/WASM host build
 builder-image:
-    ./mill --no-daemon artifacts.builderImage
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.builderImage
 
 # ============================================================
 # Local Rust + Java build
@@ -64,11 +83,12 @@ builder-image:
 
 # Download Python pip packages into cpython/lib/pip-packages
 pip-packages:
-    ./mill --no-daemon artifacts.installPipPackages
+    ./mill artifacts.installPipPackages
 
 # Build the WASM binary via the configured container engine
 wasm:
-    ./mill --no-daemon artifacts.installWasm
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.installWasm
 
 # Build the WASM binary locally (requires WASI SDK + Wizer + Rust on PATH)
 wasm-local:
@@ -76,15 +96,15 @@ wasm-local:
 
 # Populate runtime resources from the cpython-wasi artifact
 resources:
-    ./mill --no-daemon artifacts.installResources
+    ./mill artifacts.installResources
 
 # Build Java project (AOT compile WASM + package)
 build:
-    ./mill --no-daemon build
+    ./mill build
 
 # Run tests
 test:
-    ./mill --no-daemon test
+    ./mill test
 
 # ============================================================
 # Individual WASM step shortcuts

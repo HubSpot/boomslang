@@ -52,6 +52,7 @@ private def mavenCommand(args: String*): Seq[String] =
   Seq("mvn") ++ sys.env.get("MAVEN_TOOLCHAINS_FILE").toSeq.flatMap(path => Seq("--toolchains", path)) ++ args
 
 private val dockerBuildEnv = Map("DOCKER_BUILDKIT" -> "1")
+private val containerCliConfig = ".boomslang-container-cli"
 
 private def isAppleContainerCli(cli: String): Boolean = cli == "container"
 
@@ -67,6 +68,15 @@ private def dockerCopyFromImage(cli: String, image: String, src: String, dest: o
   val cid = os.proc(cli, "create", image, "unused-cmd").call().out.text().trim
   try runLogged((cli, "cp", s"$cid:$src", dest))
   finally runLogged((cli, "rm", cid))
+}
+
+private def configuredContainerCliPath: os.Path =
+  BuildCtx.workspaceRoot / containerCliConfig
+
+private def configuredContainerCli(): Option[String] = {
+  val path = configuredContainerCliPath
+  if (os.exists(path)) Some(os.read(path).trim).filter(_.nonEmpty)
+  else None
 }
 
 private val runtimeResources = "core/src/main/resources/python"
@@ -164,11 +174,30 @@ object artifacts extends Module {
   )
 
   def containerCli = Task.Input {
-    sys.env.getOrElse("BOOMSLANG_CONTAINER_CLI", "docker")
+    val cli = configuredContainerCli()
+      .orElse(sys.env.get("BOOMSLANG_CONTAINER_CLI"))
+      .getOrElse("docker")
+    requireContainerCli(cli)
+    cli
   }
 
   def showContainerCli() = Task.Command {
     println(containerCli())
+  }
+
+  def setContainerCli(cli: String) = Task.Command {
+    requireContainerCli(cli)
+    BuildCtx.withFilesystemCheckerDisabled {
+      os.write.over(configuredContainerCliPath, s"$cli\n")
+    }
+    println(cli)
+  }
+
+  def clearContainerCli() = Task.Command {
+    BuildCtx.withFilesystemCheckerDisabled {
+      os.remove.all(configuredContainerCliPath)
+    }
+    println("docker")
   }
 
   def pydanticCoreWasiContext = Task.Sources(

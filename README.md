@@ -212,18 +212,21 @@ For the stock repo build that produces the bundled runtime, use `just wasm` and 
 Requirements: Java 21, Maven, `just`, and Docker on Linux. Apple `container` is also supported on macOS.
 
 ```bash
-./mill --no-daemon artifacts.installAll
-./mill --no-daemon build
+./mill artifacts.installAll
+./mill build
 ```
 
 That builds the native WASM artifacts, Rust host, Python resources, Java AOT classes, and Maven packages. First runs take about an hour because the CPython and library builds are container-heavy.
 
+The selected container engine is stored in the ignored `.boomslang-container-cli` file so Mill daemon builds see a stable input. The `./mill` wrapper also writes that file when `BOOMSLANG_CONTAINER_CLI` is set.
+
 Docker is the default container engine. To be explicit on Linux:
 
 ```bash
-BOOMSLANG_CONTAINER_CLI=docker ./mill --no-daemon artifacts.showContainerCli
-BOOMSLANG_CONTAINER_CLI=docker ./mill --no-daemon artifacts.installAll
-./mill --no-daemon build
+./mill artifacts.setContainerCli --cli docker
+./mill artifacts.showContainerCli
+./mill artifacts.installAll
+./mill build
 ```
 
 Docker builds require BuildKit/buildx because the Dockerfiles use BuildKit syntax and automatic target architecture args.
@@ -232,9 +235,10 @@ Use Apple container instead of Docker:
 
 ```bash
 container system start
-BOOMSLANG_CONTAINER_CLI=container ./mill --no-daemon artifacts.showContainerCli
-BOOMSLANG_CONTAINER_CLI=container ./mill --no-daemon artifacts.installAll
-./mill --no-daemon build
+./mill artifacts.setContainerCli --cli container
+./mill artifacts.showContainerCli
+./mill artifacts.installAll
+./mill build
 ```
 
 Common local workflows:
