@@ -31,7 +31,8 @@ The ABI JSON decides the Wasmtime import signatures and memory lowering:
 - `int` params lower to `i32`.
 - `float` params lower to `f64`.
 - `string` and `bytes` returns use caller-provided `i32 result_ptr, i32 result_max_len` params and return the written byte length as `i32`.
-- async functions return an `i64` host token.
+
+Rust host generation currently supports synchronous imports only. ABI JSON with async functions is rejected because the Rust adapter does not yet generate the `__async_poll__`, `__async_result__`, and `__async_cancel__` control imports needed to complete Boomslang awaitables. Use the generated Java host adapter for async extensions for now.
 
 The generated host binding is typed:
 

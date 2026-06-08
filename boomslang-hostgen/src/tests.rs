@@ -43,6 +43,14 @@ fn emit_enables_standard_build_outputs() {
 }
 
 #[test]
+fn emit_defaults_enables_standard_build_outputs() {
+    let build = Build::new(ExtensionSpec::new("demo")).emit_defaults();
+
+    assert!(build.rust_guest);
+    assert!(build.abi_json);
+}
+
+#[test]
 fn it_generates_stock_java_equivalent_to_checked_in_class() {
     let expected = include_str!(
         "../../core/src/main/java/com/hubspot/boomslang/generated/BoomslangHostHostFunctions.java"
@@ -150,16 +158,24 @@ fn _boomslang_host(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[test]
 fn it_serializes_stock_abi_json() {
-    let abi = serde_json::to_string_pretty(&stock_manifest()).unwrap();
+    let expected = serde_json::to_string_pretty(&stock_manifest()).unwrap() + "\n";
 
-    assert!(abi.contains(r#""abi_version": 1"#));
-    assert!(abi.contains(r#""name": "boomslang_host""#));
-    assert!(abi.contains(r#""type": "string""#));
+    assert_eq!(
+        include_str!("../../examples/rust-host/abi/boomslang_host.abi.json"),
+        expected
+    );
+}
+
+#[test]
+fn it_omits_absent_wasm_module_from_abi_json() {
+    let abi = serde_json::to_string_pretty(&ExtensionSpec::new("demo").into_manifest()).unwrap();
+
+    assert!(!abi.contains("wasm_module"));
 }
 
 #[test]
 fn it_generates_stock_rust_host_from_abi() {
-    let code = generate_rust_host_code(&stock_manifest());
+    let code = generate_rust_host_code(&stock_manifest()).unwrap();
 
     assert!(code.contains("pub struct BoomslangHostHostFunctions"));
     assert!(code.contains("pub fn with_call<F>(mut self, handler: F) -> Self"));
@@ -173,6 +189,28 @@ fn it_generates_stock_rust_host_from_abi() {
     assert!(code.contains("write_buffer_result(&mut caller, memory, result_ptr, result_max_len, result.as_bytes(), results)?;"));
     assert!(code.contains("linker.func_new(Self::MODULE, \"log\""));
     assert!(code.contains("Ok(vec![\"boomslang::call\", \"boomslang::log\"])"));
+}
+
+#[test]
+fn it_rejects_async_rust_host_generation() {
+    let err = generate_rust_host_code(&async_manifest())
+        .unwrap_err()
+        .to_string();
+
+    assert!(err.contains("Rust host generation does not support async function 'lookup' yet"));
+}
+
+#[test]
+fn it_rejects_invalid_identifiers() {
+    let err = validate_manifest(
+        &ExtensionSpec::new("demo")
+            .function("foo-bar", |f| f.param("valid", Type::String))
+            .into_manifest(),
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert!(err.contains("function name 'foo-bar' must be an ASCII Rust/Java identifier"));
 }
 
 #[test]

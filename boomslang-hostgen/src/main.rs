@@ -22,7 +22,12 @@ struct Cli {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let abi_path = cli.abi.to_str().unwrap();
+    let abi_path = cli.abi.to_str().ok_or("ABI path must be valid UTF-8")?;
+
+    if cli.java_out.is_none() && cli.rust_host_out.is_none() {
+        boomslang_hostgen::read_abi(&cli.abi)?;
+        return Err("no output requested; pass --java-out or --rust-host-out".into());
+    }
 
     if let Some(java_out) = &cli.java_out {
         let package = cli

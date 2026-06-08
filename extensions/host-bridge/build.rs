@@ -1,6 +1,8 @@
 fn main() {
     let ext = boomslang_hostgen::ExtensionSpec::new("boomslang_host")
         .wasm_module("boomslang")
+        // Importing boomslang_host.asyncio during Wizer init installs the Boomslang event
+        // loop policy into the frozen runtime, so user scripts only need `import asyncio`.
         .prewarm([
             "_boomslang_host",
             "boomslang_host",

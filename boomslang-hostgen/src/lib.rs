@@ -24,6 +24,7 @@ pub struct Manifest {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Extension {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub wasm_module: Option<String>,
     #[serde(default)]
     pub prewarm: Vec<String>,
@@ -174,6 +175,10 @@ impl Build {
         self.emit_rust_guest().emit_abi_json()
     }
 
+    pub fn emit_defaults(self) -> Self {
+        self.emit()
+    }
+
     pub fn emit_rust_guest(mut self) -> Self {
         self.rust_guest = true;
         self
@@ -275,7 +280,7 @@ fn write_java_host(
 fn write_rust_host(manifest: &Manifest, out_dir: &Path) -> Result<(), Box<dyn Error>> {
     fs::create_dir_all(out_dir)?;
     let filename = format!("host_{}.rs", manifest.extension.name);
-    fs::write(out_dir.join(filename), generate_rust_host_code(manifest))?;
+    fs::write(out_dir.join(filename), generate_rust_host_code(manifest)?)?;
     Ok(())
 }
 
@@ -309,10 +314,12 @@ fn validate_manifest(manifest: &Manifest) -> Result<(), Box<dyn Error>> {
     if manifest.extension.name.trim().is_empty() {
         return Err("extension name is required".into());
     }
+    validate_identifier("extension name", &manifest.extension.name)?;
     for function in &manifest.functions {
         if function.name.trim().is_empty() {
             return Err("function name is required".into());
         }
+        validate_identifier("function name", &function.name)?;
         if is_reserved_async_control_name(&function.name) {
             return Err(format!("function name '{}' is reserved", function.name).into());
         }
@@ -327,9 +334,133 @@ fn validate_manifest(manifest: &Manifest) -> Result<(), Box<dyn Error>> {
             if param.name.trim().is_empty() {
                 return Err(format!("parameter name is required for {}", function.name).into());
             }
+            validate_identifier(
+                &format!("parameter name for function '{}'", function.name),
+                &param.name,
+            )?;
         }
     }
     Ok(())
+}
+
+fn validate_identifier(kind: &str, name: &str) -> Result<(), Box<dyn Error>> {
+    if !is_valid_identifier(name) {
+        return Err(format!(
+            "{} '{}' must be an ASCII Rust/Java identifier: start with a letter or underscore, continue with letters, digits, or underscores, and avoid reserved keywords",
+            kind, name
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn is_valid_identifier(name: &str) -> bool {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !(first == '_' || first.is_ascii_alphabetic()) {
+        return false;
+    }
+    if !chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric()) {
+        return false;
+    }
+    !is_reserved_identifier(name)
+}
+
+fn is_reserved_identifier(name: &str) -> bool {
+    const RESERVED: &[&str] = &[
+        "abstract",
+        "as",
+        "assert",
+        "async",
+        "await",
+        "become",
+        "boolean",
+        "box",
+        "break",
+        "byte",
+        "case",
+        "catch",
+        "char",
+        "class",
+        "const",
+        "continue",
+        "crate",
+        "default",
+        "do",
+        "double",
+        "dyn",
+        "else",
+        "enum",
+        "extends",
+        "extern",
+        "false",
+        "final",
+        "finally",
+        "float",
+        "fn",
+        "for",
+        "gen",
+        "goto",
+        "if",
+        "impl",
+        "implements",
+        "import",
+        "in",
+        "instanceof",
+        "int",
+        "interface",
+        "let",
+        "long",
+        "loop",
+        "macro",
+        "match",
+        "mod",
+        "move",
+        "mut",
+        "native",
+        "new",
+        "null",
+        "override",
+        "package",
+        "priv",
+        "private",
+        "protected",
+        "pub",
+        "public",
+        "ref",
+        "return",
+        "self",
+        "Self",
+        "short",
+        "static",
+        "strictfp",
+        "struct",
+        "super",
+        "switch",
+        "synchronized",
+        "this",
+        "throw",
+        "throws",
+        "trait",
+        "transient",
+        "true",
+        "try",
+        "type",
+        "typeof",
+        "union",
+        "unsafe",
+        "unsized",
+        "use",
+        "virtual",
+        "void",
+        "volatile",
+        "where",
+        "while",
+        "yield",
+    ];
+    RESERVED.contains(&name)
 }
 
 fn is_reserved_async_control_name(name: &str) -> bool {
@@ -602,7 +733,10 @@ fn rust_py_type(ty: Type) -> &'static str {
 
 // ── Rust Wasmtime host codegen ──────────────────────────────────────────────
 
-pub fn generate_rust_host_code(m: &Manifest) -> String {
+pub fn generate_rust_host_code(m: &Manifest) -> Result<String, Box<dyn Error>> {
+    validate_manifest(m)?;
+    validate_rust_host_manifest(m)?;
+
     let ext_name = &m.extension.name;
     let struct_name = rust_host_struct_name(ext_name);
     let builder_name = format!("{}Builder", struct_name);
@@ -761,7 +895,18 @@ fn expect_f64(params: &[Val], index: usize, name: &str) -> Result<f64> {
 "#,
     );
 
-    out
+    Ok(out)
+}
+
+fn validate_rust_host_manifest(m: &Manifest) -> Result<(), Box<dyn Error>> {
+    if let Some(function) = m.functions.iter().find(|f| f.r#async) {
+        return Err(format!(
+            "Rust host generation does not support async function '{}' yet; Java hosts provide AsyncHostRegistry, but Rust hosts do not yet generate async control imports",
+            function.name
+        )
+        .into());
+    }
+    Ok(())
 }
 
 fn generate_rust_host_register_function(f: &Function) -> String {
@@ -799,7 +944,7 @@ fn generate_rust_host_register_function(f: &Function) -> String {
     ));
     out.push_str("                };\n");
 
-    if java_needs_memory(f) {
+    if needs_memory(f) {
         out.push_str("                let memory = caller_memory(&mut caller)?;\n");
     }
     out.push_str(&rust_host_param_reads(f));
@@ -1124,7 +1269,7 @@ fn java_function_template(f: &Function) -> JavaFunctionTemplate {
         return_handling: java_return_handling(f, &field),
         error_handling: java_error_handling(f),
         is_async: f.r#async,
-        needs_memory: java_needs_memory(f),
+        needs_memory: needs_memory(f),
     }
 }
 
@@ -1132,7 +1277,7 @@ fn java_function_template(f: &Function) -> JavaFunctionTemplate {
 /// string/bytes argument, or writes a string/bytes result back into a caller-provided buffer.
 /// Functions with only scalar params and no buffer return (e.g. `add`) must NOT declare the
 /// `Memory` local, otherwise error-prone's UnusedLocalVariable check fails downstream.
-fn java_needs_memory(f: &Function) -> bool {
+fn needs_memory(f: &Function) -> bool {
     let reads_buffer = f
         .params
         .iter()
