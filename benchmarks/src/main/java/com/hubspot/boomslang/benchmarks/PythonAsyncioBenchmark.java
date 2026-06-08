@@ -53,6 +53,27 @@ public class PythonAsyncioBenchmark {
     "print(asyncio.run(main()))"
   );
 
+  private static final String ASYNCIO_IMPORT_PREWARMED = String.join(
+    "\n",
+    "import asyncio",
+    "async def main():",
+    "    print(type(asyncio.get_running_loop()).__name__)",
+    "asyncio.run(main())"
+  );
+
+  private static final String ASYNCIO_IMPORT_FORCED_RUNTIME = String.join(
+    "\n",
+    "import sys",
+    "for name in list(sys.modules):",
+    "    if name == 'boomslang_host.asyncio' or name == 'asyncio' or name.startswith('asyncio.'):",
+    "        sys.modules.pop(name, None)",
+    "import asyncio",
+    "import boomslang_host.asyncio",
+    "async def main():",
+    "    print(type(asyncio.get_running_loop()).__name__)",
+    "asyncio.run(main())"
+  );
+
   private static final String ASYNCIO_GATHER_SLEEP_ZERO = String.join(
     "\n",
     "import asyncio",
@@ -102,6 +123,8 @@ public class PythonAsyncioBenchmark {
   private PythonExecutorFactory factory;
   private PythonInstance instance;
   private byte[] asyncioNoopBytecode;
+  private byte[] asyncioImportPrewarmedBytecode;
+  private byte[] asyncioImportForcedRuntimeBytecode;
   private byte[] asyncioGatherSleepZeroBytecode;
   private byte[] hostAsyncGatherCompletedBytecode;
   private byte[] hostAsyncGatherExecutorBytecode;
@@ -131,6 +154,8 @@ public class PythonAsyncioBenchmark {
         .build();
 
     asyncioNoopBytecode = compile(ASYNCIO_NOOP);
+    asyncioImportPrewarmedBytecode = compile(ASYNCIO_IMPORT_PREWARMED);
+    asyncioImportForcedRuntimeBytecode = compile(ASYNCIO_IMPORT_FORCED_RUNTIME);
     asyncioGatherSleepZeroBytecode = compile(ASYNCIO_GATHER_SLEEP_ZERO);
     hostAsyncGatherCompletedBytecode = compile(HOST_ASYNC_GATHER_COMPLETED);
     hostAsyncGatherExecutorBytecode = compile(HOST_ASYNC_GATHER_EXECUTOR);
@@ -158,6 +183,19 @@ public class PythonAsyncioBenchmark {
   @Benchmark
   public PythonResult asyncioNoop() {
     return factory.runOnWasmThread(() -> instance.loadCode(asyncioNoopBytecode));
+  }
+
+  @Benchmark
+  public PythonResult asyncioImportPrewarmed() {
+    return factory.runOnWasmThread(() -> instance.loadCode(asyncioImportPrewarmedBytecode)
+    );
+  }
+
+  @Benchmark
+  public PythonResult asyncioImportForcedRuntime() {
+    return factory.runOnWasmThread(() ->
+      instance.loadCode(asyncioImportForcedRuntimeBytecode)
+    );
   }
 
   @Benchmark
