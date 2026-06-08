@@ -91,6 +91,27 @@
           <artifactId>chicory-compiler-maven-plugin</artifactId>
           <version>${dep.chicory.version}</version>
         </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-gpg-plugin</artifactId>
+          <dependencies>
+            <dependency>
+              <groupId>org.bouncycastle</groupId>
+              <artifactId>bcpg-jdk18on</artifactId>
+              <version>1.81</version>
+            </dependency>
+            <dependency>
+              <groupId>org.bouncycastle</groupId>
+              <artifactId>bcprov-jdk18on</artifactId>
+              <version>1.81</version>
+            </dependency>
+            <dependency>
+              <groupId>org.bouncycastle</groupId>
+              <artifactId>bcutil-jdk18on</artifactId>
+              <version>1.81</version>
+            </dependency>
+          </dependencies>
+        </plugin>
       </plugins>
     </pluginManagement>
   </build>
