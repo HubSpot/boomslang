@@ -259,7 +259,7 @@ mvn compile -pl core
 mvn test -pl tests
 ```
 
-`just fetch-main-wasm` installs the latest `main` runtime artifact published as a GitHub release asset into `core/src/main/resources/python/bin/` and `core/src/main/resources/python/usr/`. Use it when you want a fast local Java build without rebuilding the full WASM/CPython pipeline. To fetch a specific artifact, pass through selectors:
+`just fetch-main-wasm` installs the latest successful `main` runtime artifact published as a GitHub release asset into `core/src/main/resources/python/bin/` and `core/src/main/resources/python/usr/`. Use it when you want a fast local Java build without rebuilding the full WASM/CPython pipeline. To fetch a specific artifact, pass through selectors:
 
 ```bash
 just fetch-main-wasm -- --branch main

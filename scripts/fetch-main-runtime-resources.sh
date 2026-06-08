@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo="${BOOMSLANG_GITHUB_REPO:-HubSpot/boomslang}"
 branch="${BOOMSLANG_GITHUB_BRANCH:-main}"
+workflow="${BOOMSLANG_GITHUB_WORKFLOW:-build.yml}"
 requested_sha="${BOOMSLANG_GITHUB_SHA:-}"
 repo_root_arg="."
 
@@ -17,12 +18,14 @@ Options:
   --branch <branch>    Fetch the latest published artifact for a branch (default: main)
   --sha <sha>          Fetch the published artifact for a specific commit SHA
   --repo <owner/repo>  GitHub repository to query (default: HubSpot/boomslang)
+  --workflow <file>    Workflow file name or ID (default: build.yml)
   -h, --help           Show this help
 
 Environment defaults:
   BOOMSLANG_GITHUB_REPO
   BOOMSLANG_GITHUB_BRANCH
   BOOMSLANG_GITHUB_SHA
+  BOOMSLANG_GITHUB_WORKFLOW
 
 Examples:
   just fetch-main-wasm
@@ -59,11 +62,11 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     --workflow)
-      # Kept as a no-op for compatibility with older docs/shell history.
       if [ "$#" -lt 2 ]; then
         echo "ERROR: --workflow requires a value" >&2
         exit 1
       fi
+      workflow="$2"
       shift 2
       ;;
     -h | --help)
@@ -109,10 +112,16 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 github_api_get() {
   local path="$1"
-  curl -fsSL \
-    -H "Accept: application/vnd.github+json" \
-    -H "X-GitHub-Api-Version: 2022-11-28" \
-    "https://api.github.com$path"
+  local headers=(
+    -H "Accept: application/vnd.github+json"
+    -H "X-GitHub-Api-Version: 2022-11-28"
+  )
+
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    headers+=( -H "Authorization: Bearer $GITHUB_TOKEN" )
+  fi
+
+  curl -fsSL "${headers[@]}" "https://api.github.com$path"
 }
 
 url_encode() {
@@ -123,41 +132,43 @@ print(quote(sys.argv[1], safe=''))
 PY
 }
 
-resolve_branch_sha() {
-  local encoded_ref
-  encoded_ref="$(url_encode "$branch")"
-  github_api_get "/repos/$repo/commits/$encoded_ref" | python3 -c 'import json, sys; print(json.load(sys.stdin)["sha"])'
-}
-
-if [ -n "$requested_sha" ]; then
-  selected_sha="$requested_sha"
-  echo "Looking for published runtime release asset for $repo@$selected_sha..."
-else
-  echo "Resolving $repo@$branch..."
-  selected_sha="$(resolve_branch_sha)"
-  echo "Looking for published runtime release asset for $repo@$branch ($selected_sha)..."
-fi
-
 download_dir="$tmp_dir/download"
 mkdir -p "$download_dir"
+selected_sha=""
+release_tag=""
+runtime_asset=""
+checksum_asset=""
+runtime_url=""
+checksum_url=""
+tarball=""
+checksum_file=""
 
-runtime_asset="boomslang-runtime-$selected_sha.tar.gz"
-checksum_asset="boomslang-$selected_sha.sha256"
-release_tag="build-$selected_sha"
-runtime_url="https://github.com/$repo/releases/download/$release_tag/$runtime_asset"
-checksum_url="https://github.com/$repo/releases/download/$release_tag/$checksum_asset"
-tarball="$download_dir/$runtime_asset"
-checksum_file="$download_dir/$checksum_asset"
+set_release_vars() {
+  selected_sha="$1"
+  release_tag="build-$selected_sha"
+  runtime_asset="boomslang-runtime-$selected_sha.tar.gz"
+  checksum_asset="boomslang-$selected_sha.sha256"
+  runtime_url="https://github.com/$repo/releases/download/$release_tag/$runtime_asset"
+  checksum_url="https://github.com/$repo/releases/download/$release_tag/$checksum_asset"
+  tarball="$download_dir/$runtime_asset"
+  checksum_file="$download_dir/$checksum_asset"
+}
 
-echo "Downloading $runtime_url"
-if ! curl -fL --retry 3 --retry-delay 2 -o "$tarball" "$runtime_url"; then
-  echo "ERROR: Could not download $runtime_asset from release $release_tag" >&2
-  echo "Make sure the GitHub Actions release job has published runtime assets for $selected_sha." >&2
-  exit 1
-fi
+download_release_assets() {
+  local sha="$1"
+  set_release_vars "$sha"
+  rm -f "$tarball" "$checksum_file"
 
-if curl -fL --retry 3 --retry-delay 2 -o "$checksum_file" "$checksum_url"; then
-  python3 - "$download_dir" "$checksum_file" <<'PY'
+  echo "Checking $runtime_url"
+  if ! curl -fsSLI "$runtime_url" >/dev/null; then
+    return 1
+  fi
+
+  echo "Downloading $runtime_url"
+  curl -fL --retry 3 --retry-delay 2 -o "$tarball" "$runtime_url"
+
+  if curl -fL --retry 3 --retry-delay 2 -o "$checksum_file" "$checksum_url"; then
+    python3 - "$download_dir" "$checksum_file" <<'PY'
 import hashlib
 import pathlib
 import sys
@@ -177,8 +188,52 @@ for raw_line in checksum_file.read_text().splitlines():
     if actual != expected:
         raise SystemExit(f"Checksum mismatch for {filename}: expected {expected}, got {actual}")
 PY
+  else
+    echo "WARNING: Could not download checksum file $checksum_asset; continuing without checksum validation" >&2
+  fi
+}
+
+find_latest_branch_release() {
+  local encoded_branch encoded_workflow runs_file
+  encoded_branch="$(url_encode "$branch")"
+  encoded_workflow="$(url_encode "$workflow")"
+  runs_file="$tmp_dir/runs.tsv"
+
+  github_api_get "/repos/$repo/actions/workflows/$encoded_workflow/runs?branch=$encoded_branch&event=push&status=success&per_page=20" \
+    | python3 -c 'import json, sys; [print(run["head_sha"]) for run in json.load(sys.stdin).get("workflow_runs", [])]' \
+    > "$runs_file"
+
+  if [ ! -s "$runs_file" ]; then
+    echo "ERROR: No successful $workflow push runs found for $repo@$branch" >&2
+    return 1
+  fi
+
+  while IFS= read -r sha; do
+    if [ -z "$sha" ]; then
+      continue
+    fi
+    echo "Trying successful $branch workflow artifact from $sha..."
+    if download_release_assets "$sha"; then
+      return 0
+    fi
+  done < "$runs_file"
+
+  echo "ERROR: No recent successful $branch workflow runs had published runtime release assets" >&2
+  return 1
+}
+
+if [ -n "$requested_sha" ]; then
+  echo "Looking for published runtime release asset for $repo@$requested_sha..."
+  if ! download_release_assets "$requested_sha"; then
+    echo "ERROR: Could not download runtime release asset for $requested_sha" >&2
+    echo "Make sure the GitHub Actions release job has published runtime assets for that commit." >&2
+    exit 1
+  fi
 else
-  echo "WARNING: Could not download checksum file $checksum_asset; continuing without checksum validation" >&2
+  echo "Looking for latest successful published runtime release asset for $repo@$branch..."
+  if ! find_latest_branch_release; then
+    exit 1
+  fi
 fi
 
 stage_dir="$tmp_dir/stage"
