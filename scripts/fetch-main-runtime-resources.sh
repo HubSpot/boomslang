@@ -3,7 +3,6 @@ set -euo pipefail
 
 repo="${BOOMSLANG_GITHUB_REPO:-HubSpot/boomslang}"
 branch="${BOOMSLANG_GITHUB_BRANCH:-main}"
-workflow="${BOOMSLANG_GITHUB_WORKFLOW:-build.yml}"
 requested_sha="${BOOMSLANG_GITHUB_SHA:-}"
 repo_root_arg="."
 
@@ -18,14 +17,13 @@ Options:
   --branch <branch>    Fetch the latest published artifact for a branch (default: main)
   --sha <sha>          Fetch the published artifact for a specific commit SHA
   --repo <owner/repo>  GitHub repository to query (default: HubSpot/boomslang)
-  --workflow <file>    Workflow file name or ID (default: build.yml)
+  --workflow <file>    Ignored compatibility option
   -h, --help           Show this help
 
 Environment defaults:
   BOOMSLANG_GITHUB_REPO
   BOOMSLANG_GITHUB_BRANCH
   BOOMSLANG_GITHUB_SHA
-  BOOMSLANG_GITHUB_WORKFLOW
 
 Examples:
   just fetch-main-wasm
@@ -62,11 +60,11 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     --workflow)
+      # Kept as a no-op for compatibility with older docs/shell history.
       if [ "$#" -lt 2 ]; then
         echo "ERROR: --workflow requires a value" >&2
         exit 1
       fi
-      workflow="$2"
       shift 2
       ;;
     -h | --help)
@@ -122,14 +120,6 @@ github_api_get() {
   fi
 
   curl -fsSL "${headers[@]}" "https://api.github.com$path"
-}
-
-url_encode() {
-  python3 - "$1" <<'PY'
-import sys
-from urllib.parse import quote
-print(quote(sys.argv[1], safe=''))
-PY
 }
 
 download_dir="$tmp_dir/download"
@@ -194,17 +184,30 @@ PY
 }
 
 find_latest_branch_release() {
-  local encoded_branch encoded_workflow runs_file
-  encoded_branch="$(url_encode "$branch")"
-  encoded_workflow="$(url_encode "$workflow")"
-  runs_file="$tmp_dir/runs.tsv"
+  local releases_json releases_file
+  releases_json="$tmp_dir/releases.json"
+  releases_file="$tmp_dir/releases.tsv"
 
-  github_api_get "/repos/$repo/actions/workflows/$encoded_workflow/runs?branch=$encoded_branch&event=push&status=success&per_page=20" \
-    | python3 -c 'import json, sys; [print(run["head_sha"]) for run in json.load(sys.stdin).get("workflow_runs", [])]' \
-    > "$runs_file"
+  github_api_get "/repos/$repo/releases?per_page=30" > "$releases_json"
+  python3 - "$releases_json" <<'PY' > "$releases_file"
+import json
+import sys
 
-  if [ ! -s "$runs_file" ]; then
-    echo "ERROR: No successful $workflow push runs found for $repo@$branch" >&2
+with open(sys.argv[1]) as releases_json:
+    releases = json.load(releases_json)
+
+for release in releases:
+    tag = release.get("tag_name", "")
+    if release.get("draft") or not tag.startswith("build-"):
+        continue
+    sha = tag.removeprefix("build-")
+    expected_asset = f"boomslang-runtime-{sha}.tar.gz"
+    if any(asset.get("name") == expected_asset for asset in release.get("assets", [])):
+        print(sha)
+PY
+
+  if [ ! -s "$releases_file" ]; then
+    echo "ERROR: No published build-* runtime releases found for $repo" >&2
     return 1
   fi
 
@@ -212,13 +215,13 @@ find_latest_branch_release() {
     if [ -z "$sha" ]; then
       continue
     fi
-    echo "Trying successful $branch workflow artifact from $sha..."
+    echo "Trying published runtime release from $sha..."
     if download_release_assets "$sha"; then
       return 0
     fi
-  done < "$runs_file"
+  done < "$releases_file"
 
-  echo "ERROR: No recent successful $branch workflow runs had published runtime release assets" >&2
+  echo "ERROR: No recent build-* releases had downloadable runtime assets" >&2
   return 1
 }
 
