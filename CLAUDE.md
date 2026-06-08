@@ -55,7 +55,7 @@ just pip-packages               # Download pydantic etc.
 just wasm                       # Build Rust host + Wizer pre-init in a container
 just wasm-local                 # Build Rust host locally (needs WASI SDK)
 just resources                  # Populate Java resources
-just fetch-main-wasm            # Fetch latest main runtime resources from GitHub artifacts (or pass -- --sha <commit-sha>)
+just fetch-main-wasm            # Fetch latest main runtime resources from GitHub release assets (or pass -- --sha <commit-sha>)
 just build                      # Maven build with AOT
 just test                       # Run tests
 ```
