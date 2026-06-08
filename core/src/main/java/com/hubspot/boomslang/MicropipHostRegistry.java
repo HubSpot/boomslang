@@ -107,7 +107,9 @@ class MicropipHostRegistry {
         throw new IllegalArgumentException("invalid chunk range");
       }
       int end = (int) Math.min(body.length, (long) offset + length);
-      String encoded = BASE64_ENCODER.encodeToString(Arrays.copyOfRange(body, offset, end));
+      String encoded = BASE64_ENCODER.encodeToString(
+        Arrays.copyOfRange(body, offset, end)
+      );
       if (end == body.length) {
         responses.remove(token);
       }

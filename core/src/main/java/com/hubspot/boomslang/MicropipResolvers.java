@@ -62,7 +62,9 @@ public final class MicropipResolvers {
     };
   }
 
-  private static Map<String, String> flattenHeaders(Map<String, java.util.List<String>> raw) {
+  private static Map<String, String> flattenHeaders(
+    Map<String, java.util.List<String>> raw
+  ) {
     Map<String, String> headers = new LinkedHashMap<>();
     for (Map.Entry<String, java.util.List<String>> entry : raw.entrySet()) {
       if (!entry.getValue().isEmpty()) {

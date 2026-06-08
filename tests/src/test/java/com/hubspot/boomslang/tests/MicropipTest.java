@@ -31,8 +31,7 @@ import org.junit.jupiter.api.Test;
 class MicropipTest {
 
   @Test
-  void itInstallsPurePythonWheelFromResolverAndListsAndUninstalls()
-    throws Exception {
+  void itInstallsPurePythonWheelFromResolverAndListsAndUninstalls() throws Exception {
     byte[] wheel = wheel(
       "tiny-pkg",
       "1.0.0",
@@ -131,26 +130,32 @@ class MicropipTest {
       Path root = SharedTestSetup.createRootPath();
       PythonExecutorFactory factory = factory(root, MicropipResolvers.pypi());
 
-      PythonResult result = factory.runOnWasmThread(() -> {
+      List<PythonResult> results = factory.runOnWasmThread(() -> {
         PythonInstance instance = factory.createInstance(root);
-        return instance.execute(
+        PythonResult installResult = instance.execute(
           String.join(
             "\n",
             "import asyncio",
             "import micropip",
-            "async def main():",
-            "    await micropip.install('parent-pkg==1.0.0', index_urls='" + base + "/simple')",
-            "    import child_pkg",
-            "    import parent_pkg",
-            "    print(parent_pkg.VALUE + '|' + child_pkg.VALUE)",
-            "asyncio.run(main())"
+            "asyncio.run(micropip.install('parent-pkg==1.0.0', index_urls='" +
+            base +
+            "/simple'))"
           )
         );
+        PythonResult importResult = instance.execute(
+          String.join(
+            "\n",
+            "import child_pkg",
+            "import parent_pkg",
+            "print(parent_pkg.VALUE + '|' + child_pkg.VALUE)"
+          )
+        );
+        return List.of(installResult, importResult);
       });
 
-      assertThat(result.stderr()).as("stderr").isEmpty();
-      assertThat(result.exitCode()).isEqualTo(0);
-      assertThat(result.stdout().trim()).isEqualTo("parent|child");
+      assertSuccess(results.get(0), "install");
+      assertSuccess(results.get(1), "import");
+      assertThat(results.get(1).stdout().trim()).isEqualTo("parent|child");
     } finally {
       server.stop(0);
     }
@@ -176,29 +181,33 @@ class MicropipTest {
     Files.write(root.resolve("wheels/file_pkg-1.0.0-py3-none-any.whl"), fileWheel);
     PythonExecutorFactory factory = factory(root, null);
 
-    PythonResult result = factory.runOnWasmThread(() -> {
+    List<PythonResult> results = factory.runOnWasmThread(() -> {
       PythonInstance instance = factory.createInstance(root);
-      return instance.execute(
+      PythonResult installResult = instance.execute(
         String.join(
           "\n",
           "import asyncio",
           "import micropip",
-          "async def main():",
-          "    await micropip.install([",
+          "asyncio.run(micropip.install([",
           "        'emfs:/wheels/emfs_pkg-1.0.0-py3-none-any.whl',",
           "        'file:/wheels/file_pkg-1.0.0-py3-none-any.whl',",
-          "    ])",
-          "    import emfs_pkg",
-          "    import file_pkg",
-          "    print(emfs_pkg.VALUE + '|' + file_pkg.VALUE)",
-          "asyncio.run(main())"
+          "    ]))"
         )
       );
+      PythonResult importResult = instance.execute(
+        String.join(
+          "\n",
+          "import emfs_pkg",
+          "import file_pkg",
+          "print(emfs_pkg.VALUE + '|' + file_pkg.VALUE)"
+        )
+      );
+      return List.of(installResult, importResult);
     });
 
-    assertThat(result.stderr()).as("stderr").isEmpty();
-    assertThat(result.exitCode()).isEqualTo(0);
-    assertThat(result.stdout().trim()).isEqualTo("emfs|file");
+    assertSuccess(results.get(0), "install");
+    assertSuccess(results.get(1), "import");
+    assertThat(results.get(1).stdout().trim()).isEqualTo("emfs|file");
   }
 
   @Test
@@ -314,6 +323,11 @@ class MicropipTest {
       .build();
   }
 
+  private static void assertSuccess(PythonResult result, String label) {
+    assertThat(result.stderr()).as(label + " stderr").isEmpty();
+    assertThat(result.exitCode()).as(label + " exit").isEqualTo(0);
+  }
+
   private static MicropipResolver mapResolver(
     Map<String, MicropipFetchResponse> responses
   ) {
@@ -426,7 +440,8 @@ class MicropipTest {
     );
   }
 
-  private static void respondWheel(HttpExchange exchange, byte[] body) throws IOException {
+  private static void respondWheel(HttpExchange exchange, byte[] body)
+    throws IOException {
     respond(exchange, "application/octet-stream", body);
   }
 
