@@ -171,10 +171,11 @@ jobs:
             target_args=(--target "$GITHUB_SHA")
           fi
 
-          if gh release view "$release_tag" >/dev/null 2>&1; then
-            gh release upload "$release_tag" dist/* --clobber
+          if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$release_tag" dist/* --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$release_tag" dist/* \
+              --repo "$GITHUB_REPOSITORY" \
               "${target_args[@]}" \
               "${prerelease_args[@]}" \
               --title "$release_title" \
