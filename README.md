@@ -171,7 +171,9 @@ PythonExecutorFactory factory = PythonExecutorFactory
   .addExtension(
     HostBridge
       .builder()
-      .withMicropipResolver(MicropipResolvers.pypi())
+      .withMicropipResolver(
+        MicropipResolvers.pypiAllowing(Path.of("requirements.txt"))
+      )
       .withLogHandler((level, message) -> LOG.info("[Python] {}", message))
       .buildExtension()
   )
@@ -193,8 +195,10 @@ asyncio.run(main())
 `micropip.install(...)` is async, so use `asyncio.run(...)` inside Boomslang
 scripts instead of Pyodide-style top-level `await`. Local wheels can be installed
 with `file:` or `emfs:` URLs without a resolver. Remote installs fail unless a
-resolver is configured; applications can provide their own resolver for mirrors,
-allowlists, caching, or offline artifacts.
+resolver is configured. Use `MicropipResolvers.pypiAllowing(...)` or
+`MicropipResolvers.withAllowlist(...)` to reject packages that are not listed in
+a requirements or lock-style file before making a PyPI request. Applications can
+also provide their own resolver for mirrors, caching, or offline artifacts.
 
 This support is intentionally limited to pure-Python wheels such as
 `py3-none-any.whl`. Native wheels are not dynamically loaded by Boomslang; build

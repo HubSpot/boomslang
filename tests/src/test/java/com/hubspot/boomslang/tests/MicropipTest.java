@@ -1,8 +1,10 @@
 package com.hubspot.boomslang.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.hubspot.boomslang.HostBridge;
+import com.hubspot.boomslang.MicropipFetchRequest;
 import com.hubspot.boomslang.MicropipFetchResponse;
 import com.hubspot.boomslang.MicropipResolver;
 import com.hubspot.boomslang.MicropipResolvers;
@@ -14,6 +16,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -307,6 +310,112 @@ class MicropipTest {
     assertThat(result.stderr()).as("stderr").isEmpty();
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(result.stdout().trim()).isEqualTo("1100000");
+  }
+
+  @Test
+  void itRejectsRequestsMissingFromResolverAllowlistBeforeDelegating() throws Exception {
+    AtomicBoolean called = new AtomicBoolean(false);
+    MicropipResolver resolver = MicropipResolvers.withAllowlist(
+      request -> {
+        called.set(true);
+        return wheelResponse(new byte[0]);
+      },
+      List.of("allowed-pkg==1.0.0")
+    );
+
+    resolver.fetch(
+      new MicropipFetchRequest(
+        URI.create("https://pypi.org/simple/allowed-pkg/"),
+        Map.of()
+      )
+    );
+    assertThat(called.get()).isTrue();
+
+    called.set(false);
+    assertThatThrownBy(() ->
+        resolver.fetch(
+          new MicropipFetchRequest(
+            URI.create("https://pypi.org/simple/blocked-pkg/"),
+            Map.of()
+          )
+        )
+      )
+      .isInstanceOf(IOException.class)
+      .hasMessageContaining("not allowlisted")
+      .hasMessageContaining("blocked-pkg");
+    assertThat(called.get()).isFalse();
+
+    called.set(false);
+    resolver.fetch(
+      new MicropipFetchRequest(
+        URI.create(
+          "https://files.pythonhosted.org/packages/allowed_pkg-1.0.0-py3-none-any.whl"
+        ),
+        Map.of()
+      )
+    );
+    assertThat(called.get()).isTrue();
+
+    called.set(false);
+    assertThatThrownBy(() ->
+        resolver.fetch(
+          new MicropipFetchRequest(
+            URI.create(
+              "https://files.pythonhosted.org/packages/allowed_pkg-2.0.0-py3-none-any.whl"
+            ),
+            Map.of()
+          )
+        )
+      )
+      .isInstanceOf(IOException.class)
+      .hasMessageContaining("allowed-pkg")
+      .hasMessageContaining("2.0.0");
+    assertThat(called.get()).isFalse();
+  }
+
+  @Test
+  void itBuildsResolverAllowlistFromLockStyleFile() throws Exception {
+    Path root = SharedTestSetup.createRootPath();
+    Path lockFile = root.resolve("micropip.lock");
+    Files.writeString(
+      lockFile,
+      String.join("\n", "[[package]]", "name = \"lock-pkg\"", "version = \"1.2.3\"")
+    );
+
+    AtomicBoolean called = new AtomicBoolean(false);
+    MicropipResolver resolver = MicropipResolvers.withAllowlist(
+      request -> {
+        called.set(true);
+        return wheelResponse(new byte[0]);
+      },
+      lockFile
+    );
+
+    resolver.fetch(
+      new MicropipFetchRequest(
+        URI.create(
+          "https://files.pythonhosted.org/packages/lock_pkg-1.2.3-py3-none-any.whl.metadata"
+        ),
+        Map.of()
+      )
+    );
+    assertThat(called.get()).isTrue();
+
+    called.set(false);
+    assertThatThrownBy(() ->
+        resolver.fetch(
+          new MicropipFetchRequest(
+            URI.create(
+              "https://files.pythonhosted.org/packages/lock_pkg-1.2.4-py3-none-any.whl"
+            ),
+            Map.of()
+          )
+        )
+      )
+      .isInstanceOf(IOException.class)
+      .hasMessageContaining("lock-pkg")
+      .hasMessageContaining("1.2.4");
+    assertThat(called.get()).isFalse();
   }
 
   private static PythonExecutorFactory factory(Path root, MicropipResolver resolver) {
