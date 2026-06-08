@@ -87,7 +87,6 @@
               pkgs.findutils
               pkgs.gh
               pkgs.git
-              pkgs.git-lfs
               pkgs.gnumake
               pkgs.gnutar
               pkgs.gzip
