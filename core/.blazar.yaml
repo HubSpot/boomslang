@@ -34,4 +34,10 @@ before:
         tar xzf /tmp/cpython.tgz -C /tmp/cpython-staging
         cp /tmp/cpython-staging/bin/boomslang.wasm src/main/resources/python/bin/
         cp -r /tmp/cpython-staging/usr/local/lib/python3.14 src/main/resources/python/usr/local/lib/
+
+        # Blazar builds use the extracted runtime artifact from the cpython module.
+        # Remove any stale local stdlib zip so it is not packaged into the jar.
+        rm -f src/main/resources/python/stdlib.zip
+
         ls -lh src/main/resources/python/bin/boomslang.wasm
+        test -d src/main/resources/python/usr/local/lib/python3.14

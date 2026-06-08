@@ -110,6 +110,14 @@ wasm-local:
 resources:
     ./mill artifacts.installResources
 
+# Fetch runtime resources (WASM + Python stdlib) from GitHub release assets
+fetch-main-wasm *args:
+    ./scripts/fetch-main-runtime-resources.sh {{args}}
+
+# Alias for fetch-main-wasm
+fetch-main-runtime *args:
+    ./scripts/fetch-main-runtime-resources.sh {{args}}
+
 # Build Java project (AOT compile WASM + package)
 build:
     ./mill build

@@ -50,6 +50,14 @@
   </dependencies>
 
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <excludes>
+          <exclude>python/stdlib.zip</exclude>
+        </excludes>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -76,39 +84,6 @@
   </build>
 
   <profiles>
-    <profile>
-      <id>unpack-stdlib</id>
-      <activation>
-        <file>
-          <exists>${basedir}/src/main/resources/python/stdlib.zip</exists>
-        </file>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-antrun-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>unzip-stdlib</id>
-                <goals>
-                  <goal>run</goal>
-                </goals>
-                <phase>generate-resources</phase>
-                <configuration>
-                  <target>
-                    <exec executable="${basedir}/../scripts/ensure-lfs-runtime-resources.sh" failonerror="true">
-                      <arg value="${basedir}" />
-                    </exec>
-                    <unzip src="${basedir}/src/main/resources/python/stdlib.zip" dest="${basedir}/src/main/resources/python/" overwrite="true" />
-                  </target>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
     <profile>
       <id>aot</id>
       <activation>

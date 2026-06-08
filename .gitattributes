@@ -1,3 +1,1 @@
-core/src/main/resources/python/bin/*.wasm filter=lfs diff=lfs merge=lfs -text
-core/src/main/resources/python/stdlib.zip filter=lfs diff=lfs merge=lfs -text
 flake.lock linguist-generated=true

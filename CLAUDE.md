@@ -24,7 +24,7 @@ Enter the Nix dev shell before running local build commands:
 nix develop
 ```
 
-The shell provides Java 21, Maven, `just`, Python 3, Git LFS, and the Maven toolchain file required by basepom.
+The shell provides Java 21, Maven, `just`, Python 3, and the Maven toolchain file required by basepom.
 
 ```bash
 just everything
@@ -55,6 +55,7 @@ just pip-packages               # Download pydantic etc.
 just wasm                       # Build Rust host + Wizer pre-init in a container
 just wasm-local                 # Build Rust host locally (needs WASI SDK)
 just resources                  # Populate Java resources
+just fetch-main-wasm            # Fetch latest main runtime resources from GitHub release assets (or pass -- --sha <commit-sha>)
 just build                      # Maven build with AOT
 just test                       # Run tests
 ```
