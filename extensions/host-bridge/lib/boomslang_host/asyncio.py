@@ -152,10 +152,13 @@ def install():
     asyncio.set_event_loop_policy(BoomslangEventLoopPolicy())
 
 
+install()
+
+
 def _running_boomslang_loop():
     loop = asyncio.get_running_loop()
     if not isinstance(loop, BoomslangEventLoop):
-        raise RuntimeError("boomslang_host.asyncio.install() must be called before asyncio.run()")
+        raise RuntimeError("boomslang_host.asyncio must be imported before asyncio.run()")
     return loop
 
 

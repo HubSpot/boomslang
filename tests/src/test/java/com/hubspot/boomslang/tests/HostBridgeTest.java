@@ -168,6 +168,26 @@ class HostBridgeTest {
   }
 
   @Test
+  void itPrewarmsBoomslangAsyncioPolicy() {
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
+      return instance.execute(
+        String.join(
+          "\n",
+          "import asyncio",
+          "async def main():",
+          "    print(type(asyncio.get_running_loop()).__name__)",
+          "asyncio.run(main())"
+        )
+      );
+    });
+
+    assertThat(result.stderr()).as("stderr").isEmpty();
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("BoomslangEventLoop");
+  }
+
+  @Test
   void itAwaitsSharedRegistryTokensWithoutGenericAsyncHandlers() {
     // Mirrors how generated extension async functions work: a token is created directly on the
     // shared registry and awaited via from_host_token, with no named async handler registered.
