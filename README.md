@@ -252,14 +252,14 @@ container system start
 Common local workflows:
 
 ```bash
-just fetch-main-wasm  # download latest main runtime resources from GitHub artifacts
+just fetch-main-wasm  # download latest main runtime resources from GitHub release assets
 just build            # package with AOT, skips tests
 just test             # tests module
 mvn compile -pl core
 mvn test -pl tests
 ```
 
-`just fetch-main-wasm` installs the latest `main` runtime artifact published by GitHub Actions into `core/src/main/resources/python/bin/` and `core/src/main/resources/python/usr/`. Use it when you want a fast local Java build without rebuilding the full WASM/CPython pipeline. To fetch a specific artifact, pass through selectors:
+`just fetch-main-wasm` installs the latest `main` runtime artifact published as a GitHub release asset into `core/src/main/resources/python/bin/` and `core/src/main/resources/python/usr/`. Use it when you want a fast local Java build without rebuilding the full WASM/CPython pipeline. To fetch a specific artifact, pass through selectors:
 
 ```bash
 just fetch-main-wasm -- --branch main

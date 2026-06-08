@@ -3,36 +3,32 @@ set -euo pipefail
 
 repo="${BOOMSLANG_GITHUB_REPO:-HubSpot/boomslang}"
 branch="${BOOMSLANG_GITHUB_BRANCH:-main}"
-workflow="${BOOMSLANG_GITHUB_WORKFLOW:-build.yml}"
 requested_sha="${BOOMSLANG_GITHUB_SHA:-}"
 repo_root_arg="."
-branch_was_explicit="false"
 
 usage() {
   cat <<'EOF'
 Usage: scripts/fetch-main-runtime-resources.sh [options] [repo-root]
 
-Fetch a published Boomslang runtime artifact and install it into
+Fetch a published Boomslang runtime release asset and install it into
 core/src/main/resources/python.
 
 Options:
-  --branch <branch>    Fetch the latest artifact for a branch (default: main)
-  --sha <sha>          Fetch the artifact for a specific commit SHA
+  --branch <branch>    Fetch the latest published artifact for a branch (default: main)
+  --sha <sha>          Fetch the published artifact for a specific commit SHA
   --repo <owner/repo>  GitHub repository to query (default: HubSpot/boomslang)
-  --workflow <file>    Workflow file name or ID (default: build.yml)
   -h, --help           Show this help
 
 Environment defaults:
   BOOMSLANG_GITHUB_REPO
   BOOMSLANG_GITHUB_BRANCH
   BOOMSLANG_GITHUB_SHA
-  BOOMSLANG_GITHUB_WORKFLOW
 
 Examples:
   just fetch-main-wasm
-  just fetch-main-wasm -- --sha 8f1d2cd2cec1de555e9dcfb585ca2b29d84cb97d
+  just fetch-main-wasm -- --sha 902169b138a4d18258ca180adbb177c851b59dff
   ./scripts/fetch-main-runtime-resources.sh --branch main
-  ./scripts/fetch-main-runtime-resources.sh --sha 8f1d2cd2cec1de555e9dcfb585ca2b29d84cb97d
+  ./scripts/fetch-main-runtime-resources.sh --sha 902169b138a4d18258ca180adbb177c851b59dff
 EOF
 }
 
@@ -44,7 +40,6 @@ while [ "$#" -gt 0 ]; do
         exit 1
       fi
       branch="$2"
-      branch_was_explicit="true"
       shift 2
       ;;
     --sha)
@@ -64,11 +59,11 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     --workflow)
+      # Kept as a no-op for compatibility with older docs/shell history.
       if [ "$#" -lt 2 ]; then
         echo "ERROR: --workflow requires a value" >&2
         exit 1
       fi
-      workflow="$2"
       shift 2
       ;;
     -h | --help)
@@ -105,144 +100,63 @@ require_command() {
   fi
 }
 
-require_command gh
+require_command curl
 require_command python3
 require_command tar
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-runs_file="$tmp_dir/runs.tsv"
-selected_run_id=""
-selected_sha=""
-selected_source=""
-release_checked_sha=""
-download_dir="$tmp_dir/download"
-
-try_download_release() {
-  local sha="$1"
-
-  if [ "$release_checked_sha" = "$sha" ]; then
-    return 1
-  fi
-  release_checked_sha="$sha"
-
-  rm -rf "$download_dir"
-  mkdir -p "$download_dir"
-
-  echo "Trying release assets for $sha..."
-  if gh release download "build-$sha" \
-    --repo "$repo" \
-    --pattern "boomslang-runtime-$sha.tar.gz" \
-    --pattern "boomslang-$sha.sha256" \
-    --dir "$download_dir" >/dev/null 2>&1; then
-    selected_run_id=""
-    selected_sha="$sha"
-    selected_source="GitHub release build-$sha"
-    return 0
-  fi
-
-  return 1
+github_api_get() {
+  local path="$1"
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com$path"
 }
 
-try_download_for_run() {
-  local run_id="$1"
-  local sha="$2"
-  local conclusion="$3"
-
-  if try_download_release "$sha"; then
-    selected_run_id="$run_id"
-    return 0
-  fi
-
-  rm -rf "$download_dir"
-  mkdir -p "$download_dir"
-
-  echo "Trying workflow artifact for $sha ($conclusion workflow run $run_id)..."
-  if gh run download "$run_id" \
-    --repo "$repo" \
-    --name "boomslang-runtime-$sha" \
-    --dir "$download_dir" >/dev/null 2>&1; then
-    selected_run_id="$run_id"
-    selected_sha="$sha"
-    selected_source="GitHub Actions artifact boomslang-runtime-$sha from run $run_id"
-    return 0
-  fi
-
-  return 1
+url_encode() {
+  python3 - "$1" <<'PY'
+import sys
+from urllib.parse import quote
+print(quote(sys.argv[1], safe=''))
+PY
 }
 
-query_runs() {
-  local args=(
-    --hostname github.com
-    --method GET
-    "/repos/$repo/actions/workflows/$workflow/runs"
-    -f status=completed
-    -f per_page=20
-  )
-
-  if [ -n "$requested_sha" ]; then
-    args+=( -f head_sha="$requested_sha" )
-    if [ "$branch_was_explicit" = "true" ]; then
-      args+=( -f branch="$branch" )
-    fi
-  else
-    args+=( -f branch="$branch" )
-  fi
-
-  gh api "${args[@]}" --jq '.workflow_runs[] | [.id, .head_sha, .conclusion] | @tsv' > "$runs_file"
+resolve_branch_sha() {
+  local encoded_ref
+  encoded_ref="$(url_encode "$branch")"
+  github_api_get "/repos/$repo/commits/$encoded_ref" | python3 -c 'import json, sys; print(json.load(sys.stdin)["sha"])'
 }
 
 if [ -n "$requested_sha" ]; then
-  echo "Looking for runtime artifact for $repo@$requested_sha..."
-  try_download_release "$requested_sha" || true
+  selected_sha="$requested_sha"
+  echo "Looking for published runtime release asset for $repo@$selected_sha..."
 else
-  echo "Looking for recent $branch runtime artifacts in $repo..."
+  echo "Resolving $repo@$branch..."
+  selected_sha="$(resolve_branch_sha)"
+  echo "Looking for published runtime release asset for $repo@$branch ($selected_sha)..."
 fi
 
-if [ -z "$selected_sha" ]; then
-  query_runs
+download_dir="$tmp_dir/download"
+mkdir -p "$download_dir"
 
-  if [ ! -s "$runs_file" ]; then
-    if [ -n "$requested_sha" ]; then
-      echo "ERROR: No completed $workflow runs found for $repo@$requested_sha" >&2
-    else
-      echo "ERROR: No completed $workflow runs found for $repo@$branch" >&2
-    fi
-    exit 1
-  fi
+runtime_asset="boomslang-runtime-$selected_sha.tar.gz"
+checksum_asset="boomslang-$selected_sha.sha256"
+release_tag="build-$selected_sha"
+runtime_url="https://github.com/$repo/releases/download/$release_tag/$runtime_asset"
+checksum_url="https://github.com/$repo/releases/download/$release_tag/$checksum_asset"
+tarball="$download_dir/$runtime_asset"
+checksum_file="$download_dir/$checksum_asset"
 
-  while IFS=$'\t' read -r run_id sha conclusion; do
-    if [ -z "$run_id" ] || [ -z "$sha" ]; then
-      continue
-    fi
-    if try_download_for_run "$run_id" "$sha" "$conclusion"; then
-      break
-    fi
-  done < "$runs_file"
-fi
-
-if [ -z "$selected_sha" ]; then
-  if [ -n "$requested_sha" ]; then
-    echo "ERROR: Could not download runtime artifact for $repo@$requested_sha" >&2
-  else
-    echo "ERROR: Could not download runtime artifact from recent $branch workflow runs" >&2
-  fi
+echo "Downloading $runtime_url"
+if ! curl -fL --retry 3 --retry-delay 2 -o "$tarball" "$runtime_url"; then
+  echo "ERROR: Could not download $runtime_asset from release $release_tag" >&2
+  echo "Make sure the GitHub Actions release job has published runtime assets for $selected_sha." >&2
   exit 1
 fi
 
-tarball="$download_dir/boomslang-runtime-$selected_sha.tar.gz"
-if [ ! -f "$tarball" ]; then
-  tarball="$(find "$download_dir" -name 'boomslang-runtime-*.tar.gz' -print -quit)"
-fi
-
-if [ -z "$tarball" ] || [ ! -f "$tarball" ]; then
-  echo "ERROR: Downloaded artifact did not contain boomslang-runtime-$selected_sha.tar.gz" >&2
-  exit 1
-fi
-
-checksum_file="$download_dir/boomslang-$selected_sha.sha256"
-if [ -f "$checksum_file" ]; then
+if curl -fL --retry 3 --retry-delay 2 -o "$checksum_file" "$checksum_url"; then
   python3 - "$download_dir" "$checksum_file" <<'PY'
 import hashlib
 import pathlib
@@ -263,6 +177,8 @@ for raw_line in checksum_file.read_text().splitlines():
     if actual != expected:
         raise SystemExit(f"Checksum mismatch for {filename}: expected {expected}, got {actual}")
 PY
+else
+  echo "WARNING: Could not download checksum file $checksum_asset; continuing without checksum validation" >&2
 fi
 
 stage_dir="$tmp_dir/stage"
@@ -302,10 +218,7 @@ PY
 wasm_size="$(wc -c < "$runtime_root/bin/boomslang.wasm" | tr -d ' ')"
 stdlib_paths="$(find "$runtime_root/usr/local/lib/python3.14" | wc -l | tr -d ' ')"
 
-echo "Installed runtime resources from $selected_source"
-if [ -n "$selected_run_id" ]; then
-  echo "  run: $selected_run_id"
-fi
+echo "Installed runtime resources from GitHub release $release_tag"
 echo "  sha: $selected_sha"
 echo "  wasm: $runtime_root/bin/boomslang.wasm ($wasm_size bytes)"
 echo "  stdlib: $runtime_root/usr/local/lib/python3.14 ($stdlib_paths paths)"

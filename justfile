@@ -110,7 +110,7 @@ wasm-local:
 resources:
     ./mill artifacts.installResources
 
-# Fetch runtime resources (WASM + Python stdlib) from GitHub artifacts
+# Fetch runtime resources (WASM + Python stdlib) from GitHub release assets
 fetch-main-wasm *args:
     ./scripts/fetch-main-runtime-resources.sh {{args}}
 
