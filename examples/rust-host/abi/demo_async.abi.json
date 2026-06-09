@@ -1,0 +1,35 @@
+{
+  "abi_version": 1,
+  "extension": {
+    "name": "demo_async",
+    "wasm_module": "demo"
+  },
+  "functions": [
+    {
+      "name": "lookup",
+      "params": [
+        {
+          "name": "request",
+          "type": "string"
+        },
+        {
+          "name": "count",
+          "type": "int"
+        }
+      ],
+      "returns": "string",
+      "async": true
+    },
+    {
+      "name": "echo",
+      "params": [
+        {
+          "name": "request",
+          "type": "string"
+        }
+      ],
+      "returns": "string",
+      "async": false
+    }
+  ]
+}

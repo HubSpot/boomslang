@@ -5,11 +5,20 @@ mod generated {
     include!(concat!(env!("OUT_DIR"), "/host_boomslang_host.rs"));
 }
 
-use generated::BoomslangHostHostFunctions;
+mod generated_async {
+    include!(concat!(env!("OUT_DIR"), "/host_demo_async.rs"));
+}
 
-fn build_host() -> BoomslangHostHostFunctions {
+use generated::{AsyncHostRegistry, BoomslangHostHostFunctions};
+
+fn build_host(async_registry: AsyncHostRegistry) -> BoomslangHostHostFunctions {
+    let registry_for_call = async_registry.clone();
     BoomslangHostHostFunctions::builder()
-        .with_call(|name, payload| Ok(format!("rust handler received {name}({payload})")))
+        .with_call(move |name, payload| {
+            registry_for_call.handle_call_or(name, payload, |name, payload| {
+                Ok(format!("rust handler received {name}({payload})"))
+            })
+        })
         .with_log(|level, message| {
             eprintln!("[guest log:{level}] {message}");
             Ok(())
@@ -20,7 +29,7 @@ fn build_host() -> BoomslangHostHostFunctions {
 fn main() -> Result<()> {
     let engine = Engine::default();
     let mut linker = Linker::<()>::new(&engine);
-    let imports = build_host().register(&mut linker)?;
+    let imports = build_host(AsyncHostRegistry::default()).register(&mut linker)?;
 
     println!(
         "registered {} generated imports for {}",
@@ -38,7 +47,101 @@ fn main() -> Result<()> {
 mod tests {
     use super::*;
     use anyhow::{Context, bail};
+    use generated_async::DemoAsyncHostFunctions;
     use wasmtime::{Module, Store};
+
+    #[test]
+    fn async_registry_routes_control_calls() -> Result<()> {
+        let registry = AsyncHostRegistry::default();
+        registry.register_blocking_handler("rpc", |_, payload| Ok(format!("done:{payload}")))?;
+
+        assert_eq!(
+            registry
+                .handle_control_call(AsyncHostRegistry::PROTOCOL, "")?
+                .context("protocol response")?,
+            "1"
+        );
+
+        let token = registry
+            .handle_control_call(AsyncHostRegistry::START, "rpc\nhello")?
+            .context("start response")?;
+        let headers = registry
+            .handle_control_call(AsyncHostRegistry::POLL, "1000")?
+            .context("poll response")?;
+        assert_eq!(headers, format!("{token}\t1\t10\n"));
+
+        let value = registry
+            .handle_control_call(AsyncHostRegistry::RESULT, &token)?
+            .context("result response")?;
+        assert_eq!(value, "ZG9uZTpoZWxsbw==");
+
+        let error = registry
+            .handle_control_call(AsyncHostRegistry::POLL, "not-a-timeout")
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("invalid async poll timeout"));
+
+        assert_eq!(
+            registry.handle_call_or(
+                "echo".to_string(),
+                "payload".to_string(),
+                |name, payload| Ok(format!("{name}:{payload}")),
+            )?,
+            "echo:payload"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn generated_async_host_returns_registry_token() -> Result<()> {
+        let engine = Engine::default();
+        let mut linker = Linker::<()>::new(&engine);
+        let registry = AsyncHostRegistry::default();
+        let registry_for_lookup = registry.clone();
+        assert_eq!(DemoAsyncHostFunctions::EXTENSION_NAME, "demo_async");
+        let host = DemoAsyncHostFunctions::builder()
+            .with_lookup(move |request, count| {
+                registry_for_lookup.start_completed(format!("{request}:{count}"))
+            })
+            .with_echo(|request| Ok(request))
+            .build();
+
+        let imports = host.register(&mut linker)?;
+        assert_eq!(imports, vec!["demo::lookup", "demo::echo"]);
+
+        let module = Module::new(
+            &engine,
+            wat::parse_str(
+                r#"
+                (module
+                  (import "demo" "lookup"
+                    (func $lookup (param i32 i32 i32) (result i64)))
+                  (memory (export "memory") 1)
+                  (data (i32.const 0) "request")
+                  (func (export "run") (result i64)
+                    (call $lookup (i32.const 0) (i32.const 7) (i32.const 3))))
+                "#,
+            )?,
+        )?;
+
+        let mut store = Store::new(&engine, ());
+        let instance = linker.instantiate(&mut store, &module)?;
+        let run = instance.get_typed_func::<(), i64>(&mut store, "run")?;
+        let token = run.call(&mut store, ())?;
+        assert!(token > 0);
+
+        let headers = registry
+            .handle_control_call(AsyncHostRegistry::POLL, "0")?
+            .context("poll response")?;
+        assert_eq!(headers, format!("{token}\t1\t9\n"));
+
+        let value = registry
+            .handle_control_call(AsyncHostRegistry::RESULT, &token.to_string())?
+            .context("result response")?;
+        assert_eq!(value, "cmVxdWVzdDoz");
+
+        Ok(())
+    }
 
     #[test]
     fn it_registers_generated_stock_call_import_from_abi_json() -> Result<()> {

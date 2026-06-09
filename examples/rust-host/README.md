@@ -31,8 +31,7 @@ The ABI JSON decides the Wasmtime import signatures and memory lowering:
 - `int` params lower to `i32`.
 - `float` params lower to `f64`.
 - `string` and `bytes` returns use caller-provided `i32 result_ptr, i32 result_max_len` params and return the written byte length as `i32`.
-
-Rust host generation currently supports synchronous imports only. ABI JSON with async functions is rejected because the Rust adapter does not yet generate the `__async_poll__`, `__async_result__`, and `__async_cancel__` control imports needed to complete Boomslang awaitables. Use the generated Java host adapter for async extensions for now.
+- async functions return an `i64` host token.
 
 The generated host binding is typed:
 
@@ -47,6 +46,32 @@ let host = BoomslangHostHostFunctions::builder()
 
 host.register(&mut linker)?;
 ```
+
+## Async Host Calls
+
+Generated Rust host bindings include a minimal `AsyncHostRegistry`. Typed async imports should return a token from that registry, and the stock `boomslang_host.call` handler should route reserved `__async_*` calls through the same registry:
+
+```rust
+let async_registry = AsyncHostRegistry::default();
+async_registry.register_blocking_handler("rpc", |_, payload| {
+    Ok(format!("done: {payload}"))
+})?;
+
+let registry_for_call = async_registry.clone();
+let host = BoomslangHostHostFunctions::builder()
+    .with_call(move |name, payload| {
+        registry_for_call.handle_call_or(name, payload, |name, payload| {
+            Ok(format!("{name}: {payload}"))
+        })
+    })
+    .with_log(|level, message| {
+        eprintln!("[guest log:{level}] {message}");
+        Ok(())
+    })
+    .build();
+```
+
+For a generated typed async function, return `async_registry.start_completed(...)`, `async_registry.start_failed(...)`, or `async_registry.start_blocking(...)` from its handler. The Python side awaits that token through `boomslang_host.asyncio.from_host_token(...)`; completions are delivered by `__async_poll__`, `__async_result__`, and `__async_cancel__` over the stock call bridge.
 
 ## Running A Real Boomslang WASM
 

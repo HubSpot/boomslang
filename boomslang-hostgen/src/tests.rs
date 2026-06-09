@@ -192,15 +192,6 @@ fn it_generates_stock_rust_host_from_abi() {
 }
 
 #[test]
-fn it_rejects_async_rust_host_generation() {
-    let err = generate_rust_host_code(&async_manifest())
-        .unwrap_err()
-        .to_string();
-
-    assert!(err.contains("Rust host generation does not support async function 'lookup' yet"));
-}
-
-#[test]
 fn it_rejects_invalid_identifiers() {
     let err = validate_manifest(
         &ExtensionSpec::new("demo")
@@ -211,6 +202,21 @@ fn it_rejects_invalid_identifiers() {
     .to_string();
 
     assert!(err.contains("function name 'foo-bar' must be an ASCII Rust/Java identifier"));
+}
+
+#[test]
+fn it_generates_async_rust_host_with_registry_helpers() {
+    let code = generate_rust_host_code(&async_manifest()).unwrap();
+
+    assert!(code.contains("pub struct AsyncHostRegistry"));
+    assert!(code.contains("pub fn handle_control_call(&self, name: &str, args: &str)"));
+    assert!(code.contains("pub fn register_blocking_handler<F>"));
+    assert!(code.contains("pub fn start_completed(&self, value: impl Into<String>)"));
+    assert!(code.contains("invalid async poll timeout"));
+    assert!(code.contains("wait_timeout_while"));
+    assert!(code.contains("F: Fn(String, i32) -> Result<i64> + Send + Sync + 'static"));
+    assert!(code.contains("let token = handler(param0, param1)?;"));
+    assert!(code.contains("results[0] = Val::I64(token);"));
 }
 
 #[test]
