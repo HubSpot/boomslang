@@ -182,12 +182,12 @@ fn it_generates_stock_rust_host_from_abi() {
     assert!(code.contains("F: Fn(String, String) -> Result<String> + Send + Sync + 'static"));
     assert!(code.contains("pub fn with_log<F>(mut self, handler: F) -> Self"));
     assert!(code.contains("F: Fn(i32, String) -> Result<()> + Send + Sync + 'static"));
-    assert!(code.contains("linker.func_new(Self::MODULE, \"call\""));
+    assert!(code.contains("linker.func_new(\n            Self::MODULE,\n            \"call\""));
     assert!(code.contains(
-        "vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32]"
+        "vec![\n                ValType::I32,\n                ValType::I32,\n                ValType::I32"
     ));
     assert!(code.contains("write_buffer_result(&mut caller, memory, result_ptr, result_max_len, result.as_bytes(), results)?;"));
-    assert!(code.contains("linker.func_new(Self::MODULE, \"log\""));
+    assert!(code.contains("linker.func_new(\n            Self::MODULE,\n            \"log\""));
     assert!(code.contains("Ok(vec![\"boomslang::call\", \"boomslang::log\"])"));
 }
 

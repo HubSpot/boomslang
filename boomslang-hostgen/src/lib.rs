@@ -737,9 +737,11 @@ pub fn generate_rust_host_code(m: &Manifest) -> Result<String, Box<dyn Error>> {
     validate_manifest(m)?;
 
     let ext_name = &m.extension.name;
+    let struct_name = rust_host_struct_name(ext_name);
+    let builder_name = format!("{}Builder", struct_name);
     let template = RustHostTemplate {
-        struct_name: rust_host_struct_name(ext_name),
-        builder_name: format!("{}Builder", rust_host_struct_name(ext_name)),
+        struct_name,
+        builder_name,
         extension_name: rust_string_literal(ext_name),
         wasm_module: rust_string_literal(m.extension.wasm_module.as_deref().unwrap_or(ext_name)),
         imports: rust_host_imports(m),
@@ -824,7 +826,7 @@ fn rust_host_param_reads(f: &Function) -> String {
         match p.ty {
             Type::String => {
                 out.push_str(&format!(
-                    "                let {name} = read_string(&caller, memory, expect_i32(params, {ptr_idx}, {ptr_name})?, expect_i32(params, {len_idx}, {len_name})?)?;\n",
+                    "                    let {name} = read_string(&caller, memory, expect_i32(params, {ptr_idx}, {ptr_name})?, expect_i32(params, {len_idx}, {len_name})?)?;\n",
                     name = rust_name,
                     ptr_idx = arg_idx,
                     ptr_name = rust_string_literal(&format!("{}_ptr", p.name)),
@@ -835,7 +837,7 @@ fn rust_host_param_reads(f: &Function) -> String {
             }
             Type::Bytes => {
                 out.push_str(&format!(
-                    "                let {name} = read_bytes(&caller, memory, expect_i32(params, {ptr_idx}, {ptr_name})?, expect_i32(params, {len_idx}, {len_name})?)?;\n",
+                    "                    let {name} = read_bytes(&caller, memory, expect_i32(params, {ptr_idx}, {ptr_name})?, expect_i32(params, {len_idx}, {len_name})?)?;\n",
                     name = rust_name,
                     ptr_idx = arg_idx,
                     ptr_name = rust_string_literal(&format!("{}_ptr", p.name)),
@@ -846,7 +848,7 @@ fn rust_host_param_reads(f: &Function) -> String {
             }
             Type::Int => {
                 out.push_str(&format!(
-                    "                let {} = expect_i32(params, {}, {})?;\n",
+                    "                    let {} = expect_i32(params, {}, {})?;\n",
                     rust_name,
                     arg_idx,
                     rust_string_literal(&p.name)
@@ -855,7 +857,7 @@ fn rust_host_param_reads(f: &Function) -> String {
             }
             Type::Float => {
                 out.push_str(&format!(
-                    "                let {} = expect_f64(params, {}, {})?;\n",
+                    "                    let {} = expect_f64(params, {}, {})?;\n",
                     rust_name,
                     arg_idx,
                     rust_string_literal(&p.name)
@@ -867,11 +869,11 @@ fn rust_host_param_reads(f: &Function) -> String {
 
     if !f.r#async && is_buffer_return(f.returns) {
         out.push_str(&format!(
-            "                let result_ptr = expect_i32(params, {}, \"result_ptr\")?;\n",
+            "                    let result_ptr = expect_i32(params, {}, \"result_ptr\")?;\n",
             arg_idx
         ));
         out.push_str(&format!(
-            "                let result_max_len = expect_i32(params, {}, \"result_max_len\")?;\n",
+            "                    let result_max_len = expect_i32(params, {}, \"result_max_len\")?;\n",
             arg_idx + 1
         ));
     }
@@ -889,45 +891,45 @@ fn rust_host_return_handling(f: &Function) -> String {
     if f.r#async {
         validate_async_function(f);
         return format!(
-            "                let token = {}?;\n                results[0] = Val::I64(token);\n",
+            "                    let token = {}?;\n                    results[0] = Val::I64(token);\n",
             call
         );
     }
 
     match f.returns {
         Some(Type::String) => format!(
-            "                let result = {}?;\n                write_buffer_result(&mut caller, memory, result_ptr, result_max_len, result.as_bytes(), results)?;\n",
+            "                    let result = {}?;\n                    write_buffer_result(&mut caller, memory, result_ptr, result_max_len, result.as_bytes(), results)?;\n",
             call
         ),
         Some(Type::Bytes) => format!(
-            "                let result = {}?;\n                write_buffer_result(&mut caller, memory, result_ptr, result_max_len, &result, results)?;\n",
+            "                    let result = {}?;\n                    write_buffer_result(&mut caller, memory, result_ptr, result_max_len, &result, results)?;\n",
             call
         ),
         Some(Type::Int) => format!(
-            "                let result = {}?;\n                results[0] = Val::I32(result);\n",
+            "                    let result = {}?;\n                    results[0] = Val::I32(result);\n",
             call
         ),
         Some(Type::Float) => format!(
-            "                let result = {}?;\n                results[0] = Val::F64(result.to_bits());\n",
+            "                    let result = {}?;\n                    results[0] = Val::F64(result.to_bits());\n",
             call
         ),
-        None => format!("                {}?;\n", call),
+        None => format!("                    {}?;\n", call),
     }
 }
 
 fn rust_host_error_handling(f: &Function) -> String {
     if f.r#async {
         format!(
-            "            if let Err(error) = result {{\n                eprintln!(\"async host function {{}}::{} failed: {{error:#}}\", Self::MODULE);\n                results[0] = Val::I64(-1);\n            }}\n            Ok(())\n",
+            "                if let Err(error) = result {{\n                    eprintln!(\"async host function {{}}::{} failed: {{error:#}}\", Self::MODULE);\n                    results[0] = Val::I64(-1);\n                }}\n                Ok(())\n",
             f.name
         )
     } else if is_buffer_return(f.returns) {
         format!(
-            "            if let Err(error) = result {{\n                eprintln!(\"host function {{}}::{} failed: {{error:#}}\", Self::MODULE);\n                results[0] = Val::I32(-1);\n            }}\n            Ok(())\n",
+            "                if let Err(error) = result {{\n                    eprintln!(\"host function {{}}::{} failed: {{error:#}}\", Self::MODULE);\n                    results[0] = Val::I32(-1);\n                }}\n                Ok(())\n",
             f.name
         )
     } else {
-        "            result.map_err(wasmtime::Error::msg)\n".to_string()
+        "                result.map_err(wasmtime::Error::msg)\n".to_string()
     }
 }
 
@@ -1017,10 +1019,15 @@ fn rust_host_wasmtime_returns(f: &Function) -> Vec<&'static str> {
 
 fn rust_host_valtype_vec(types: Vec<&'static str>) -> String {
     if types.is_empty() {
-        "vec![]".to_string()
-    } else {
-        format!("vec![{}]", types.join(", "))
+        return "vec![]".to_string();
     }
+    if types.len() <= 3 {
+        return format!("vec![{}]", types.join(", "));
+    }
+    format!(
+        "vec![\n                {},\n            ]",
+        types.join(",\n                ")
+    )
 }
 
 fn rust_string_literal(value: &str) -> String {

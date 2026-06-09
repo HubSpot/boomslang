@@ -111,6 +111,8 @@ var factory = PythonExecutorFactory.builder()
     .build();
 ```
 
+5. Build and use the custom host.
+
 ## Async extension functions
 
 Custom extensions can also expose Java `CompletionStage<String>` work as Python awaitables. Use `r#async()` in the extension DSL:
@@ -205,5 +207,3 @@ Why this shape matters:
   any non-positive token immediately.
 - **Binary-safe value channel.** Completion values are carried as base64 of raw bytes, so extending
   async returns to `bytes` later needs no wire change.
-
-5. Build and use.

@@ -39,17 +39,26 @@ impl {{ struct_name }} {
 {% for function in functions %}
     fn {{ function.register_method }}<T: Send + 'static>(&self, linker: &mut Linker<T>) -> Result<()> {
         let handler = self.{{ function.field }}.clone();
-        let ty = FuncType::new(linker.engine(), {{ function.wasm_params }}, {{ function.wasm_returns }});
-        linker.func_new(Self::MODULE, {{ function.import_name }}, ty, move |mut caller: Caller<'_, T>, params: &[Val], {{ function.results_name }}: &mut [Val]| {
-            let result = (|| -> Result<()> {
-                let Some(handler) = handler.as_ref() else {
-                    bail!("No handler registered for host function {}::{{ function.name }}", Self::MODULE);
-                };
+        let ty = FuncType::new(
+            linker.engine(),
+            {{ function.wasm_params }},
+            {{ function.wasm_returns }},
+        );
+        linker.func_new(
+            Self::MODULE,
+            {{ function.import_name }},
+            ty,
+            move |mut caller: Caller<'_, T>, params: &[Val], {{ function.results_name }}: &mut [Val]| {
+                let result = (|| -> Result<()> {
+                    let Some(handler) = handler.as_ref() else {
+                        bail!("No handler registered for host function {}::{{ function.name }}", Self::MODULE);
+                    };
 {% if function.needs_memory %}
-                let memory = caller_memory(&mut caller)?;
-{% endif %}{{ function.param_reads }}{{ function.return_handling }}                Ok(())
-            })();
-{{ function.error_handling }}        })?;
+                    let memory = caller_memory(&mut caller)?;
+{% endif %}{{ function.param_reads }}{{ function.return_handling }}                    Ok(())
+                })();
+{{ function.error_handling }}            },
+        )?;
         Ok(())
     }
 
