@@ -34,12 +34,18 @@ setup_wasi_sdk() {
     WASI_SDK_VERSION=24
     ARCH=$(uname -m)
     case "$ARCH" in
-        x86_64)  SDK_ARCH="x86_64" ;;
+        x86_64)        SDK_ARCH="x86_64" ;;
         arm64|aarch64) SDK_ARCH="arm64" ;;
         *) echo "ERROR: Unsupported architecture: $ARCH"; exit 1 ;;
     esac
+    OS=$(uname -s)
+    case "$OS" in
+        Darwin) SDK_OS="macos" ;;
+        Linux)  SDK_OS="linux" ;;
+        *) echo "ERROR: Unsupported OS: $OS"; exit 1 ;;
+    esac
     mkdir -p "$BUILD_DIR"
-    curl -sL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-${SDK_ARCH}-macos.tar.gz" \
+    curl -sL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-${SDK_ARCH}-${SDK_OS}.tar.gz" \
         | tar xz -C "$BUILD_DIR"
     mv "$BUILD_DIR"/wasi-sdk-${WASI_SDK_VERSION}.0-* "$BUILD_DIR/wasi-sdk"
     export WASI_SDK_PATH="$BUILD_DIR/wasi-sdk"
@@ -225,13 +231,15 @@ do_all() {
     do_install
 }
 
-case "$CMD" in
-    build)   do_build ;;
-    wizer)   do_wizer ;;
-    install) do_install ;;
-    all)     do_all ;;
-    *)
-        echo "Usage: $0 {build|wizer|install|all}"
-        exit 1
-        ;;
-esac
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    case "$CMD" in
+        build)   do_build ;;
+        wizer)   do_wizer ;;
+        install) do_install ;;
+        all)     do_all ;;
+        *)
+            echo "Usage: $0 {build|wizer|install|all}"
+            exit 1
+            ;;
+    esac
+fi
