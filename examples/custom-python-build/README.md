@@ -1,15 +1,15 @@
-# Custom boomslang Host Example
+# Custom Python Build Example
 
-This example shows how to build a custom boomslang WASM binary with your own extensions.
+This example shows how to build a custom Boomslang Python/WASM runtime with your own extensions.
 
-## Why build a custom host?
+## Why build a custom Python runtime?
 
 The stock `python-host` ships with the generic host bridge (`boomslang_host.call()` / `boomslang_host.log()`). If you need:
 - Dedicated WASM imports with typed signatures (no JSON overhead)
 - Custom Python builtin modules
 - Additional prewarm modules
 
-...you build a custom host that composes `boomslang-host-core` with your extensions.
+...you build a custom Python/WASM runtime that composes `boomslang-host-core` with your extensions.
 
 ## Building
 
@@ -111,7 +111,7 @@ var factory = PythonExecutorFactory.builder()
     .build();
 ```
 
-5. Build and use the custom host.
+5. Build and use the custom Python/WASM runtime.
 
 ## Async extension functions
 

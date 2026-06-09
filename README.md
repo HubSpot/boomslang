@@ -126,7 +126,7 @@ user_json = call("lookup_user", "12345")
 log(2, "loaded user")
 ```
 
-Use a custom extension when you need typed WASM imports or custom Python modules. Start with `examples/custom-host/`.
+Use a custom extension when you need typed WASM imports or custom Python modules. Start with `examples/custom-python-build/`.
 
 ## Adding pure-Python modules
 
@@ -189,22 +189,22 @@ Your app then needs to provide:
 
 If your WASM is not at the default classpath location, set it with `withWasmResource(...)`.
 
-## Custom WASM host builds
+## Custom Python builds
 
-Build a custom WASM host when the stock `boomslang_host.call(...)` bridge is too blunt. This changes the Rust/WASI Python runtime inside `boomslang.wasm`; it is independent of whether the outside host is Java, Rust, or another language.
+Build a custom Python/WASM runtime when the stock `boomslang_host.call(...)` bridge is too blunt. This changes the Rust/WASI Python runtime inside `boomslang.wasm`; it is independent of whether the outside host is Java, Rust, or another language.
 
-Custom WASM hosts can change the Rust host crate, add guest extensions, prewarm modules, and statically link native libraries into the WASI binary.
+Custom Python builds can change the Rust/WASI guest crate, add guest extensions, prewarm modules, and statically link native libraries into the WASI binary.
 
 This runtime does not support WASI dynamic linking. Native code needed by Python extensions must be statically linked into the host build.
 
-Use a custom WASM host for:
+Use a custom Python build for:
 
 - typed WASM imports instead of string/JSON calls
 - host functions exposed as custom Python modules
 - extra Python modules prewarmed into the Wizer snapshot
 - native libraries required by Python extensions
 
-Start from `examples/custom-host/`. The build flow is:
+Start from `examples/custom-python-build/`. The build flow is:
 
 1. Define an extension contract in the extension crate's `build.rs` with the `boomslang-hostgen` Rust DSL.
 2. Have `boomslang-hostgen` emit Rust guest code and an ABI JSON file.
@@ -331,7 +331,7 @@ just test
 - `python-host-core/`: reusable Rust host core
 - `extensions/`: built-in host extensions
 - `boomslang-hostgen/`: extension code generator
-- `examples/custom-host/`: custom host example
+- `examples/custom-python-build/`: custom Python/WASM build example
 - `examples/rust-host/`: Rust runtime host example with ABI JSON to Wasmtime hostgen
 - `cpython/`: CPython, native library, and container build pipeline
 

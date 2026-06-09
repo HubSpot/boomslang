@@ -62,7 +62,7 @@ just test                       # Run tests
 
 ### Extensions
 
-The stock host includes the built-in `host-bridge` extension. For custom typed extensions, build a custom host that composes `boomslang-host-core` with your extension crate; see `examples/custom-host/`.
+The stock host includes the built-in `host-bridge` extension. For custom typed extensions, build a custom Python/WASM runtime that composes `boomslang-host-core` with your extension crate; see `examples/custom-python-build/`.
 
 ### Rust changes
 

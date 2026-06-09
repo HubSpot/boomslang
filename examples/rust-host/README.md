@@ -2,9 +2,9 @@
 
 This example shows the other side of the extension ABI: a Rust program embedding a WASM runtime with typed host imports generated from a Boomslang ABI JSON file.
 
-It is different from `examples/custom-host/`:
+It is different from `examples/custom-python-build/`:
 
-- `examples/custom-host/` builds a custom Rust/WASI Python host that runs inside WASM.
+- `examples/custom-python-build/` builds a custom Rust/WASI Python runtime that runs inside WASM.
 - `examples/rust-host/` is the outside runtime host. Its `build.rs` turns `<extension>.abi.json` into typed Wasmtime bindings.
 
 ## Run The Example
