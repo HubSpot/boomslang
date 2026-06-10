@@ -25,3 +25,9 @@
 - [Async Wire Protocol](reference/async-protocol.md)
 - [hostgen DSL Reference](reference/hostgen-dsl.md)
 - [Glossary](reference/glossary.md)
+
+# Contributing
+
+- [Building from Source](contributing/building.md)
+- [Architecture](contributing/architecture.md)
+- [Repository Map](contributing/repo-map.md)
