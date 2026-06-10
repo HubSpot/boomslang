@@ -258,6 +258,7 @@ rm -f "$runtime_root/stdlib.zip"
 mkdir -p "$runtime_root"
 cp -R "$stage_dir/python/bin" "$runtime_root/bin"
 cp -R "$stage_dir/python/usr" "$runtime_root/usr"
+"$repo_root/scripts/install-micropip-runtime.sh" "$repo_root"
 
 python3 - "$runtime_root" <<'PY'
 import pathlib

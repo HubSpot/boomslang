@@ -207,9 +207,9 @@ are not implemented, so `micropip.freeze()` is not meaningful for Boomslang.
 
 Boomslang's patched `micropip` runtime source comes from the
 `third_party/micropip` submodule, which tracks the `boomslang` branch of
-`https://github.com/zklapow/micropip.git`. `just resources` and Maven's stdlib
-unpack step run `scripts/install-micropip-runtime.sh` to copy that package into
-the generated Python runtime resources.
+`https://github.com/zklapow/micropip.git`. `just resources` includes that package
+when building runtime resources locally, and `just fetch-main-wasm` reapplies it
+after installing runtime resources from a published main build.
 
 ## Python resource overlay
 
