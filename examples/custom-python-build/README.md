@@ -1,15 +1,15 @@
-# Custom boomslang Host Example
+# Custom Python Build Example
 
-This example shows how to build a custom boomslang WASM binary with your own extensions.
+This example shows how to build a custom Boomslang Python/WASM runtime with your own extensions.
 
-## Why build a custom host?
+## Why build a custom Python runtime?
 
 The stock `python-host` ships with the generic host bridge (`boomslang_host.call()` / `boomslang_host.log()`). If you need:
 - Dedicated WASM imports with typed signatures (no JSON overhead)
 - Custom Python builtin modules
 - Additional prewarm modules
 
-...you build a custom host that composes `boomslang-host-core` with your extensions.
+...you build a custom Python/WASM runtime that composes `boomslang-host-core` with your extensions.
 
 ## Building
 
@@ -28,23 +28,25 @@ cargo build --target wasm32-wasip1 --release
 1. Create an extension crate using `boomslang-hostgen`:
 
 ```bash
-# Define your extension contract
-cat > my-ext/extension.toml <<EOF
-[extension]
-name = "myext"
-wasm_module = "myext"
-prewarm = ["_myext"]
-
-[[functions]]
-name = "do_thing"
-params = [{ name = "input", type = "string" }]
-returns = "string"
-EOF
-
 # Create the crate
 mkdir -p my-ext/src
 cat > my-ext/build.rs <<EOF
-fn main() { boomslang_hostgen::generate_rust("extension.toml"); }
+fn main() {
+    let ext = boomslang_hostgen::ExtensionSpec::new("myext")
+        .wasm_module("myext")
+        .prewarm(["_myext"])
+        .function("do_thing", |f| {
+            f.param("input", boomslang_hostgen::Type::String)
+                .returns(boomslang_hostgen::Type::String)
+        });
+
+    boomslang_hostgen::Build::new(ext)
+        .emit()
+        .generate()
+        .expect("generate myext");
+
+    println!("cargo:rerun-if-changed=build.rs");
+}
 EOF
 cat > my-ext/src/lib.rs <<EOF
 include!(concat!(env!("OUT_DIR"), "/ext_myext.rs"));
@@ -71,14 +73,31 @@ boomslang_host_core::init(
 );
 ```
 
-4. Generate the typed Java host-function bridge for the extension:
+4. Generate typed host-function bridges for the extension.
+
+For Java hosts:
 
 ```bash
 cargo run --manifest-path ../../boomslang-hostgen/Cargo.toml -- \
-  ../my-ext/extension.toml \
+  ../my-ext/target/wasm32-wasip1/release/build/my-ext-*/out/myext.abi.json \
   --java-out ../../core/src/main/java \
   --java-package com.hubspot.boomslang.generated
 ```
+
+For build systems that want Java generation during the Rust extension build, call
+`emit_java_host("../../core/src/main/java", "com.hubspot.boomslang.generated")` on the
+`Build` value instead of running the CLI later.
+
+For Rust/Wasmtime hosts:
+
+```bash
+cargo run --manifest-path ../../boomslang-hostgen/Cargo.toml -- \
+  ../my-ext/target/wasm32-wasip1/release/build/my-ext-*/out/myext.abi.json \
+  --rust-host-out ./src/generated
+```
+
+That writes `host_myext.rs`, a typed builder plus `register(&mut wasmtime::Linker<_>)`
+method. See `examples/rust-host/` for a complete runnable example.
 
 The generated class exposes typed functional interfaces and a builder, so Java users only fill in the host implementations:
 
@@ -92,24 +111,29 @@ var factory = PythonExecutorFactory.builder()
     .build();
 ```
 
+5. Build and use the custom Python/WASM runtime.
+
 ## Async extension functions
 
-Custom extensions can also expose Java `CompletionStage<String>` work as Python awaitables. Use `async = true` in the extension manifest. See `async-extension.toml` for a complete manifest example:
+Custom extensions can also expose Java `CompletionStage<String>` work as Python awaitables. Use `r#async()` in the extension DSL:
 
-```toml
-[extension]
-name = "my_async_ext"
-wasm_module = "my_async_ext"
-prewarm = ["_my_async_ext"]
+```rust
+fn main() {
+    let ext = boomslang_hostgen::ExtensionSpec::new("my_async_ext")
+        .wasm_module("my_async_ext")
+        .prewarm(["_my_async_ext"])
+        .function("lookup", |f| {
+            f.r#async()
+                .param("request", boomslang_hostgen::Type::String)
+                .param("shard", boomslang_hostgen::Type::Int)
+                .returns(boomslang_hostgen::Type::String)
+        });
 
-[[functions]]
-name = "lookup"
-async = true
-params = [
-  { name = "request", type = "string" },
-  { name = "shard", type = "int" },
-]
-returns = "string"
+    boomslang_hostgen::Build::new(ext)
+        .emit()
+        .generate()
+        .expect("generate my_async_ext");
+}
 ```
 
 Generated async functions preserve the normal typed argument handling. The Java handler receives typed params and returns a `CompletionStage<String>`:
@@ -183,5 +207,3 @@ Why this shape matters:
   any non-positive token immediately.
 - **Binary-safe value channel.** Completion values are carried as base64 of raw bytes, so extending
   async returns to `bytes` later needs no wire change.
-
-5. Build and use.

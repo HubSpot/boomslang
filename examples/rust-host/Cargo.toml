@@ -1,0 +1,16 @@
+[package]
+name = "boomslang-rust-host-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Example: wiring boomslang ABI JSON into a Rust WASM runtime host."
+
+[dependencies]
+anyhow = "1"
+wasmtime = { version = "36", default-features = false, features = ["cranelift", "runtime", "std"] }
+
+[build-dependencies]
+boomslang-hostgen = { path = "../../boomslang-hostgen", default-features = false }
+
+[dev-dependencies]
+wat = "1"

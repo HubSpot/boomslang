@@ -2,7 +2,7 @@
 name = "my-custom-python"
 version = "0.1.0"
 edition = "2024"
-description = "Example: building a custom boomslang WASM host with your own extensions."
+description = "Example: building a custom Boomslang Python/WASM runtime with your own extensions."
 
 [lib]
 crate-type = ["cdylib"]

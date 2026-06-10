@@ -1,0 +1,44 @@
+{
+  "abi_version": 1,
+  "extension": {
+    "name": "boomslang_host",
+    "wasm_module": "boomslang",
+    "prewarm": [
+      "_boomslang_host",
+      "boomslang_host",
+      "boomslang_host.asyncio"
+    ]
+  },
+  "functions": [
+    {
+      "name": "call",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "args",
+          "type": "string"
+        }
+      ],
+      "returns": "string",
+      "async": false
+    },
+    {
+      "name": "log",
+      "params": [
+        {
+          "name": "level",
+          "type": "int"
+        },
+        {
+          "name": "message",
+          "type": "string"
+        }
+      ],
+      "returns": null,
+      "async": false
+    }
+  ]
+}
