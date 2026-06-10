@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "boomslang"
+dynamic = ["version"]
+description = "Sandboxed CPython 3.14 execution via WebAssembly (wasmtime)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["wasmtime>=36"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.hatch.version]
+path = "src/boomslang/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/boomslang"]
+# The staged runtime assets are gitignored; force their inclusion in the wheel.
+artifacts = ["src/boomslang/_runtime/**"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["src/boomslang/_runtime"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

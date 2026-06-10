@@ -129,9 +129,71 @@ jobs:
           df -h
           docker system df || true
 
+  python-wheel:
+    name: Python wheel
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download runtime artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: boomslang-runtime-${{ github.sha }}
+          path: dist
+
+      - name: Install runtime resources
+        run: |
+          set -euo pipefail
+          mkdir -p stage
+          tar -xzf "dist/boomslang-runtime-${GITHUB_SHA}.tar.gz" -C stage
+          mkdir -p core/src/main/resources/python
+          cp -R stage/python/bin stage/python/usr core/src/main/resources/python/
+
+      - name: Stage runtime into Python package
+        run: ./scripts/stage-python-runtime.sh
+
+      - name: Resolve wheel version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" == v* ]]; then
+            echo "BOOMSLANG_WHEEL_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "BOOMSLANG_WHEEL_VERSION=0.0.0+g${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build wheel
+        run: |
+          pip install build
+          ./scripts/build-python-wheel.sh
+
+      - name: Test installed wheel
+        run: |
+          python -m venv /tmp/wheel-venv
+          /tmp/wheel-venv/bin/pip install boomslang-py/dist/*.whl pytest
+          cd /tmp
+          /tmp/wheel-venv/bin/pytest "$GITHUB_WORKSPACE/boomslang-py/tests"
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: boomslang-wheel-${{ github.sha }}
+          path: boomslang-py/dist/*.whl
+          if-no-files-found: error
+          retention-days: 90
+
   release:
     name: Publish runtime release
-    needs: build
+    needs: [build, python-wheel]
     if: |
       github.event_name == 'push' &&
       (
@@ -149,6 +211,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: boomslang-runtime-${{ github.sha }}
+          path: dist
+
+      - name: Download Python wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: boomslang-wheel-${{ github.sha }}
           path: dist
 
       - name: Publish GitHub release
