@@ -15,6 +15,7 @@ from wasmtime import DirPerms, FilePerms, Linker, Store, WasiConfig
 from ._assets import usr_host_dir
 from ._async import AsyncHostRegistry
 from ._engine import DISARMED_DEADLINE_TICKS, runtime
+from ._layout import link_tree, protected_usr_copy, sync_dirs, unprotect_tree
 from ._trampolines import define_boomslang_imports
 from .errors import (
     PythonCompilationError,
@@ -176,22 +177,55 @@ class Sandbox:
         for name, fn in (async_host_functions or {}).items():
             self._register_async(name, fn)
 
-        self._scratch = tempfile.TemporaryDirectory(prefix="boomslang-scratch-")
-        (Path(self._scratch.name) / "tmp").mkdir()
-        (Path(self._scratch.name) / "lib").mkdir()
-        if work_dir is None:
-            self._managed_work = tempfile.TemporaryDirectory(prefix="boomslang-work-")
-            self._work_dir = Path(self._managed_work.name)
+        self._user_work = None if work_dir is None else Path(work_dir)
+        if self._user_work is not None:
+            self._user_work.mkdir(parents=True, exist_ok=True)
+        self._user_lib = None if lib_dir is None else Path(lib_dir)
+        if self._user_lib is not None and not self._user_lib.is_dir():
+            raise ValueError(f"lib_dir is not a directory: {self._user_lib}")
+
+        self._layout = runtime().layout()
+        self._scratch = tempfile.TemporaryDirectory(
+            prefix="boomslang-scratch-", ignore_cleanup_errors=True
+        )
+        scratch = Path(self._scratch.name)
+        self._managed_work = None
+        self._sync_pairs: list[tuple[Path, Path]] = []
+        self._root: Path | None = None
+
+        if self._layout.single_root:
+            # The guest resolves every path through one preopen; build a root
+            # directory shaped like the guest fs. User-supplied work/lib dirs
+            # cannot be bind-mounted, so they are emulated by syncing files
+            # (hardlinks where possible) into/out of the backing dirs around
+            # each guest invocation.
+            root = scratch / "root"
+            root.mkdir()
+            for name in ("work", "lib", "tmp"):
+                (root / name).mkdir()
+            link_tree(protected_usr_copy(usr_host_dir()), root / "usr")
+            self._root = root
+            self._backing_work = root / "work"
+            self._backing_lib = root / "lib"
+            self._backing_tmp = root / "tmp"
+            if self._user_work is not None:
+                self._sync_pairs.append((self._user_work, self._backing_work))
+            if self._user_lib is not None:
+                self._sync_pairs.append((self._user_lib, self._backing_lib))
         else:
-            self._managed_work = None
-            self._work_dir = Path(work_dir)
-            self._work_dir.mkdir(parents=True, exist_ok=True)
-        if lib_dir is None:
-            self._lib_dir = Path(self._scratch.name) / "lib"
-        else:
-            self._lib_dir = Path(lib_dir)
-            if not self._lib_dir.is_dir():
-                raise ValueError(f"lib_dir is not a directory: {self._lib_dir}")
+            (scratch / "tmp").mkdir()
+            (scratch / "lib").mkdir()
+            self._backing_tmp = scratch / "tmp"
+            if self._user_work is None:
+                self._managed_work = tempfile.TemporaryDirectory(
+                    prefix="boomslang-work-"
+                )
+                self._backing_work = Path(self._managed_work.name)
+            else:
+                self._backing_work = self._user_work
+            self._backing_lib = (
+                scratch / "lib" if self._user_lib is None else self._user_lib
+            )
 
         self._instantiate()
 
@@ -209,14 +243,33 @@ class Sandbox:
 
         wasi = WasiConfig()
         wasi.env = [("PYTHONHOME", "/usr/local"), ("PYTHONDONTWRITEBYTECODE", "1")]
-        # The guest libc's preopen table was baked in by Wizer and binds
-        # positionally: fd 3 = /usr, fd 4 = /lib, fd 5 = /work, fd 6 = /tmp.
-        # Registration order here is the contract; the guest_path strings are
-        # ignored by the guest.
-        wasi.preopen_dir(str(usr_host_dir()), "/usr", DirPerms.READ_ONLY, FilePerms.READ_ONLY)
-        wasi.preopen_dir(str(self._lib_dir), "/lib")
-        wasi.preopen_dir(str(self._work_dir), GUEST_WORK_PATH)
-        wasi.preopen_dir(str(Path(self._scratch.name) / "tmp"), "/tmp")
+        # The guest libc's preopen table is baked into the Wizer snapshot and
+        # binds host preopens positionally — the guest_path strings here are
+        # ignored by the guest. See _layout.py for the probed layout kinds.
+        if self._layout.single_root:
+            wasi.preopen_dir(str(self._root), "/")
+        else:
+            host_for_name = {
+                "/usr": (str(usr_host_dir()), True),
+                "/lib": (str(self._backing_lib), False),
+                GUEST_WORK_PATH: (str(self._backing_work), False),
+                "/tmp": (str(self._backing_tmp), False),
+            }
+            for position, name in enumerate(self._layout.positions):
+                if name in host_for_name:
+                    host, read_only = host_for_name[name]
+                    if read_only:
+                        wasi.preopen_dir(
+                            host, name, DirPerms.READ_ONLY, FilePerms.READ_ONLY
+                        )
+                    else:
+                        wasi.preopen_dir(host, name)
+                else:
+                    # Unknown name at this position: register a filler so
+                    # later positions stay aligned with the baked table.
+                    filler = Path(self._scratch.name) / f"filler{position}"
+                    filler.mkdir(exist_ok=True)
+                    wasi.preopen_dir(str(filler), f"/filler{position}")
         # Guest stdout/stderr are captured by in-guest buffers; WASI streams
         # only carry low-level runtime diagnostics.
         wasi.stdout_file = str(Path(self._scratch.name) / ".wasi-stdout.log")
@@ -263,10 +316,13 @@ class Sandbox:
             if self._closed:
                 return
             self._closed = True
+            self._export_sync()
             self._fn = {}
             self._memory = None
             self._store = None
             self._async_registry.close()
+            if self._root is not None:
+                unprotect_tree(self._root / "usr")
             self._scratch.cleanup()
             if self._managed_work is not None:
                 self._managed_work.cleanup()
@@ -283,6 +339,7 @@ class Sandbox:
     def execute(self, code: str) -> ExecutionResult:
         with self._lock:
             self._check_usable()
+            self._import_sync()
             start = time.perf_counter()
             exit_code = self._invoke_script("execute", code)
             return self._collect_result(exit_code, start)
@@ -292,6 +349,7 @@ class Sandbox:
         JSON array of positional arguments (e.g. "[2, 40]") or empty."""
         with self._lock:
             self._check_usable()
+            self._import_sync()
             start = time.perf_counter()
             name_data = name.encode("utf-8")
             args_data = args_json.encode("utf-8")
@@ -340,6 +398,7 @@ class Sandbox:
         """Execute bytecode previously produced by compile()."""
         with self._lock:
             self._check_usable()
+            self._import_sync()
             start = time.perf_counter()
             ptr = self._alloc(len(bytecode))
             try:
@@ -392,10 +451,19 @@ class Sandbox:
         stdout = self._read_stream("stdout")
         stderr = self._read_stream("stderr")
         self._clear_stdin_locked()
+        self._export_sync()
         duration_ms = (time.perf_counter() - start) * 1000
         return ExecutionResult(
             stdout=stdout, stderr=stderr, exit_code=exit_code, duration_ms=duration_ms
         )
+
+    def _import_sync(self) -> None:
+        for user_dir, backing_dir in self._sync_pairs:
+            sync_dirs(user_dir, backing_dir)
+
+    def _export_sync(self) -> None:
+        for user_dir, backing_dir in self._sync_pairs:
+            sync_dirs(backing_dir, user_dir)
 
     def _invoke_script(self, fn_name: str, code: str) -> int:
         data = code.encode("utf-8")
@@ -539,13 +607,13 @@ class Sandbox:
 
     @property
     def work_dir(self) -> Path:
-        """Host path mounted at /work inside the guest."""
-        return self._work_dir
+        """Host path shared with the guest at /work."""
+        return self._user_work if self._user_work is not None else self._backing_work
 
     @property
     def lib_dir(self) -> Path:
-        """Host path mounted at /lib inside the guest (on the guest's sys.path)."""
-        return self._lib_dir
+        """Host path shared with the guest at /lib (on the guest's sys.path)."""
+        return self._user_lib if self._user_lib is not None else self._backing_lib
 
     @property
     def guest_work_path(self) -> str:

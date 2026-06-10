@@ -66,6 +66,14 @@ preopen table is baked in at build time):
 additional mount points are not supported — share files through `/work`, and
 make extra pure-Python libraries importable by placing them in `lib_dir`.
 
+The guest's mount table is frozen into the runtime image at build time, so
+the sandbox probes it once per process and adapts. Depending on the image,
+user-supplied `work_dir`/`lib_dir` are either mounted directly or emulated
+by syncing files (hardlinks where possible) into and out of the guest around
+each execution — semantics are the same either way: files present before an
+execution are visible to the guest, and guest-created files appear on the
+host after it.
+
 ## Stdin
 
 ```python

@@ -89,12 +89,16 @@ just python-test    # staged resources + venv + pytest
 just python-wheel   # build dist/boomslang-<version>-py3-none-any.whl
 ```
 
-Key constraint: the guest libc's preopen table is baked in at Wizer time and
-binds host preopens **positionally** — fd 3 = `/usr` (runtime, read-only),
-fd 4 = `/lib`, fd 5 = `/work`, fd 6 = `/tmp`. The guest-path strings passed
-to the WASI config are ignored by the guest, and arbitrary extra mount points
-are unreachable. Any host (Java, Rust, or Python) must register mounts in
-this order.
+Key constraint: the guest libc's preopen table is baked into the Wizer
+snapshot and binds host preopens **positionally** — the guest-path strings
+passed to the WASI config are ignored, and mount points beyond the baked
+table are unreachable. The baked table differs across runtime builds
+(wasi-libc version dependent): current builds bake a single `/` entry (the
+host provides one root dir shaped like the guest fs — same contract as the
+Java host's rootPath), while older builds baked one entry per wizer-fs
+subdir (`/usr`, `/lib`, `/work`, `/tmp`) in image-specific order. The Python
+host probes the layout at runtime (`boomslang-py/src/boomslang/_layout.py`)
+instead of assuming either.
 
 ## Project Structure
 

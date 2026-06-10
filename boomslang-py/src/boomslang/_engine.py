@@ -3,6 +3,7 @@ import threading
 import wasmtime
 
 from ._assets import wasm_path
+from ._layout import Layout, probe_layout
 
 EPOCH_TICK_SECONDS = 0.01
 
@@ -35,6 +36,18 @@ class _Runtime:
         self.module = wasmtime.Module.from_file(self.engine, str(wasm_path()))
         self._ticker_lock = threading.Lock()
         self._ticker_started = False
+        self._layout: Layout | None = None
+        self._layout_lock = threading.Lock()
+
+    def layout(self) -> Layout:
+        """The guest filesystem layout baked into this runtime image,
+        discovered once per process via a throwaway probe instance."""
+        with self._layout_lock:
+            if self._layout is None:
+                self._layout = probe_layout(
+                    self.engine, self.module, DISARMED_DEADLINE_TICKS
+                )
+            return self._layout
 
     def ensure_ticker(self) -> None:
         with self._ticker_lock:
