@@ -22,6 +22,7 @@ A *host* is the outside process embedding `boomslang.wasm`: it supplies the WASM
 | Host language | Status | Runtime | Host adapter support |
 | --- | --- | --- | --- |
 | Java | Primary host | Chicory | Stock runtime API, `HostBridge`, generated Java adapters |
+| Python | Supported host package | Wasmtime (wasmtime-py) | [`boomslang-py` wheel](guide/python-host.md) with the `Sandbox` API and host functions |
 | Rust | Supported example host | Wasmtime | Generated Rust adapters; see `examples/rust-host/` |
 | Other languages | ABI target | Any WASM runtime with compatible imports | Implement the ABI JSON contract directly |
 
