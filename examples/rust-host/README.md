@@ -25,13 +25,7 @@ cargo run --manifest-path boomslang-hostgen/Cargo.toml -- \
 
 ## What The ABI Drives
 
-The ABI JSON decides the Wasmtime import signatures and memory lowering:
-
-- `string` and `bytes` params lower to `i32 ptr, i32 len`.
-- `int` params lower to `i32`.
-- `float` params lower to `f64`.
-- `string` and `bytes` returns use caller-provided `i32 result_ptr, i32 result_max_len` params and return the written byte length as `i32`.
-- async functions return an `i64` host token.
+The ABI JSON decides the Wasmtime import signatures and memory lowering — pointer/length pairs for strings and bytes, caller-provided result buffers for returns, `i64` tokens for async. The full rules are specified in the [extension ABI reference](https://github.hubspot.com/boomslang/reference/extension-abi.html).
 
 The generated host binding is typed:
 
