@@ -78,9 +78,32 @@ mvn compile -pl core
 mvn test -pl tests
 ```
 
+### Python package (boomslang-py)
+
+`boomslang-py/` is a Python host: a wheel bundling the WASM runtime, executed
+with wasmtime-py. Published as a GitHub release asset by CI (not PyPI).
+
+```bash
+just python-stage   # copy runtime resources + overlay into the package (needs fetch-main-wasm or resources first)
+just python-test    # staged resources + venv + pytest
+just python-wheel   # build dist/boomslang-<version>-py3-none-any.whl
+```
+
+Key constraint: the guest libc's preopen table is baked into the Wizer
+snapshot and binds host preopens **positionally** — the guest-path strings
+passed to the WASI config are ignored, and mount points beyond the baked
+table are unreachable. The baked table differs across runtime builds
+(wasi-libc version dependent): current builds bake a single `/` entry (the
+host provides one root dir shaped like the guest fs — same contract as the
+Java host's rootPath), while older builds baked one entry per wizer-fs
+subdir (`/usr`, `/lib`, `/work`, `/tmp`) in image-specific order. The Python
+host probes the layout at runtime (`boomslang-py/src/boomslang/_layout.py`)
+instead of assuming either.
+
 ## Project Structure
 
 - `core/` — Java runtime (PythonExecutorFactory, PythonInstance, CopyOnWriteMemory)
+- `boomslang-py/` — Python host package (Sandbox API, wheel bundling the WASM runtime)
 - `python-host/` — Rust WASM host (PyO3 wrapper around CPython)
 - `cpython/` — All native WASM build infrastructure:
   - `cpython-wasi/` — CPython → WASM build pipeline

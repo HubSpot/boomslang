@@ -22,10 +22,25 @@ The extension ABI is not tied to Java. An extension crate declares its contract 
 | Host language | Status | Runtime | Host adapter support |
 | --- | --- | --- | --- |
 | Java | Primary host | Chicory | Stock runtime API, `HostBridge`, generated Java adapters with `--java-out` or `emit_java_host(...)` |
+| Python | Supported host package | Wasmtime (wasmtime-py) | `boomslang-py/` wheel bundling the runtime; `Sandbox` API with host functions; see `boomslang-py/README.md` |
 | Rust | Supported example host | Wasmtime | Generated Rust adapters with `--rust-host-out` or `emit_rust_host(...)`; see `examples/rust-host/` |
 | Other languages | ABI target only | Any WASM runtime with compatible imports | Use the ABI JSON to implement the same pointer/length lowering and return-buffer protocol |
 
 The Maven artifact is still Java-first and includes the bundled runtime. Rust hosting is there for embedders that want to run the same Boomslang WASM from a Rust process.
+
+## Python host usage
+
+The `boomslang-py/` package lets regular Python programs run sandboxed Python: it bundles the same WASM runtime and executes it with wasmtime. Wheels are attached to GitHub releases (not PyPI).
+
+```python
+from boomslang import Sandbox
+
+with Sandbox() as sandbox:
+    result = sandbox.execute("print('hello from the sandbox')")
+    print(result.stdout)
+```
+
+See `boomslang-py/README.md` for resource limits, host functions, and the guest filesystem layout. Local build: `just fetch-main-wasm && just python-test`; wheel: `just python-wheel`.
 
 ## Java host usage
 
@@ -274,6 +289,8 @@ Common local loops:
 just fetch-main-wasm  # download latest main runtime resources from GitHub release assets
 just build            # package with AOT, skips tests
 just test             # tests module
+just python-test      # Python package test suite (stages runtime resources first)
+just python-wheel     # build the Python wheel
 mvn compile -pl core
 mvn test -pl tests
 ```
@@ -325,6 +342,7 @@ just test
 ## Repo map
 
 - `core/`: Java runtime API and bundled Python resources
+- `boomslang-py/`: Python host package (wheel bundling the WASM runtime)
 - `tests/`: integration tests
 - `benchmarks/`: JMH benchmarks
 - `python-host/`: stock Rust WASM host

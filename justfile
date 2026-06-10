@@ -127,6 +127,32 @@ test:
     ./mill test
 
 # ============================================================
+# Python package (boomslang-py)
+# ============================================================
+
+# Stage runtime resources (WASM + stdlib) into the Python package
+python-stage:
+    ./scripts/stage-python-runtime.sh
+
+# Run the Python package test suite against staged runtime resources
+python-test: python-stage
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd boomslang-py
+    if command -v uv >/dev/null 2>&1; then
+        uv venv .venv --allow-existing
+        uv pip install --python .venv/bin/python -q -e '.[dev]'
+    else
+        python3 -m venv .venv
+        .venv/bin/pip install -q -e '.[dev]'
+    fi
+    .venv/bin/pytest
+
+# Build the Python wheel (bundles WASM + stdlib)
+python-wheel: python-stage
+    ./scripts/build-python-wheel.sh
+
+# ============================================================
 # Individual WASM step shortcuts
 # ============================================================
 
