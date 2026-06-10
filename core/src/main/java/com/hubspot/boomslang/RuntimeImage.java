@@ -14,6 +14,13 @@ import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * The shared, immutable runtime state behind a {@link PythonExecutorFactory}: the parsed WASM
+ * module, the optional AOT machine factory, and the "golden" memory snapshot captured from a single
+ * instantiation of the pre-initialized (Wizer) interpreter. Every {@link PythonInstance} reads from
+ * this snapshot through a {@link CopyOnWriteMemory}, so one image can back many concurrent
+ * instances without copying.
+ */
 public class RuntimeImage {
 
   private static final Logger LOG = LoggerFactory.getLogger(RuntimeImage.class);
@@ -38,6 +45,18 @@ public class RuntimeImage {
     this.goldenMemoryPages = goldenMemoryPages;
   }
 
+  /**
+   * Instantiates the module once against the extracted Python tree and captures its memory as the
+   * golden snapshot. This is expensive and is normally done once, by {@link
+   * PythonExecutorFactory.Builder#build()}.
+   *
+   * @param module the parsed Python runtime WASM module
+   * @param machineFactory AOT machine factory, or null to use the interpreter
+   * @param extractedPythonPath host directory containing the extracted Python runtime tree
+   * @param pythonHome guest-visible {@code PYTHONHOME}
+   * @param pythonPath guest-visible {@code PYTHONPATH}, or null
+   * @param hostFunctions host functions the module imports (e.g. from {@link HostBridge})
+   */
   public static RuntimeImage create(
     WasmModule module,
     Function<Instance, Machine> machineFactory,
@@ -98,22 +117,30 @@ public class RuntimeImage {
     );
   }
 
+  /** Returns the parsed Python runtime WASM module. */
   public WasmModule getModule() {
     return module;
   }
 
+  /** Returns the AOT machine factory, or null when running interpreted. */
   public Function<Instance, Machine> getMachineFactory() {
     return machineFactory;
   }
 
+  /** Returns the host directory containing the extracted Python runtime tree. */
   public Path getExtractedPythonPath() {
     return extractedPythonPath;
   }
 
+  /**
+   * Returns the golden memory snapshot. The returned array is shared, not copied — treat it as
+   * read-only.
+   */
   public byte[] getGoldenMemory() {
     return goldenMemory;
   }
 
+  /** Returns the size of the golden snapshot in 64 KiB WASM pages. */
   public int getGoldenMemoryPages() {
     return goldenMemoryPages;
   }

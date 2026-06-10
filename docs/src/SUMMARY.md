@@ -24,6 +24,7 @@
 - [Extension ABI JSON & Lowering](reference/extension-abi.md)
 - [Async Wire Protocol](reference/async-protocol.md)
 - [hostgen DSL Reference](reference/hostgen-dsl.md)
+- [API Docs](reference/api-docs.md)
 - [Glossary](reference/glossary.md)
 
 # Contributing

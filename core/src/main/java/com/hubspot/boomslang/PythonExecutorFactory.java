@@ -40,6 +40,22 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Entry point for executing Python from Java. The factory extracts the bundled Python runtime,
+ * loads the WASM module, and pins a pre-initialized (Wizer) interpreter memory snapshot — the
+ * {@link RuntimeImage} — that all instances share. Create one factory per process and reuse it;
+ * construction is expensive, while {@link PythonInstance}s created from it are cheap, copy-on-write
+ * views of the snapshot that can be freely created and discarded.
+ *
+ * <p>Threading model: all WASM execution must run on the factory's dedicated thread pool via {@link
+ * #runOnWasmThread(Callable)} (the pool threads have the large stack the interpreter needs). A
+ * {@link PythonInstance} itself is not thread-safe and must be confined to one task at a time.
+ *
+ * <p>The bundled runtime's WASM module unconditionally imports the {@code boomslang.call} and
+ * {@code boomslang.log} host functions, so a {@link HostBridge} (or an equivalent extension) must
+ * be registered via {@link Builder#addExtension(BoomslangExtension)} — even with no handlers — or
+ * instantiation fails with unresolved imports.
+ */
 public class PythonExecutorFactory {
 
   private static final Logger LOG = LoggerFactory.getLogger(PythonExecutorFactory.class);
@@ -104,10 +120,17 @@ public class PythonExecutorFactory {
     );
   }
 
+  /** Returns a new {@link Builder} for configuring a factory. */
   public static Builder builder() {
     return new Builder();
   }
 
+  /**
+   * Creates a new Python instance backed by the shared snapshot, with {@link
+   * ResourceLimits#defaults()}.
+   *
+   * @param rootPath host directory mounted as the guest's root filesystem ({@code /})
+   */
   public PythonInstance createInstance(Path rootPath) {
     return new PythonInstance(
       runtimeImage,
@@ -128,6 +151,12 @@ public class PythonExecutorFactory {
     );
   }
 
+  /**
+   * Creates a new Python instance backed by the shared snapshot, with the given limits.
+   *
+   * @param rootPath host directory mounted as the guest's root filesystem ({@code /})
+   * @param limits per-instance memory and output limits
+   */
   public PythonInstance createInstance(Path rootPath, ResourceLimits limits) {
     return new PythonInstance(
       runtimeImage,
@@ -219,6 +248,13 @@ public class PythonExecutorFactory {
     List<?> returnTypes
   ) {}
 
+  /**
+   * Runs a task on the factory's dedicated WASM thread pool and blocks until it completes. All
+   * calls into a {@link PythonInstance} should go through one of the {@code runOnWasmThread}
+   * overloads; the pool threads are sized with the large stack the interpreter requires.
+   *
+   * @return the task's result
+   */
   public <T> T runOnWasmThread(Callable<T> task) {
     Future<T> future = executorService.submit(task);
     try {
@@ -235,10 +271,33 @@ public class PythonExecutorFactory {
     }
   }
 
+  /**
+   * Runs a task on the WASM thread pool with a timeout. Equivalent to {@link
+   * #runOnWasmThread(Callable, Duration, PythonInstance)} with no instance to poison; prefer that
+   * overload when the task uses a {@link PythonInstance}, so the instance is marked unusable on
+   * timeout.
+   *
+   * @throws PythonInstance.PythonTimeoutException if the task does not complete within the timeout
+   */
   public <T> T runOnWasmThread(Callable<T> task, Duration timeout) {
     return runOnWasmThread(task, timeout, null);
   }
 
+  /**
+   * Runs a task on the WASM thread pool with a timeout, poisoning the given instance if the timeout
+   * elapses. This is the enforced execution timeout (the {@link ResourceLimits#executionTimeout()}
+   * value is currently not enforced).
+   *
+   * <p>On timeout the task's thread is interrupted and {@code instanceToPoison} is {@link
+   * PythonInstance#poison() poisoned}, but interruption is only observed at host-function
+   * boundaries (e.g. {@link HostBridge} call/log handlers). CPU-bound Python that makes no host
+   * calls keeps running on the pool thread past the timeout. Prefer discarding a poisoned instance
+   * over calling {@link PythonInstance#reset()}, because the abandoned execution may still be
+   * running against that instance's memory.
+   *
+   * @param instanceToPoison instance to mark unusable on timeout or interruption; may be null
+   * @throws PythonInstance.PythonTimeoutException if the task does not complete within the timeout
+   */
   public <T> T runOnWasmThread(
     Callable<T> task,
     Duration timeout,
@@ -271,14 +330,23 @@ public class PythonExecutorFactory {
     }
   }
 
+  /**
+   * Returns whether an AOT-compiled machine is in use. When false, the WASM module runs in
+   * Chicory's interpreter, which is significantly slower.
+   */
   public boolean isAotAvailable() {
     return aotAvailable;
   }
 
+  /** Returns the host-side path of the extracted {@code site-packages} directory. */
   public Path getSitePackagesPath() {
     return extractedPythonPath.resolve(PYTHON_LIB_DIR).resolve("site-packages");
   }
 
+  /**
+   * Returns the shared {@link RuntimeImage} (WASM module plus golden memory snapshot) that backs
+   * all instances created by this factory.
+   */
   public RuntimeImage getRuntimeImage() {
     return runtimeImage;
   }
@@ -546,8 +614,8 @@ public class PythonExecutorFactory {
   /**
    * Configures a Python executor factory. Filesystem paths on this builder are host-side setup
    * paths used while creating the runtime image; guest-visible paths are provided by the root path
-   * passed to {@link PythonExecutorFactory#createInstance(Path)} and by Python's configured home and
-   * path values.
+   * passed to {@link PythonExecutorFactory#createInstance(Path)} and by Python's configured home
+   * and path values.
    */
   public static class Builder {
 
@@ -564,10 +632,10 @@ public class PythonExecutorFactory {
     private Builder() {}
 
     /**
-     * Sets the classpath resource for the Python WASM binary. The default is
-     * {@code python/bin/boomslang.wasm}. Resources under the {@code python/} prefix are extracted
-     * relative to {@link #withStdlibPath(Path)}, so {@code /python/bin/boomslang.wasm} is written to
-     * {@code <stdlibPath>/bin/boomslang.wasm}.
+     * Sets the classpath resource for the Python WASM binary. The default is {@code
+     * python/bin/boomslang.wasm}. Resources under the {@code python/} prefix are extracted relative
+     * to {@link #withStdlibPath(Path)}, so {@code /python/bin/boomslang.wasm} is written to {@code
+     * <stdlibPath>/bin/boomslang.wasm}.
      */
     public Builder withWasmResource(String resourcePath) {
       this.wasmResource = resourcePath;
@@ -586,11 +654,11 @@ public class PythonExecutorFactory {
     /**
      * Sets the host-side extraction root for Python resources. This is not the guest-visible stdlib
      * directory. Boomslang copies resources under this root while preserving their layout after the
-     * {@code python/} resource prefix; for example, the CPython stdlib is extracted to
-     * {@code <stdlibPath>/usr/local/lib/python3.14}. The caller must make that extracted tree
-     * visible to the WASM instance at the paths expected by {@link #withPythonHome(String)} and
-     * {@link #withPythonPath(String)}, usually by passing an appropriate root filesystem to
-     * {@link PythonExecutorFactory#createInstance(Path)}.
+     * {@code python/} resource prefix; for example, the CPython stdlib is extracted to {@code
+     * <stdlibPath>/usr/local/lib/python3.14}. The caller must make that extracted tree visible to
+     * the WASM instance at the paths expected by {@link #withPythonHome(String)} and {@link
+     * #withPythonPath(String)}, usually by passing an appropriate root filesystem to {@link
+     * PythonExecutorFactory#createInstance(Path)}.
      */
     public Builder withStdlibPath(Path stdlibPath) {
       this.stdlibPath = stdlibPath;
@@ -622,7 +690,11 @@ public class PythonExecutorFactory {
       return this;
     }
 
-    /** Adds all host functions from a named boomslang extension. */
+    /**
+     * Adds all host functions from a named boomslang extension. The bundled runtime requires a
+     * {@link HostBridge} extension (built via {@code HostBridge.builder().buildExtension()}) to
+     * satisfy its {@code boomslang.call} and {@code boomslang.log} imports.
+     */
     public Builder addExtension(BoomslangExtension extension) {
       return addExtension(() -> extension);
     }
@@ -654,6 +726,12 @@ public class PythonExecutorFactory {
       return this;
     }
 
+    /**
+     * Builds the factory: extracts Python resources, loads the WASM module, instantiates it once,
+     * and captures the golden memory snapshot shared by all instances. This is expensive; do it
+     * once per process. Fails if the module has unresolved imports — with the bundled runtime,
+     * register a {@link HostBridge} extension via {@link #addExtension(BoomslangExtension)} first.
+     */
     public PythonExecutorFactory build() {
       return new PythonExecutorFactory(this);
     }
