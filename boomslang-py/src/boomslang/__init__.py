@@ -12,6 +12,7 @@ Quickstart:
 from ._version import __version__
 from .errors import (
     BoomslangError,
+    PythonCompilationError,
     PythonExecutionError,
     PythonTimeoutError,
     RuntimeAssetsError,
@@ -25,6 +26,7 @@ from .sandbox import Sandbox
 __all__ = [
     "BoomslangError",
     "ExecutionResult",
+    "PythonCompilationError",
     "PythonExecutionError",
     "PythonTimeoutError",
     "ResourceLimits",

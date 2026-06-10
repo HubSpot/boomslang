@@ -79,3 +79,56 @@ def test_custom_on_log():
     with Sandbox(on_log=lambda level, message: seen.append((level, message))) as sandbox:
         sandbox.execute("from boomslang_host import log\nlog(3, 'warn msg')")
     assert seen == [(3, "warn msg")]
+
+
+def test_large_host_function_result():
+    # Larger than the guest bridge's fixed 1 MiB native buffer — fetched back
+    # through the chunked __result_pending__/__result_chunk__ protocol.
+    payload = "x" * (3 * 1024 * 1024)
+    with Sandbox(host_functions={"big": lambda args: payload}) as sandbox:
+        result = sandbox.execute(
+            "import json\n"
+            "from boomslang_host import call\n"
+            "data = json.loads(call('big', '{}'))\n"
+            "print(len(data), data[0], data[-1])"
+        )
+        assert result.stdout == f"{len(payload)} x x\n", result.stderr
+
+
+def test_large_async_host_function_result():
+    payload = "y" * (2 * 1024 * 1024)
+    with Sandbox(async_host_functions={"big": lambda args: payload}) as sandbox:
+        result = sandbox.execute(
+            "import asyncio, json\n"
+            "from boomslang_host.asyncio import async_call\n"
+            "async def main():\n"
+            "    return json.loads(await async_call('big', '{}'))\n"
+            "data = asyncio.run(main())\n"
+            "print(len(data), data[0])"
+        )
+        assert result.stdout == f"{len(payload)} y\n", result.stderr
+
+
+def test_error_after_large_result_still_raises():
+    # A handler error must not be masked by a stale parked result.
+    payload = "z" * (2 * 1024 * 1024)
+    calls = {"n": 0}
+
+    def flaky(args):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise RuntimeError("second call fails")
+        return payload
+
+    with Sandbox(host_functions={"flaky": flaky}) as sandbox:
+        result = sandbox.execute(
+            "import json\n"
+            "from boomslang_host import call\n"
+            "first = json.loads(call('flaky', '{}'))\n"
+            "print(len(first))\n"
+            "try:\n"
+            "    call('flaky', '{}')\n"
+            "except RuntimeError:\n"
+            "    print('second-failed')"
+        )
+        assert result.stdout == f"{len(payload)}\nsecond-failed\n", result.stderr

@@ -37,12 +37,9 @@ def define_boomslang_imports(linker: Linker, sandbox) -> None:
             result = sandbox._dispatch_host_call(name, args)
             data = result.encode("utf-8")
             if len(data) > result_max_len:
-                logger.error(
-                    "host function %r result is %d bytes, exceeding the guest's %d-byte buffer",
-                    name,
-                    len(data),
-                    result_max_len,
-                )
+                # Park the result so the guest-side call() wrapper can fetch
+                # it back in chunks via __result_pending__/__result_chunk__.
+                sandbox._park_oversized_result(data)
                 return CALL_RESULT_TOO_LARGE
             memory.write(caller, data, result_ptr)
             return len(data)

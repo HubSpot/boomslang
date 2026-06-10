@@ -66,13 +66,23 @@ preopen table is baked in at build time):
 additional mount points are not supported — share files through `/work`, and
 make extra pure-Python libraries importable by placing them in `lib_dir`.
 
-There is no stdin: `input()` raises `EOFError`.
+## Stdin
+
+```python
+sandbox.set_stdin("Ada\n")
+sandbox.execute("print('hello', input())")
+```
+
+Mirroring the Java host, stdin is consumed by the next execution and then
+cleared — call `set_stdin()` before each execution that needs it. Without it,
+`input()` raises `EOFError`.
 
 ## Host functions
 
 Guest code can call back into your process through the bundled
-`boomslang_host` bridge. Arguments and results cross the boundary as JSON;
-results are capped at 1 MiB by the guest-side buffer.
+`boomslang_host` bridge. Arguments and results cross the boundary as JSON.
+Results larger than the bridge's native 1 MiB buffer are transparently
+fetched back in chunks, so there is no practical size cap.
 
 ```python
 sandbox = Sandbox()
@@ -93,6 +103,48 @@ For full control pass `call_handler=lambda name, args_json: ...` (raw JSON
 strings in and out), and `on_log=lambda level, message: ...` to receive
 `boomslang_host.log()` output (default: forwarded to the `boomslang.guest`
 logger).
+
+### Async host functions
+
+Async handlers run on a host thread pool, so guest coroutines can overlap
+slow host work (I/O, RPCs) via the bundled `boomslang_host.asyncio` event
+loop (the same wire protocol as the Java `AsyncHostRegistry`):
+
+```python
+sandbox = Sandbox()
+
+@sandbox.async_host_function("fetch")
+def fetch(args):                       # runs on a host worker thread
+    return {"id": args["id"], "name": "Ada"}
+
+result = sandbox.execute("""
+import asyncio, json
+from boomslang_host.asyncio import async_call
+
+async def main():
+    a, b = await asyncio.gather(
+        async_call("fetch", json.dumps({"id": 1})),
+        async_call("fetch", json.dumps({"id": 2})),
+    )
+    print(json.loads(a)["name"], json.loads(b)["name"])
+
+asyncio.run(main())
+""")
+```
+
+The execute timeout still applies while the guest is awaiting.
+
+## Bytecode and function calls
+
+`compile()` produces bytecode you can cache and re-run (also in other
+sandboxes), skipping repeated parsing; `execute_function()` calls a function
+defined in the guest's `__main__` with a JSON array of positional arguments:
+
+```python
+bytecode = sandbox.compile("def add(a, b):\n    print(a + b)")
+sandbox.load_bytecode(bytecode)
+sandbox.execute_function("add", "[2, 40]")   # prints 42
+```
 
 ## Performance notes
 

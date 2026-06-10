@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import os
@@ -12,9 +13,11 @@ import wasmtime
 from wasmtime import DirPerms, FilePerms, Linker, Store, WasiConfig
 
 from ._assets import usr_host_dir
+from ._async import AsyncHostRegistry
 from ._engine import DISARMED_DEADLINE_TICKS, runtime
 from ._trampolines import define_boomslang_imports
 from .errors import (
+    PythonCompilationError,
     PythonExecutionError,
     PythonTimeoutError,
     SandboxClosedError,
@@ -31,10 +34,22 @@ HostFunction = Callable[[Any], Any]
 
 GUEST_WORK_PATH = "/work"
 
+MAX_BYTECODE_SIZE = 10 * 1024 * 1024
+
+# Reserved control names for fetching host-call results larger than the
+# guest bridge's fixed 1 MiB buffer (see _GUEST_BOOTSTRAP below).
+_RESULT_PENDING = "__result_pending__"
+_RESULT_CHUNK = "__result_chunk__"
+# Base64 chunk size; must stay comfortably under the guest's 1 MiB buffer.
+_RESULT_CHUNK_SIZE = 768 * 1024
+
 _EXPORT_NAMES = (
     "alloc",
     "dealloc",
     "execute",
+    "compile_source",
+    "load_bytecode",
+    "execute_function",
     "reset_state",
     "get_stdout_len",
     "get_stderr_len",
@@ -44,6 +59,60 @@ _EXPORT_NAMES = (
 )
 
 _LOG_LEVELS = {0: logging.DEBUG, 1: logging.DEBUG, 2: logging.INFO, 3: logging.WARNING}
+
+# Wraps boomslang_host.call so results larger than the guest bridge's fixed
+# 1 MiB native buffer are fetched in base64 chunks through the reserved
+# __result_pending__/__result_chunk__ control calls. The wrapper is installed
+# by monkeypatching because the prewarmed boomslang_host module (and the
+# `call` reference captured by boomslang_host.asyncio) is frozen into the
+# Wizer memory snapshot — overriding the .py file on disk would not be seen.
+# Under hosts without the control calls (e.g. the Java host) the pending probe
+# fails and the original error is re-raised, preserving stock behavior.
+_GUEST_BOOTSTRAP = """
+def __boomslang_install():
+    import base64
+    import boomslang_host
+    if hasattr(boomslang_host, "_boomslang_native_call"):
+        return
+    native = boomslang_host.call
+    boomslang_host._boomslang_native_call = native
+
+    def patched(name, args=""):
+        try:
+            return native(name, args)
+        except RuntimeError:
+            try:
+                header = native("__result_pending__", "")
+            except RuntimeError:
+                header = ""
+            if not header:
+                raise
+            total = int(header)
+            parts = []
+            offset = 0
+            while offset < total:
+                part = native("__result_chunk__", str(offset))
+                if not part:
+                    raise RuntimeError("host call failed (truncated chunked result)")
+                parts.append(part)
+                offset += len(part)
+            return base64.b64decode("".join(parts)).decode("utf-8")
+
+    boomslang_host.call = patched
+    try:
+        import boomslang_host.asyncio
+        boomslang_host.asyncio.call = patched
+    except Exception:
+        pass
+
+
+__boomslang_install()
+del __boomslang_install
+"""
+
+_CLEAR_STDIN_SCRIPT = (
+    "import sys, io\nsys.stdin = io.TextIOWrapper(io.BytesIO(b''), encoding='utf-8')"
+)
 
 
 def _default_on_log(level: int, message: str) -> None:
@@ -63,7 +132,11 @@ class Sandbox:
         from boomslang_host import call, log
         call("my_function", '{"key": "value"}')   # JSON in, JSON out
 
-    Host-function results are capped at 1 MiB by the guest-side bridge buffer.
+    Async host functions are awaited through the bundled event loop:
+
+        import asyncio
+        from boomslang_host.asyncio import async_call
+        asyncio.run(async_call("my_async_function", '{"key": "value"}'))
 
     The guest filesystem layout is fixed by the runtime image (the libc
     preopen table is baked in at Wizer time, bound positionally to the host's
@@ -83,6 +156,7 @@ class Sandbox:
         work_dir: str | os.PathLike | None = None,
         lib_dir: str | os.PathLike | None = None,
         host_functions: Mapping[str, HostFunction] | None = None,
+        async_host_functions: Mapping[str, HostFunction] | None = None,
         call_handler: Callable[[str, str], str] | None = None,
         on_log: Callable[[int, str], None] | None = None,
         python_path: Sequence[str] = (GUEST_WORK_PATH,),
@@ -95,6 +169,12 @@ class Sandbox:
         self._lock = threading.RLock()
         self._closed = False
         self._poisoned = False
+        self._stdin_armed = False
+        self._deadline_at: float | None = None
+        self._parked_result: str | None = None
+        self._async_registry = AsyncHostRegistry(self._deadline_remaining)
+        for name, fn in (async_host_functions or {}).items():
+            self._register_async(name, fn)
 
         self._scratch = tempfile.TemporaryDirectory(prefix="boomslang-scratch-")
         (Path(self._scratch.name) / "tmp").mkdir()
@@ -152,19 +232,20 @@ class Sandbox:
         self._store = store
         self._memory = exports["memory"]
         self._fn = {name: exports[name] for name in _EXPORT_NAMES}
+        self._stdin_armed = False
 
-        self._bootstrap_python_path()
+        self._bootstrap()
 
-    def _bootstrap_python_path(self) -> None:
-        if not self._python_path:
-            return
-        script = "import sys"
-        for entry in self._python_path:
-            script += f"\nsys.path.insert(0, {entry!r})"
-        status = self._call_execute(script)
+    def _bootstrap(self) -> None:
+        script = _GUEST_BOOTSTRAP
+        if self._python_path:
+            script += "\nimport sys"
+            for entry in self._python_path:
+                script += f"\nsys.path.insert(0, {entry!r})"
+        status = self._invoke_script("execute", script)
         if status != 0:
             logger.warning(
-                "python_path injection failed with code %s: %s",
+                "sandbox bootstrap failed with code %s: %s",
                 status,
                 self._read_stream("stderr"),
             )
@@ -185,6 +266,7 @@ class Sandbox:
             self._fn = {}
             self._memory = None
             self._store = None
+            self._async_registry.close()
             self._scratch.cleanup()
             if self._managed_work is not None:
                 self._managed_work.cleanup()
@@ -202,40 +284,159 @@ class Sandbox:
         with self._lock:
             self._check_usable()
             start = time.perf_counter()
-            exit_code = self._call_execute(code)
-            stdout = self._read_stream("stdout")
-            stderr = self._read_stream("stderr")
-            duration_ms = (time.perf_counter() - start) * 1000
-            return ExecutionResult(
-                stdout=stdout, stderr=stderr, exit_code=exit_code, duration_ms=duration_ms
-            )
+            exit_code = self._invoke_script("execute", code)
+            return self._collect_result(exit_code, start)
 
-    def _call_execute(self, code: str) -> int:
+    def execute_function(self, name: str, args_json: str = "") -> ExecutionResult:
+        """Call a function defined in the guest's __main__. args_json must be a
+        JSON array of positional arguments (e.g. "[2, 40]") or empty."""
+        with self._lock:
+            self._check_usable()
+            start = time.perf_counter()
+            name_data = name.encode("utf-8")
+            args_data = args_json.encode("utf-8")
+            name_ptr = self._alloc(len(name_data))
+            args_ptr = self._alloc(len(args_data)) if args_data else 0
+            try:
+                self._memory.write(self._store, name_data, name_ptr)
+                if args_data:
+                    self._memory.write(self._store, args_data, args_ptr)
+                exit_code = self._invoke(
+                    "execute_function", name_ptr, len(name_data), args_ptr, len(args_data)
+                )
+            finally:
+                self._dealloc(name_ptr, len(name_data))
+                if args_ptr:
+                    self._dealloc(args_ptr, len(args_data))
+            return self._collect_result(exit_code, start)
+
+    def compile(self, code: str) -> bytes:
+        """Compile Python source to bytecode that can be re-run via load_bytecode()."""
+        with self._lock:
+            self._check_usable()
+            data = code.encode("utf-8")
+            source_ptr = self._alloc(len(data))
+            output_ptr = self._alloc(MAX_BYTECODE_SIZE)
+            try:
+                self._memory.write(self._store, data, source_ptr)
+                bytecode_len = self._invoke(
+                    "compile_source", source_ptr, len(data), output_ptr, MAX_BYTECODE_SIZE
+                )
+                if bytecode_len < 0:
+                    stderr = self._try_read_stderr()
+                    message = stderr or f"compilation failed with code {bytecode_len}"
+                    if bytecode_len == -3:
+                        message = f"compiled bytecode exceeds {MAX_BYTECODE_SIZE} bytes"
+                    raise PythonCompilationError(message)
+                data_out = self._memory.read(
+                    self._store, output_ptr, output_ptr + bytecode_len
+                )
+                return bytes(data_out)
+            finally:
+                self._dealloc(source_ptr, len(data))
+                self._dealloc(output_ptr, MAX_BYTECODE_SIZE)
+
+    def load_bytecode(self, bytecode: bytes) -> ExecutionResult:
+        """Execute bytecode previously produced by compile()."""
+        with self._lock:
+            self._check_usable()
+            start = time.perf_counter()
+            ptr = self._alloc(len(bytecode))
+            try:
+                self._memory.write(self._store, bytecode, ptr)
+                exit_code = self._invoke("load_bytecode", ptr, len(bytecode))
+            finally:
+                self._dealloc(ptr, len(bytecode))
+            return self._collect_result(exit_code, start)
+
+    # ------------------------------------------------------------------
+    # Stdin
+
+    def set_stdin(self, data: bytes | str) -> None:
+        """Provide stdin for the next execute()/execute_function()/load_bytecode()
+        call. Mirrors the Java host: stdin is cleared after each execution."""
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        encoded = base64.b64encode(data).decode("ascii")
+        script = (
+            "import sys, io, base64\n"
+            f"sys.stdin = io.TextIOWrapper(io.BytesIO(base64.b64decode('{encoded}')), "
+            "encoding='utf-8')"
+        )
+        with self._lock:
+            self._check_usable()
+            status = self._invoke_script("execute", script)
+            if status != 0:
+                raise PythonExecutionError(
+                    self._try_read_stderr() or "failed to set stdin"
+                )
+            self._stdin_armed = True
+
+    def clear_stdin(self) -> None:
+        with self._lock:
+            self._check_usable()
+            self._clear_stdin_locked()
+
+    def _clear_stdin_locked(self) -> None:
+        if not self._stdin_armed:
+            return
+        self._stdin_armed = False
+        status = self._invoke_script("execute", _CLEAR_STDIN_SCRIPT)
+        if status != 0:
+            logger.warning("failed to clear sandbox stdin: %s", self._try_read_stderr())
+
+    # ------------------------------------------------------------------
+    # Guest invocation plumbing
+
+    def _collect_result(self, exit_code: int, start: float) -> ExecutionResult:
+        stdout = self._read_stream("stdout")
+        stderr = self._read_stream("stderr")
+        self._clear_stdin_locked()
+        duration_ms = (time.perf_counter() - start) * 1000
+        return ExecutionResult(
+            stdout=stdout, stderr=stderr, exit_code=exit_code, duration_ms=duration_ms
+        )
+
+    def _invoke_script(self, fn_name: str, code: str) -> int:
         data = code.encode("utf-8")
         ptr = self._alloc(len(data))
         try:
             self._memory.write(self._store, data, ptr)
-            self._store.set_epoch_deadline(runtime().deadline_ticks(self._limits.timeout))
-            try:
-                return int(self._fn["execute"](self._store, ptr, len(data)))
-            except wasmtime.Trap as trap:
-                self._poisoned = True
-                self._disarm_deadline()
-                if trap.trap_code == wasmtime.TrapCode.INTERRUPT:
-                    raise PythonTimeoutError(
-                        f"execution exceeded the {self._limits.timeout}s timeout; "
-                        "the sandbox is poisoned until reset()"
-                    ) from trap
-                stderr = self._try_read_stderr()
-                message = stderr or trap.message
-                raise PythonExecutionError(message) from trap
-            finally:
-                self._disarm_deadline()
+            return self._invoke(fn_name, ptr, len(data))
         finally:
             self._dealloc(ptr, len(data))
 
+    def _invoke(self, fn_name: str, *args: int) -> int:
+        """Call a guest export with the execute deadline armed, mapping traps."""
+        self._arm_deadline()
+        try:
+            return int(self._fn[fn_name](self._store, *args))
+        except wasmtime.Trap as trap:
+            self._poisoned = True
+            self._disarm_deadline()
+            if trap.trap_code == wasmtime.TrapCode.INTERRUPT:
+                raise PythonTimeoutError(
+                    f"execution exceeded the {self._limits.timeout}s timeout; "
+                    "the sandbox is poisoned until reset()"
+                ) from trap
+            stderr = self._try_read_stderr()
+            raise PythonExecutionError(stderr or trap.message) from trap
+        finally:
+            self._disarm_deadline()
+
+    def _arm_deadline(self) -> None:
+        self._deadline_at = time.monotonic() + self._limits.timeout
+        self._store.set_epoch_deadline(runtime().deadline_ticks(self._limits.timeout))
+
     def _disarm_deadline(self) -> None:
+        self._deadline_at = None
         self._store.set_epoch_deadline(DISARMED_DEADLINE_TICKS)
+
+    def _deadline_remaining(self) -> float | None:
+        deadline = self._deadline_at
+        if deadline is None:
+            return None
+        return deadline - time.monotonic()
 
     def _alloc(self, size: int) -> int:
         return int(self._fn["alloc"](self._store, size)) & 0xFFFFFFFF
@@ -282,7 +483,35 @@ class Sandbox:
 
         return decorator
 
+    def async_host_function(self, name: str):
+        """Decorator registering an async host function. The handler runs on a
+        host thread pool; guest code awaits it via
+        boomslang_host.asyncio.async_call(name, args_json) under asyncio.run()."""
+
+        def decorator(fn: HostFunction) -> HostFunction:
+            self._register_async(name, fn)
+            return fn
+
+        return decorator
+
+    def _register_async(self, name: str, fn: HostFunction) -> None:
+        def handler(payload: str) -> str:
+            args = json.loads(payload) if payload else None
+            return json.dumps(fn(args))
+
+        self._async_registry.register(name, handler)
+
     def _dispatch_host_call(self, name: str, args_json: str) -> str:
+        if name == _RESULT_PENDING:
+            parked = self._parked_result
+            return "" if parked is None else str(len(parked))
+        if name == _RESULT_CHUNK:
+            return self._read_parked_chunk(int(args_json.strip()))
+        if self._async_registry.is_control_call(name):
+            return self._async_registry.handle_control_call(name, args_json)
+
+        # A new user-level call invalidates any unfetched oversized result.
+        self._parked_result = None
         fn = self._host_functions.get(name)
         if fn is not None:
             args = json.loads(args_json) if args_json else None
@@ -290,6 +519,20 @@ class Sandbox:
         if self._call_handler is not None:
             return self._call_handler(name, args_json)
         raise KeyError(f"no host function registered for {name!r}")
+
+    def _park_oversized_result(self, data: bytes) -> None:
+        """Called by the trampoline when a result exceeds the guest's buffer;
+        the guest fetches it back in chunks via __result_pending__/__result_chunk__."""
+        self._parked_result = base64.b64encode(data).decode("ascii")
+
+    def _read_parked_chunk(self, offset: int) -> str:
+        parked = self._parked_result
+        if parked is None:
+            return ""
+        chunk = parked[offset : offset + _RESULT_CHUNK_SIZE]
+        if offset + _RESULT_CHUNK_SIZE >= len(parked):
+            self._parked_result = None
+        return chunk
 
     # ------------------------------------------------------------------
     # Introspection

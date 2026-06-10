@@ -14,6 +14,10 @@ class PythonExecutionError(BoomslangError):
     """
 
 
+class PythonCompilationError(BoomslangError):
+    """compile() failed — Python syntax error or oversized bytecode."""
+
+
 class PythonTimeoutError(BoomslangError):
     """Guest execution exceeded ResourceLimits.timeout. The sandbox is poisoned
     until reset() is called."""
