@@ -1,0 +1,4 @@
+# The Python wheel is built and published by GitHub Actions (see
+# .github/workflows/build.yml), not Blazar. Without this, Blazar auto-detects
+# pyproject.toml as a Python module and fails to build it.
+disabled: true
