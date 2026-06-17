@@ -513,7 +513,8 @@ public class PythonExecutorFactory {
 
     private final List<PythonLibrary> libraries = new ArrayList<>();
     private final List<HostFunction> hostFunctions = new ArrayList<>();
-    private final List<Supplier<BoomslangExtension>> extensionFactories = new ArrayList<>();
+    private final List<Supplier<BoomslangExtension>> extensionFactories =
+      new ArrayList<>();
     private String wasmResource = DEFAULT_WASM_RESOURCE;
     private Function<Instance, Machine> machineFactory;
     private Path stdlibPath;
