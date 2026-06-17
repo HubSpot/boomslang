@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,7 +57,9 @@ public class PythonExecutorFactory {
   private final ExecutorService executorService;
   private final boolean aotAvailable;
   private final RuntimeImage runtimeImage;
-  private final HostFunction[] hostFunctions;
+  private final HostFunction[] factoryHostFunctions;
+  private final List<Supplier<BoomslangExtension>> extensionFactories;
+  private final List<HostFunctionSchema> initializationImportSchema;
   private final String pythonHome;
   private final String pythonPath;
 
@@ -69,7 +72,10 @@ public class PythonExecutorFactory {
       extractPythonResourcesToPath(stdlibPath, builder.wasmResource);
     this.module = loadWasmModule(builder.wasmResource);
     this.executorService = createWasmExecutorService();
-    this.hostFunctions = builder.hostFunctions.toArray(new HostFunction[0]);
+    this.factoryHostFunctions = builder.hostFunctions.toArray(new HostFunction[0]);
+    this.extensionFactories = List.copyOf(builder.extensionFactories);
+    HostFunction[] initializationHostFunctions = createHostFunctions();
+    this.initializationImportSchema = importSchema(initializationHostFunctions);
     this.pythonHome = builder.pythonHome;
     this.pythonPath = builder.pythonPath;
 
@@ -87,14 +93,14 @@ public class PythonExecutorFactory {
         extractedPythonPath,
         builder.pythonHome,
         builder.pythonPath,
-        hostFunctions
+        initializationHostFunctions
       );
 
     LOG.info(
       "PythonExecutorFactory initialized at: {}, custom libraries: {}, host functions: {}",
       extractedPythonPath,
       builder.libraries.size(),
-      hostFunctions.length
+      initializationHostFunctions.length
     );
   }
 
@@ -105,7 +111,7 @@ public class PythonExecutorFactory {
   public PythonInstance createInstance(Path rootPath) {
     return new PythonInstance(
       runtimeImage,
-      hostFunctions,
+      createValidatedHostFunctions(),
       rootPath,
       pythonHome,
       pythonPath
@@ -115,13 +121,63 @@ public class PythonExecutorFactory {
   public PythonInstance createInstance(Path rootPath, ResourceLimits limits) {
     return new PythonInstance(
       runtimeImage,
-      hostFunctions,
+      createValidatedHostFunctions(),
       rootPath,
       pythonHome,
       pythonPath,
       limits
     );
   }
+
+  private HostFunction[] createValidatedHostFunctions() {
+    HostFunction[] instanceHostFunctions = createHostFunctions();
+    List<HostFunctionSchema> instanceImportSchema = importSchema(instanceHostFunctions);
+    if (!initializationImportSchema.equals(instanceImportSchema)) {
+      throw new IllegalArgumentException(
+        "Instance host function imports do not match the runtime image initialization imports. " +
+        "Expected " +
+        initializationImportSchema +
+        " but got " +
+        instanceImportSchema
+      );
+    }
+    return instanceHostFunctions;
+  }
+
+  private HostFunction[] createHostFunctions() {
+    List<HostFunction> instanceHostFunctions = new ArrayList<>();
+    Collections.addAll(instanceHostFunctions, factoryHostFunctions);
+    for (Supplier<BoomslangExtension> extensionFactory : extensionFactories) {
+      BoomslangExtension extension = Objects.requireNonNull(
+        extensionFactory.get(),
+        "Extension factory returned null"
+      );
+      Collections.addAll(instanceHostFunctions, extension.hostFunctions());
+    }
+    return instanceHostFunctions.toArray(new HostFunction[0]);
+  }
+
+  private static List<HostFunctionSchema> importSchema(HostFunction[] hostFunctions) {
+    List<HostFunctionSchema> schema = new ArrayList<>(hostFunctions.length);
+    for (HostFunction hostFunction : hostFunctions) {
+      schema.add(
+        new HostFunctionSchema(
+          hostFunction.module(),
+          hostFunction.name(),
+          hostFunction.paramTypes(),
+          hostFunction.returnTypes()
+        )
+      );
+    }
+    return List.copyOf(schema);
+  }
+
+  private record HostFunctionSchema(
+    String module,
+    String name,
+    List<?> parameterTypes,
+    List<?> returnTypes
+  ) {}
 
   public <T> T runOnWasmThread(Callable<T> task) {
     Future<T> future = executorService.submit(task);
@@ -457,6 +513,7 @@ public class PythonExecutorFactory {
 
     private final List<PythonLibrary> libraries = new ArrayList<>();
     private final List<HostFunction> hostFunctions = new ArrayList<>();
+    private final List<Supplier<BoomslangExtension>> extensionFactories = new ArrayList<>();
     private String wasmResource = DEFAULT_WASM_RESOURCE;
     private Function<Instance, Machine> machineFactory;
     private Path stdlibPath;
@@ -526,7 +583,14 @@ public class PythonExecutorFactory {
 
     /** Adds all host functions from a named boomslang extension. */
     public Builder addExtension(BoomslangExtension extension) {
-      return addHostFunctions(extension.hostFunctions());
+      return addExtension(() -> extension);
+    }
+
+    public Builder addExtension(Supplier<BoomslangExtension> extensionFactory) {
+      this.extensionFactories.add(
+          Objects.requireNonNull(extensionFactory, "extensionFactory is required")
+        );
+      return this;
     }
 
     /** Installs an in-memory Python package into site-packages during factory creation. */
