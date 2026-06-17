@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class InstanceExtensionTest {
@@ -22,18 +21,23 @@ class InstanceExtensionTest {
   @Test
   void itUsesDifferentHandlersForConcurrentInstances() throws Exception {
     CountDownLatch bothHandlersStarted = new CountDownLatch(2);
-    AtomicInteger extensionNumber = new AtomicInteger();
     Path rootPath = SharedTestSetup.createRootPath();
     PythonExecutorFactory factory = PythonExecutorFactory
       .builder()
       .withStdlibPath(rootPath)
-      .addExtension(() ->
-        extension("instance-" + extensionNumber.getAndIncrement(), bothHandlersStarted)
-      )
+      .addExtension(() -> HostBridge.builder().buildExtension())
       .build();
 
-    CompletableFuture<PythonResult> firstResult = execute(factory, rootPath);
-    CompletableFuture<PythonResult> secondResult = execute(factory, rootPath);
+    CompletableFuture<PythonResult> firstResult = execute(
+      factory,
+      rootPath,
+      extension("first", bothHandlersStarted)
+    );
+    CompletableFuture<PythonResult> secondResult = execute(
+      factory,
+      rootPath,
+      extension("second", bothHandlersStarted)
+    );
 
     assertThat(
       List.of(
@@ -41,45 +45,43 @@ class InstanceExtensionTest {
         secondResult.get(10, TimeUnit.SECONDS).stdout().trim()
       )
     )
-      .containsExactlyInAnyOrder("instance-1", "instance-2");
+      .containsExactlyInAnyOrder("first", "second");
   }
 
   @Test
   void itRejectsInstanceExtensionsWithDifferentImports() {
-    AtomicInteger extensionNumber = new AtomicInteger();
     PythonExecutorFactory factory = PythonExecutorFactory
       .builder()
       .withStdlibPath(SharedTestSetup.createRootPath())
-      .addExtension(() -> {
-        if (extensionNumber.getAndIncrement() == 0) {
-          return HostBridge.builder().buildExtension();
-        }
-        return new BoomslangExtension() {
-          @Override
-          public String name() {
-            return "empty";
-          }
-
-          @Override
-          public HostFunction[] hostFunctions() {
-            return new HostFunction[0];
-          }
-        };
-      })
+      .addExtension(() -> HostBridge.builder().buildExtension())
       .build();
+    BoomslangExtension extension = new BoomslangExtension() {
+      @Override
+      public String name() {
+        return "empty";
+      }
 
-    assertThatThrownBy(() -> factory.createInstance(SharedTestSetup.createRootPath()))
+      @Override
+      public HostFunction[] hostFunctions() {
+        return new HostFunction[0];
+      }
+    };
+
+    assertThatThrownBy(() ->
+        factory.createInstance(SharedTestSetup.createRootPath(), extension)
+      )
       .isInstanceOf(IllegalArgumentException.class)
       .hasMessageContaining("do not match the runtime image initialization imports");
   }
 
   private static CompletableFuture<PythonResult> execute(
     PythonExecutorFactory factory,
-    Path rootPath
+    Path rootPath,
+    BoomslangExtension extension
   ) {
     return CompletableFuture.supplyAsync(() ->
       factory.runOnWasmThread(() -> {
-        PythonInstance instance = factory.createInstance(rootPath);
+        PythonInstance instance = factory.createInstance(rootPath, extension);
         return instance.execute(
           "from boomslang_host import call; print(call('instance', ''))"
         );

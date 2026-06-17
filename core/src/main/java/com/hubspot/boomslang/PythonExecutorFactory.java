@@ -118,6 +118,19 @@ public class PythonExecutorFactory {
     );
   }
 
+  public PythonInstance createInstance(
+    Path rootPath,
+    BoomslangExtension... extensions
+  ) {
+    return new PythonInstance(
+      runtimeImage,
+      createValidatedHostFunctions(extensions),
+      rootPath,
+      pythonHome,
+      pythonPath
+    );
+  }
+
   public PythonInstance createInstance(Path rootPath, ResourceLimits limits) {
     return new PythonInstance(
       runtimeImage,
@@ -129,8 +142,40 @@ public class PythonExecutorFactory {
     );
   }
 
+  public PythonInstance createInstance(
+    Path rootPath,
+    ResourceLimits limits,
+    BoomslangExtension... extensions
+  ) {
+    return new PythonInstance(
+      runtimeImage,
+      createValidatedHostFunctions(extensions),
+      rootPath,
+      pythonHome,
+      pythonPath,
+      limits
+    );
+  }
+
   private HostFunction[] createValidatedHostFunctions() {
-    HostFunction[] instanceHostFunctions = createHostFunctions();
+    return validateHostFunctions(createHostFunctions());
+  }
+
+  private HostFunction[] createValidatedHostFunctions(
+    BoomslangExtension[] extensions
+  ) {
+    List<HostFunction> instanceHostFunctions = new ArrayList<>();
+    Collections.addAll(instanceHostFunctions, factoryHostFunctions);
+    for (BoomslangExtension extension : extensions) {
+      Collections.addAll(
+        instanceHostFunctions,
+        Objects.requireNonNull(extension, "extension is required").hostFunctions()
+      );
+    }
+    return validateHostFunctions(instanceHostFunctions.toArray(new HostFunction[0]));
+  }
+
+  private HostFunction[] validateHostFunctions(HostFunction[] instanceHostFunctions) {
     List<HostFunctionSchema> instanceImportSchema = importSchema(instanceHostFunctions);
     if (!initializationImportSchema.equals(instanceImportSchema)) {
       throw new IllegalArgumentException(
