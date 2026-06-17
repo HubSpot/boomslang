@@ -118,10 +118,7 @@ public class PythonExecutorFactory {
     );
   }
 
-  public PythonInstance createInstance(
-    Path rootPath,
-    BoomslangExtension... extensions
-  ) {
+  public PythonInstance createInstance(Path rootPath, BoomslangExtension... extensions) {
     return new PythonInstance(
       runtimeImage,
       createValidatedHostFunctions(extensions),
@@ -161,9 +158,7 @@ public class PythonExecutorFactory {
     return validateHostFunctions(createHostFunctions());
   }
 
-  private HostFunction[] createValidatedHostFunctions(
-    BoomslangExtension[] extensions
-  ) {
+  private HostFunction[] createValidatedHostFunctions(BoomslangExtension[] extensions) {
     List<HostFunction> instanceHostFunctions = new ArrayList<>();
     Collections.addAll(instanceHostFunctions, factoryHostFunctions);
     for (BoomslangExtension extension : extensions) {
