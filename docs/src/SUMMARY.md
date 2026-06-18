@@ -20,4 +20,8 @@
 
 # Reference
 
+- [Base ABI Specification](reference/abi.md)
+- [Extension ABI JSON & Lowering](reference/extension-abi.md)
+- [Async Wire Protocol](reference/async-protocol.md)
+- [hostgen DSL Reference](reference/hostgen-dsl.md)
 - [Glossary](reference/glossary.md)
