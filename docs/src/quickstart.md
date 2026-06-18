@@ -2,6 +2,8 @@
 
 Run Python from Java in about five minutes. You need Java 21+ and Maven (or Gradle); nothing else — no Python install, no native libraries, no containers.
 
+(Embedding from Python instead? See the [Python host](guide/python-host.md) — the same runtime as a pip-installable wheel.)
+
 ## 1. Add the dependency
 
 Boomslang is published to Maven Central:

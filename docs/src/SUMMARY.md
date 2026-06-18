@@ -16,6 +16,7 @@
 - [Adding Python Modules & the Overlay](guide/python-modules.md)
 - [Supported Python Libraries](guide/supported-libraries.md)
 - [Custom Python Builds](guide/custom-python-builds.md)
+- [Python Host (boomslang-py)](guide/python-host.md)
 - [Embedding from Rust (and Other Hosts)](guide/other-hosts.md)
 
 # Reference

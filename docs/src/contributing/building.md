@@ -52,6 +52,16 @@ just build       # rebuild Java AOT classes
 just test
 ```
 
+**Python package** (`boomslang-py/` — see the [Python host guide](../guide/python-host.md)):
+
+```bash
+just python-stage   # copy runtime resources + overlay into the package (needs fetch-main-wasm or resources first)
+just python-test    # staged resources + venv + pytest
+just python-wheel   # build dist/boomslang-<version>-py3-none-any.whl
+```
+
+CI attaches the wheel to GitHub releases (not PyPI).
+
 **Docs:** `mdbook serve docs` (mdBook is in the Nix shell).
 
 ## Container engine selection

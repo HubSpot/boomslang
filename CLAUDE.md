@@ -1,6 +1,6 @@
 # boomslang
 
-Embed CPython 3.14 (WASI/WebAssembly) in any host runtime via a language-neutral ABI — Java (Chicory) is the primary host, Rust (Wasmtime) is supported, other WASM runtimes are ABI targets. Full docs: `docs/` (mdBook, published at https://github.hubspot.com/boomslang/). The build docs at `docs/src/contributing/building.md` are the source of truth; this file is the short version.
+Embed CPython 3.14 (WASI/WebAssembly) in any host runtime via a language-neutral ABI — Java (Chicory) is the primary host, Python (wasmtime-py wheel) and Rust (Wasmtime) are supported, other WASM runtimes are ABI targets. Full docs: `docs/` (mdBook, published at https://github.hubspot.com/boomslang/). The build docs at `docs/src/contributing/building.md` are the source of truth; this file is the short version.
 
 ## Build
 

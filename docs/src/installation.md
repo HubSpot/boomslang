@@ -44,6 +44,14 @@ If your WASM is not at the default classpath location, point the factory at it w
 
 This is the variant to use with a [custom Python build](https://github.com/HubSpot/boomslang/tree/main/examples/custom-python-build) — a runtime recompiled with your own typed extensions or extra native libraries.
 
+## Python wheel
+
+The [Python host package](guide/python-host.md) is distributed as a wheel attached to GitHub releases (not PyPI):
+
+```bash
+pip install https://github.com/HubSpot/boomslang/releases/download/<tag>/boomslang-<version>-py3-none-any.whl
+```
+
 ## Runtime assets outside Maven
 
 Every release also publishes raw runtime assets to [GitHub Releases](https://github.com/HubSpot/boomslang/releases): the `boomslang.wasm` binary, a `boomslang-runtime-*.tar.gz` with the Python resource tree, and sha256 checksums. Per-commit prerelease builds from `main` are published as `build-<sha>` releases. These are what non-Java hosts (or `no-python-runtime` consumers who package resources themselves) consume.

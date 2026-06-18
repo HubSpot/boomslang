@@ -5,6 +5,7 @@ The extension ABI is not tied to Java. An extension declares its contract in `bu
 | Host language | Status | Runtime | Host adapter support |
 | --- | --- | --- | --- |
 | Java | Primary host | Chicory | Stock runtime API, `HostBridge`, generated Java adapters |
+| Python | Supported host package | Wasmtime (wasmtime-py) | [`boomslang-py` wheel](python-host.md) with the `Sandbox` API |
 | Rust | Supported example host | Wasmtime | Generated Rust adapters; see below |
 | Other languages | ABI target | Any WASM runtime with compatible imports | Implement the ABI JSON contract directly |
 
