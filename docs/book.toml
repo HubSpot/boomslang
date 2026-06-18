@@ -1,0 +1,11 @@
+[book]
+title = "Boomslang"
+description = "Python, but Java: CPython 3.14 on the JVM via WebAssembly"
+authors = ["HubSpot"]
+language = "en"
+src = "src"
+
+[output.html]
+git-repository-url = "https://github.com/HubSpot/boomslang"
+edit-url-template = "https://github.com/HubSpot/boomslang/edit/main/docs/{path}"
+site-url = "/boomslang/"

@@ -93,6 +93,7 @@
               jdk
               pkgs.just
               pkgs.maven
+              pkgs.mdbook
               pkgs.pkg-config
               pkgs.rsync
               pkgs.rust-analyzer

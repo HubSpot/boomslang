@@ -55,3 +55,4 @@ cpython/lib/pip-packages/
 # Logs
 *.log
 *.bak
+docs/book/
