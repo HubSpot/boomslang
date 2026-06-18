@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 #[derive(Parser)]
 #[command(
     name = "boomslang-hostgen",
-    about = "Generate host function bindings from boomslang ABI JSON"
+    about = "Generate Java (Chicory) and/or Rust (Wasmtime) host bindings from a boomslang extension ABI JSON"
 )]
 struct Cli {
     #[arg(help = "Path to extension ABI JSON")]

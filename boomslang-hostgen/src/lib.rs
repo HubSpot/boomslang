@@ -1,3 +1,41 @@
+//! Code generator for typed boomslang host extensions.
+//!
+//! An extension declares host functions that Python code (running on CPython
+//! compiled to WASM) can call into the embedding Java or Rust host. The
+//! declaration lives in the extension crate's `build.rs`, written with the
+//! builder DSL in this crate: [`ExtensionSpec`] describes the extension and
+//! its [functions](FunctionSpec), and [`Build`] selects which artifacts to
+//! emit before [`Build::generate`] writes them out. The primary artifacts are
+//! a Rust guest module (PyO3 wrappers plus WASM imports, written to
+//! `OUT_DIR`) and an ABI JSON contract; the ABI JSON in turn drives host
+//! adapter generation — either via the `boomslang-hostgen` CLI or the
+//! [`generate_java`] / [`generate_rust_host`] functions — so hosts can be
+//! regenerated without rebuilding the guest.
+//!
+//! # Examples
+//!
+//! A typical `build.rs`:
+//!
+//! ```ignore
+//! use boomslang_hostgen::{Build, ExtensionSpec, Type};
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let ext = ExtensionSpec::new("myext")
+//!         .wasm_module("myext")
+//!         .prewarm(["myext_support"])
+//!         .function("do_thing", |f| {
+//!             f.param("input", Type::String).returns(Type::String)
+//!         });
+//!
+//!     Build::new(ext).emit().generate()
+//! }
+//! ```
+//!
+//! The extension crate then consumes the generated guest module with
+//! `include!(concat!(env!("OUT_DIR"), "/ext_myext.rs"));` and calls the
+//! included `register()` function to add the Python module to CPython's
+//! init table.
+
 use askama::Template;
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use serde::{Deserialize, Serialize};
@@ -12,57 +50,116 @@ fn default_abi_version() -> u32 {
     ABI_VERSION
 }
 
+/// The full extension contract: ABI version, extension metadata, and the
+/// list of host functions.
+///
+/// This is the (de)serialized form of the ABI JSON file. Build it with
+/// [`ExtensionSpec`] rather than constructing it by hand, or load one from
+/// disk with [`read_abi`]. Manifests are validated before any code is
+/// generated: the [`abi_version`](Manifest::abi_version) must exactly match
+/// the version this crate supports (currently `1`), every name must be a
+/// plain ASCII identifier that is not a Rust/Java keyword, function names
+/// must not collide with the reserved `__async_*` control names, and async
+/// functions must return [`Type::String`].
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Manifest {
+    /// ABI contract version. Generation fails unless this exactly matches
+    /// the version supported by this crate (currently `1`).
     #[serde(default = "default_abi_version")]
     pub abi_version: u32,
+    /// Extension-level metadata (name, WASM import module, prewarm list).
     pub extension: Extension,
+    /// Host functions exposed to Python.
     #[serde(default)]
     pub functions: Vec<Function>,
 }
 
+/// Extension-level metadata within a [`Manifest`].
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Extension {
+    /// Extension name; must be a valid ASCII identifier. Used to derive the
+    /// Python module name (`_<name>`), generated file names, and host class
+    /// names.
     pub name: String,
+    /// WASM import module the host functions are linked under. Defaults to
+    /// [`name`](Extension::name) when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wasm_module: Option<String>,
+    /// Python modules to import eagerly during Wizer pre-initialization.
     #[serde(default)]
     pub prewarm: Vec<String>,
 }
 
+/// A single host function exposed to Python.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Function {
+    /// Function name; must be a valid ASCII identifier and must not be one
+    /// of the reserved `__async_*` control names.
     pub name: String,
+    /// Typed parameters, in call order.
     #[serde(default)]
     pub params: Vec<Param>,
+    /// Return type, or `None` for a void function.
     #[serde(default)]
     pub returns: Option<Type>,
+    /// Whether the function is asynchronous. Async functions must currently
+    /// return [`Type::String`]; at the WASM level they return an `i64` token
+    /// that the guest resolves to an awaitable via `boomslang_host.asyncio`.
     #[serde(default)]
     pub r#async: bool,
 }
 
+/// A typed parameter of a [`Function`].
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Param {
+    /// Parameter name; must be a valid ASCII identifier.
     pub name: String,
+    /// Parameter type (serialized as `"type"` in ABI JSON).
     #[serde(rename = "type")]
     pub ty: Type,
 }
 
+/// Value types supported across the guest/host boundary.
+///
+/// Each variant has a fixed lowering to the WASM ABI. Buffer-typed
+/// ([`String`](Type::String)/[`Bytes`](Type::Bytes)) parameters are passed as
+/// an `i32` pointer plus `i32` length into guest linear memory. Buffer-typed
+/// returns use a caller-provided result buffer: the guest passes a result
+/// pointer and maximum length, and the host writes the payload and returns
+/// the written length as `i32` (negative values signal failure). Async
+/// functions instead return an `i64` token (see
+/// [`Function::r#async`](Function#structfield.async)).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Type {
+    /// UTF-8 string. Lowered to `i32` pointer + `i32` length as a parameter;
+    /// as a return value, written into the caller's result buffer with the
+    /// written length returned as `i32`.
     String,
+    /// 32-bit signed integer, lowered to `i32`.
     Int,
+    /// 64-bit float, lowered to `f64`.
     Float,
+    /// Raw byte buffer. Lowered to `i32` pointer + `i32` length as a
+    /// parameter; as a return value, written into the caller's result buffer
+    /// with the written length returned as `i32`.
     Bytes,
 }
 
+/// Builder for an extension [`Manifest`], used from `build.rs`.
+///
+/// Start with [`ExtensionSpec::new`], chain configuration calls, declare
+/// functions with [`function`](ExtensionSpec::function), and hand the result
+/// to [`Build::new`]. See the [crate-level example](crate).
 #[derive(Clone, Debug)]
 pub struct ExtensionSpec {
     manifest: Manifest,
 }
 
 impl ExtensionSpec {
+    /// Creates a spec for an extension with the given name at the current
+    /// ABI version. The name must be a valid ASCII identifier (validated at
+    /// [`Build::generate`] time).
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             manifest: Manifest {
@@ -77,11 +174,15 @@ impl ExtensionSpec {
         }
     }
 
+    /// Sets the WASM import module the host functions are linked under.
+    /// Defaults to the extension name when not set.
     pub fn wasm_module(mut self, wasm_module: impl Into<String>) -> Self {
         self.manifest.extension.wasm_module = Some(wasm_module.into());
         self
     }
 
+    /// Sets the Python modules to import eagerly during Wizer
+    /// pre-initialization, replacing any previously configured list.
     pub fn prewarm<I, S>(mut self, modules: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -91,6 +192,9 @@ impl ExtensionSpec {
         self
     }
 
+    /// Declares a host function. The closure configures the function's
+    /// [params](FunctionSpec::param), [return type](FunctionSpec::returns),
+    /// and [asyncness](FunctionSpec#method.async).
     pub fn function<F>(mut self, name: impl Into<String>, configure: F) -> Self
     where
         F: FnOnce(FunctionSpec) -> FunctionSpec,
@@ -101,15 +205,19 @@ impl ExtensionSpec {
         self
     }
 
+    /// Returns the manifest built so far.
     pub fn manifest(&self) -> &Manifest {
         &self.manifest
     }
 
+    /// Consumes the spec, returning the built manifest.
     pub fn into_manifest(self) -> Manifest {
         self.manifest
     }
 }
 
+/// Builder for a single [`Function`], used inside
+/// [`ExtensionSpec::function`].
 #[derive(Clone, Debug)]
 pub struct FunctionSpec {
     function: Function,
@@ -127,6 +235,8 @@ impl FunctionSpec {
         }
     }
 
+    /// Appends a typed parameter. The name must be a valid ASCII identifier
+    /// (validated at [`Build::generate`] time).
     pub fn param(mut self, name: impl Into<String>, ty: Type) -> Self {
         self.function.params.push(Param {
             name: name.into(),
@@ -135,11 +245,16 @@ impl FunctionSpec {
         self
     }
 
+    /// Sets the return type. Omit for a void function.
     pub fn returns(mut self, ty: Type) -> Self {
         self.function.returns = Some(ty);
         self
     }
 
+    /// Marks the function asynchronous. Async functions must also declare
+    /// `returns(Type::String)`; validation fails otherwise. See
+    /// [`Function::r#async`](Function#structfield.async) for the runtime
+    /// token protocol.
     pub fn r#async(mut self) -> Self {
         self.function.r#async = true;
         self
@@ -150,6 +265,11 @@ impl FunctionSpec {
     }
 }
 
+/// Selects which artifacts to generate from an [`ExtensionSpec`].
+///
+/// Each `emit_*` method enables an output; nothing is written until
+/// [`generate`](Build::generate) is called. Most `build.rs` files only need
+/// `Build::new(ext).emit().generate()`.
 pub struct Build {
     manifest: Manifest,
     rust_guest: bool,
@@ -160,6 +280,7 @@ pub struct Build {
 }
 
 impl Build {
+    /// Creates a build for the given extension with no outputs enabled.
     pub fn new(extension: ExtensionSpec) -> Self {
         Self {
             manifest: extension.into_manifest(),
@@ -171,29 +292,47 @@ impl Build {
         }
     }
 
+    /// Enables the default outputs: shorthand for
+    /// [`emit_rust_guest`](Build::emit_rust_guest) followed by
+    /// [`emit_abi_json`](Build::emit_abi_json).
     pub fn emit(self) -> Self {
         self.emit_rust_guest().emit_abi_json()
     }
 
+    /// Alias for [`emit`](Build::emit).
     pub fn emit_defaults(self) -> Self {
         self.emit()
     }
 
+    /// Enables the Rust guest module, written to
+    /// `$OUT_DIR/ext_<name>.rs` for consumption via `include!`.
     pub fn emit_rust_guest(mut self) -> Self {
         self.rust_guest = true;
         self
     }
 
+    /// Enables the ABI JSON contract, written to
+    /// `$OUT_DIR/<name>.abi.json`. Use
+    /// [`emit_abi_json_to`](Build::emit_abi_json_to) when a stable,
+    /// build-independent path is needed.
     pub fn emit_abi_json(mut self) -> Self {
         self.abi_json = true;
         self
     }
 
+    /// Additionally writes the ABI JSON to the given path (parent
+    /// directories are created). Useful for checking the contract into the
+    /// repo or feeding it to the CLI from a stable location.
     pub fn emit_abi_json_to(mut self, path: impl Into<PathBuf>) -> Self {
         self.abi_json_to = Some(path.into());
         self
     }
 
+    /// Enables the Java (Chicory) host adapter, written as
+    /// `<Name>HostFunctions.java` under `out_dir` in the given package's
+    /// directory layout. Note this writes directly into the given Java
+    /// source tree from `build.rs`; running the `boomslang-hostgen` CLI
+    /// against the emitted ABI JSON after the build is generally preferable.
     pub fn emit_java_host(
         mut self,
         out_dir: impl Into<PathBuf>,
@@ -203,11 +342,22 @@ impl Build {
         self
     }
 
+    /// Enables the Rust (Wasmtime) host adapter, written as
+    /// `host_<name>.rs` under `out_dir`. As with
+    /// [`emit_java_host`](Build::emit_java_host), generating hosts via the
+    /// CLI after the build is generally preferable.
     pub fn emit_rust_host(mut self, out_dir: impl Into<PathBuf>) -> Self {
         self.rust_host = Some(out_dir.into());
         self
     }
 
+    /// Validates the manifest and writes all enabled outputs.
+    ///
+    /// Validation enforces the exact ABI version (currently `1`), ASCII
+    /// identifier rules for all names, the reserved `__async_*` function
+    /// names, and that async functions return [`Type::String`].
+    /// Guest and default ABI JSON outputs require the `OUT_DIR` environment
+    /// variable, which Cargo sets when running `build.rs`.
     pub fn generate(self) -> Result<(), Box<dyn Error>> {
         validate_manifest(&self.manifest)?;
 
@@ -284,6 +434,8 @@ fn write_rust_host(manifest: &Manifest, out_dir: &Path) -> Result<(), Box<dyn Er
     Ok(())
 }
 
+/// Reads and validates an ABI JSON file (see [`Manifest`] for the
+/// validation rules, including the exact ABI version check).
 pub fn read_abi(path: &Path) -> Result<Manifest, Box<dyn Error>> {
     let content = fs::read_to_string(path)?;
     let manifest: Manifest = serde_json::from_str(&content)?;
@@ -291,13 +443,23 @@ pub fn read_abi(path: &Path) -> Result<Manifest, Box<dyn Error>> {
     Ok(manifest)
 }
 
-/// Generate Java host function bindings from an ABI JSON file.
+/// Generates Java (Chicory) host function bindings from an ABI JSON file.
+///
+/// Reads and validates the manifest at `abi_path`, then writes
+/// `<Name>HostFunctions.java` under the Java source root `out_dir`, in the
+/// directory layout implied by the dot-separated `package` name. This is
+/// the library entry point behind the CLI's `--java-out`/`--java-package`
+/// flags.
 pub fn generate_java(abi_path: &str, out_dir: &str, package: &str) -> Result<(), Box<dyn Error>> {
     let manifest = read_abi(Path::new(abi_path))?;
     write_java_host(&manifest, Path::new(out_dir), package)
 }
 
-/// Generate Rust Wasmtime host function bindings from an ABI JSON file.
+/// Generates Rust (Wasmtime) host function bindings from an ABI JSON file.
+///
+/// Reads and validates the manifest at `abi_path`, then writes
+/// `host_<name>.rs` into `out_dir` (created if needed). This is the library
+/// entry point behind the CLI's `--rust-host-out` flag.
 pub fn generate_rust_host(abi_path: &str, out_dir: &str) -> Result<(), Box<dyn Error>> {
     let manifest = read_abi(Path::new(abi_path))?;
     write_rust_host(&manifest, Path::new(out_dir))
@@ -476,6 +638,11 @@ fn is_reserved_async_control_name(name: &str) -> bool {
 
 // ── Rust codegen ──────────────────────────────────────────────
 
+/// Renders the Rust guest module source for a manifest: WASM import
+/// declarations, PyO3 wrapper functions, and the `register()`/`prewarm()`
+/// entry points. [`Build::emit_rust_guest`] writes this to
+/// `$OUT_DIR/ext_<name>.rs`; unlike [`Build::generate`], this function does
+/// not validate the manifest.
 pub fn generate_rust_code(m: &Manifest) -> String {
     let mod_name = &m.extension.name;
     let wasm_mod = m.extension.wasm_module.as_deref().unwrap_or(mod_name);
@@ -733,6 +900,9 @@ fn rust_py_type(ty: Type) -> &'static str {
 
 // ── Rust Wasmtime host codegen ──────────────────────────────────────────────
 
+/// Renders the Rust (Wasmtime) host adapter source for a manifest: a
+/// `<Name>HostFunctions` struct with a builder for wiring typed handler
+/// closures into a Wasmtime linker. Validates the manifest first.
 pub fn generate_rust_host_code(m: &Manifest) -> Result<String, Box<dyn Error>> {
     validate_manifest(m)?;
 
@@ -1065,6 +1235,10 @@ struct JavaFunctionTemplate {
     needs_memory: bool,
 }
 
+/// Renders the Java (Chicory) host adapter source for a manifest: a
+/// `<Name>HostFunctions` class in the given package, with typed handler
+/// interfaces and Chicory `HostFunction` registrations. Unlike
+/// [`generate_java`], this function does not validate the manifest.
 pub fn generate_java_code(m: &Manifest, package: &str) -> String {
     let ext_name = &m.extension.name;
     let template = JavaHostFunctionsTemplate {
