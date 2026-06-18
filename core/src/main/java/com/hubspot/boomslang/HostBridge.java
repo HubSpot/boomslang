@@ -3,6 +3,7 @@ package com.hubspot.boomslang;
 import com.dylibso.chicory.runtime.HostFunction;
 import com.hubspot.boomslang.generated.BoomslangHostHostFunctions;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -30,6 +31,7 @@ public class HostBridge {
     private final Map<String, Function<String, String>> handlers =
       new ConcurrentHashMap<>();
     private AsyncHostRegistry asyncRegistry = new AsyncHostRegistry();
+    private MicropipResolver micropipResolver;
 
     public Builder withCallHandler(CallHandler handler) {
       this.callHandler = handler;
@@ -64,6 +66,12 @@ public class HostBridge {
       AsyncHostRegistry.AsyncCallHandler handler
     ) {
       this.asyncRegistry.register(name, handler);
+      return this;
+    }
+
+    /** Enables remote {@code micropip.install(...)} fetches through the given host resolver. */
+    public Builder withMicropipResolver(MicropipResolver resolver) {
+      this.micropipResolver = Objects.requireNonNull(resolver, "resolver");
       return this;
     }
 
@@ -103,8 +111,17 @@ public class HostBridge {
       }
 
       CallHandler handler = effectiveCallHandler;
+      MicropipHostRegistry micropipRegistry = micropipResolver == null
+        ? null
+        : new MicropipHostRegistry(micropipResolver);
       return (name, args) -> {
         checkInterrupted();
+        if (MicropipHostRegistry.isControlCall(name)) {
+          if (micropipRegistry == null) {
+            return MicropipHostRegistry.missingResolverResponse();
+          }
+          return micropipRegistry.handleControlCall(name, args);
+        }
         // Always route the reserved async control calls (__async_protocol__ / __async_start__ /
         // __async_poll__ / __async_result__ / __async_cancel__) to the registry, regardless of
         // whether any named async handlers were registered. Generated extension async functions

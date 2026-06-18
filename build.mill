@@ -129,7 +129,17 @@ object artifacts extends Module {
     ),
     DagNode("cpythonWasi", Seq("cpythonWasiTgz")),
     DagNode("pipPackages", Seq.empty),
-    DagNode("resources", Seq("cpythonWasi", "pydanticCorePython", "hostBridgePython", "pipPackages")),
+    DagNode(
+      "resources",
+      Seq(
+        "cpythonWasi",
+        "pydanticCorePython",
+        "hostBridgePython",
+        "pipPackages",
+        "micropipPython",
+        "micropipDistInfo"
+      )
+    ),
     DagNode("builderImage", Seq("containerCli", "builderImageContext")),
     DagNode(
       "wasm",
@@ -390,6 +400,8 @@ object artifacts extends Module {
   )
   def pydanticCorePython = Task.Source("cpython/lib/pydantic_core")
   def hostBridgePython = Task.Source("extensions/host-bridge/lib")
+  def micropipPython = Task.Source("third_party/micropip/micropip")
+  def micropipDistInfo = Task.Source("third_party/micropip/micropip-0.11.1.dist-info")
 
   private def buildContainerArtifact(
       name: String,
@@ -642,6 +654,8 @@ object artifacts extends Module {
     if (os.exists(typingExtensions)) os.copy.over(typingExtensions, siteRoot / "typing_extensions.py")
 
     copyPathMerge(hostBridgePython().path, siteRoot)
+    copyPath(micropipPython().path, siteRoot / "micropip")
+    copyPath(micropipDistInfo().path, siteRoot / "micropip-0.11.1.dist-info")
     PathRef(pythonRoot)
   }
 
