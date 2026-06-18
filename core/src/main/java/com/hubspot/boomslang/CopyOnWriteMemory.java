@@ -14,6 +14,13 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Map;
 
+/**
+ * Copy-on-write WASM linear memory backed by the {@link RuntimeImage} golden snapshot. Reads are
+ * served from the shared golden pages until written; a write materializes a private 4 KiB copy of
+ * the touched region within its 64 KiB WASM page, so many {@link PythonInstance}s can share one
+ * snapshot while only paying for the pages they actually modify. {@code reset()} drops all private
+ * pages, restoring the pristine snapshot view.
+ */
 public final class CopyOnWriteMemory implements Memory {
 
   public static final int WASM_PAGE_SIZE = 65536;

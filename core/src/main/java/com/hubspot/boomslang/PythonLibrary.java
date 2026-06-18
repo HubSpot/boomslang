@@ -3,6 +3,11 @@ package com.hubspot.boomslang;
 import com.google.common.collect.ImmutableMap;
 import java.util.Map;
 
+/**
+ * An in-memory pure-Python package installed into site-packages by {@link
+ * PythonExecutorFactory.Builder#withLibrary(PythonLibrary)}, mapping file names (e.g. {@code
+ * __init__.py}) to source contents.
+ */
 public record PythonLibrary(String name, ImmutableMap<String, String> modules) {
   public static PythonLibrary of(String name, Map<String, String> modules) {
     return new PythonLibrary(name, ImmutableMap.copyOf(modules));

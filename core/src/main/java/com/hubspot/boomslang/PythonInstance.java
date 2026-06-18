@@ -7,7 +7,6 @@ import com.dylibso.chicory.runtime.Store;
 import com.dylibso.chicory.wasi.WasiOptions;
 import com.dylibso.chicory.wasi.WasiPreview1;
 import com.dylibso.chicory.wasm.types.MemoryLimits;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -17,6 +16,16 @@ import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * A single Python interpreter backed by a {@link CopyOnWriteMemory} view of the factory's golden
+ * snapshot. Instances are cheap to create from {@link PythonExecutorFactory#createInstance(Path)}
+ * and are intended to be disposable.
+ *
+ * <p>Instances are for single-threaded use only: run one task at a time against an instance, on the
+ * factory's WASM pool via {@link PythonExecutorFactory}{@code .runOnWasmThread}. The typical
+ * lifecycle is create, then {@link #execute(String)} / {@link #compile(String)} / {@link
+ * #loadCode(byte[])} as needed, then {@link #reset()} to reuse or simply discard.
+ */
 public class PythonInstance implements AutoCloseable {
 
   private static final Logger LOG = LoggerFactory.getLogger(PythonInstance.class);
@@ -46,6 +55,11 @@ public class PythonInstance implements AutoCloseable {
   private final ExportFunction getHeapPagesFunc;
   private final int goldenMemoryPages;
 
+  /**
+   * Creates an instance with {@link ResourceLimits#defaults()}. Prefer {@link
+   * PythonExecutorFactory#createInstance(Path)}, which supplies the image and host functions
+   * configured on the factory.
+   */
   public PythonInstance(
     RuntimeImage image,
     HostFunction[] hostFunctions,
@@ -63,6 +77,11 @@ public class PythonInstance implements AutoCloseable {
     );
   }
 
+  /**
+   * Creates an instance with the given limits. Prefer {@link
+   * PythonExecutorFactory#createInstance(Path, ResourceLimits)}, which supplies the image and host
+   * functions configured on the factory.
+   */
   public PythonInstance(
     RuntimeImage image,
     HostFunction[] hostFunctions,
@@ -158,14 +177,28 @@ public class PythonInstance implements AutoCloseable {
     }
   }
 
+  /**
+   * Sets the bytes Python reads from {@code sys.stdin} during the next execution. Stdin is cleared
+   * automatically after each execute/load call.
+   */
   public synchronized void setStdin(byte[] data) {
     stdinStream.resetData(data);
   }
 
+  /** Clears any pending stdin data. */
   public synchronized void clearStdin() {
     stdinStream.clear();
   }
 
+  /**
+   * Compiles Python source to bytecode without executing it. The result is CPython marshal data and
+   * is only valid for the exact runtime build that produced it — pass it back to {@link
+   * #loadCode(byte[])} on an instance from the same runtime; do not persist it across runtime
+   * upgrades.
+   *
+   * @return marshaled CPython bytecode
+   * @throws PythonCompilationException if the source does not compile (e.g. a syntax error)
+   */
   public synchronized byte[] compile(String source) {
     checkNotClosed();
 
@@ -201,6 +234,15 @@ public class PythonInstance implements AutoCloseable {
     }
   }
 
+  /**
+   * Loads and runs bytecode produced by {@link #compile(String)} in this instance's {@code
+   * __main__} module, typically to define functions for later {@link #executeFunction(String,
+   * String)} calls.
+   *
+   * @return the result of running the bytecode; a non-zero {@link PythonResult#exitCode()} means a
+   *     Python exception was raised, with the traceback in {@link PythonResult#stderr()}
+   * @throws PythonExecutionException if the runtime traps while loading
+   */
   public synchronized PythonResult loadCode(byte[] bytecode) {
     checkNotClosed();
 
@@ -242,6 +284,15 @@ public class PythonInstance implements AutoCloseable {
     }
   }
 
+  /**
+   * Calls a function previously defined in {@code __main__} (usually via {@link
+   * #loadCode(byte[])}), passing arguments as JSON.
+   *
+   * @param functionName name of the function in {@code __main__}
+   * @param argsJson JSON-encoded arguments, or null for none
+   * @return the result; a non-zero {@link PythonResult#exitCode()} means a Python exception was
+   *     raised, with the traceback in {@link PythonResult#stderr()}
+   */
   public synchronized PythonResult executeFunction(String functionName, String argsJson) {
     checkNotClosed();
 
@@ -292,6 +343,16 @@ public class PythonInstance implements AutoCloseable {
     }
   }
 
+  /**
+   * Executes a Python script in this instance's {@code __main__} module. Python exceptions do not
+   * throw: they yield a {@link PythonResult} with a non-zero exit code and the traceback in {@link
+   * PythonResult#stderr()}. State created by the script persists in the instance until {@link
+   * #reset()}.
+   *
+   * @return the captured stdout/stderr, exit code, and timing
+   * @throws PythonExecutionException if the WASM runtime itself traps (not for ordinary Python
+   *     exceptions)
+   */
   public synchronized PythonResult execute(String script) {
     checkNotClosed();
 
@@ -332,6 +393,14 @@ public class PythonInstance implements AutoCloseable {
       .build();
   }
 
+  /**
+   * Restores the copy-on-write snapshot: all private memory pages are dropped, leaving the pristine
+   * pre-initialized interpreter state with a fresh {@code __main__}. Also clears the poisoned flag
+   * and pending stdin. After a timeout, prefer discarding the instance over resetting it — see the
+   * timed {@link PythonExecutorFactory}{@code .runOnWasmThread} overload.
+   *
+   * @throws IllegalStateException if the instance has been closed
+   */
   public synchronized void reset() {
     if (closed.get()) {
       throw new IllegalStateException("PythonInstance has been closed");
@@ -342,39 +411,54 @@ public class PythonInstance implements AutoCloseable {
     clearStdin();
   }
 
+  /**
+   * Marks this instance unusable (e.g. after a timeout left it in an unknown state). Subsequent
+   * execute/compile/load calls throw {@link IllegalStateException} until {@link #reset()}.
+   */
   public void poison() {
     poisoned.set(true);
   }
 
+  /** Returns whether {@link #poison()} has been called since the last {@link #reset()}. */
   public boolean isPoisoned() {
     return poisoned.get();
   }
 
+  /** Returns the limits this instance was created with. */
   public ResourceLimits getResourceLimits() {
     return limits;
   }
 
+  /** Returns whether {@link #loadCode(byte[])} has succeeded since the last {@link #reset()}. */
   public boolean isCodeLoaded() {
     return codeLoaded.get();
   }
 
+  /** Returns whether {@link #close()} has been called. */
   public boolean isClosed() {
     return closed.get();
   }
 
+  /** Returns the guest's current linear memory size in 64 KiB WASM pages. */
   public synchronized int getHeapPages() {
     checkNotClosed();
     return Math.toIntExact(getHeapPagesFunc.apply()[0]);
   }
 
+  /** Returns the size of the shared golden snapshot in 64 KiB WASM pages. */
   public int getGoldenMemoryPages() {
     return goldenMemoryPages;
   }
 
+  /** Returns how many 64 KiB pages this instance has grown beyond the golden snapshot. */
   public int getHeapGrowthPages() {
     return getHeapPages() - goldenMemoryPages;
   }
 
+  /**
+   * Returns whether this instance is safe to reuse: not closed, not poisoned, and its heap has not
+   * grown by more than {@code maxGrowthPages} 64 KiB pages beyond the golden snapshot.
+   */
   public boolean isHealthy(int maxGrowthPages) {
     if (closed.get() || poisoned.get()) {
       return false;
@@ -386,6 +470,10 @@ public class PythonInstance implements AutoCloseable {
     }
   }
 
+  /**
+   * Marks this instance closed; subsequent calls throw {@link IllegalStateException}. Idempotent.
+   * Memory is reclaimed by garbage collection once the instance is unreachable.
+   */
   @Override
   public synchronized void close() {
     if (!closed.compareAndSet(false, true)) {
@@ -393,10 +481,16 @@ public class PythonInstance implements AutoCloseable {
     }
   }
 
+  /** Returns a short random identifier for this instance, useful for logging. */
   public String getInstanceId() {
     return instanceId;
   }
 
+  /**
+   * Returns the guest-visible scratch directory path ({@code /work}). Because the root path passed
+   * to {@link PythonExecutorFactory#createInstance(Path)} is mounted at {@code /}, this corresponds
+   * to the {@code work} subdirectory of that host path.
+   */
   public String getGuestWorkPath() {
     return "/work";
   }
@@ -458,6 +552,10 @@ public class PythonInstance implements AutoCloseable {
     }
   }
 
+  /**
+   * Thrown by {@link #compile(String)} when source fails to compile (e.g. a syntax error). The
+   * message contains the Python error output when available.
+   */
   public static class PythonCompilationException extends RuntimeException {
 
     public PythonCompilationException(String message) {
@@ -465,6 +563,11 @@ public class PythonInstance implements AutoCloseable {
     }
   }
 
+  /**
+   * Thrown when the WASM runtime traps during execution, or when captured output exceeds {@link
+   * ResourceLimits#maximumOutputBytes()}. Ordinary Python exceptions do not throw this — they are
+   * reported via {@link PythonResult#exitCode()} and {@link PythonResult#stderr()}.
+   */
   public static class PythonExecutionException extends RuntimeException {
 
     public PythonExecutionException(String message) {
@@ -476,6 +579,11 @@ public class PythonInstance implements AutoCloseable {
     }
   }
 
+  /**
+   * Thrown by the timed {@link PythonExecutorFactory}{@code .runOnWasmThread} overloads when a task
+   * does not complete within the timeout. The associated instance is poisoned and should usually be
+   * discarded.
+   */
   public static class PythonTimeoutException extends RuntimeException {
 
     public PythonTimeoutException(String message) {
