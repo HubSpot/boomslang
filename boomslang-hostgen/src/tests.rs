@@ -84,6 +84,8 @@ unsafe extern "C" {
 }
 
 const MAX_RESULT: i32 = 1024 * 1024;
+/// Host ABI sentinel: the result exceeded the caller-provided result buffer.
+const HOST_CALL_RESULT_TOO_LARGE: i32 = -2;
 
 #[pyfunction]
 #[pyo3(name = "call")]
@@ -100,6 +102,10 @@ fn py_call(name: &str, args: &str) -> PyResult<String> {
             result_buf.as_mut_ptr(),
             MAX_RESULT,
         );
+        if ret == HOST_CALL_RESULT_TOO_LARGE {
+            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("host call result exceeded the {MAX_RESULT}-byte limit")));
+        }
         if ret < 0 {
             return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("host call failed"));
         }

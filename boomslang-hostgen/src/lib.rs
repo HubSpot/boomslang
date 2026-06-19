@@ -671,7 +671,9 @@ pub fn generate_rust_code(m: &Manifest) -> String {
         out.push_str("}\n\n");
     }
 
-    out.push_str("const MAX_RESULT: i32 = 1024 * 1024;\n\n");
+    out.push_str("const MAX_RESULT: i32 = 1024 * 1024;\n");
+    out.push_str("/// Host ABI sentinel: the result exceeded the caller-provided result buffer.\n");
+    out.push_str("const HOST_CALL_RESULT_TOO_LARGE: i32 = -2;\n\n");
 
     // PyO3 wrapper functions
     for f in &m.functions {
@@ -710,6 +712,26 @@ pub fn generate_rust_code(m: &Manifest) -> String {
     }
     out.push_str("    Ok(())\n}\n");
 
+    out
+}
+
+/// Emits the shared `ret`-handling preamble for buffer-typed (String/Bytes)
+/// sync host calls. The host ABI signals failure with negative return values
+/// (see the Java and Rust host templates): `-2` (emitted as the
+/// `HOST_CALL_RESULT_TOO_LARGE` const in the generated module) means the payload
+/// exceeded the caller's `result_max_len` buffer; any other negative value is a
+/// host-side failure. A non-negative `ret` is the number of bytes written.
+fn buffer_return_error_handling() -> String {
+    let mut out = String::new();
+    out.push_str("        if ret == HOST_CALL_RESULT_TOO_LARGE {\n");
+    out.push_str("            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(\n");
+    out.push_str(
+        "                format!(\"host call result exceeded the {MAX_RESULT}-byte limit\")));\n",
+    );
+    out.push_str("        }\n");
+    out.push_str("        if ret < 0 {\n");
+    out.push_str("            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(\"host call failed\"));\n");
+    out.push_str("        }\n");
     out
 }
 
@@ -782,17 +804,13 @@ fn generate_rust_pyo3_wrapper(f: &Function) -> String {
 
     match f.returns {
         Some(Type::String) => {
-            out.push_str("        if ret < 0 {\n");
-            out.push_str("            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(\"host call failed\"));\n");
-            out.push_str("        }\n");
+            out.push_str(&buffer_return_error_handling());
             out.push_str(
                 "        Ok(String::from_utf8_lossy(&result_buf[..ret as usize]).into_owned())\n",
             );
         }
         Some(Type::Bytes) => {
-            out.push_str("        if ret < 0 {\n");
-            out.push_str("            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(\"host call failed\"));\n");
-            out.push_str("        }\n");
+            out.push_str(&buffer_return_error_handling());
             out.push_str("        Ok(result_buf[..ret as usize].to_vec())\n");
         }
         Some(Type::Int) => out.push_str("        Ok(ret)\n"),
