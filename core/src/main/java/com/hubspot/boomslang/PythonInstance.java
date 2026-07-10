@@ -1,12 +1,5 @@
 package com.hubspot.boomslang;
 
-import com.dylibso.chicory.runtime.ExportFunction;
-import com.dylibso.chicory.runtime.HostFunction;
-import com.dylibso.chicory.runtime.Instance;
-import com.dylibso.chicory.runtime.Store;
-import com.dylibso.chicory.wasi.WasiOptions;
-import com.dylibso.chicory.wasi.WasiPreview1;
-import com.dylibso.chicory.wasm.types.MemoryLimits;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -15,6 +8,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import run.endive.runtime.ExportFunction;
+import run.endive.runtime.HostFunction;
+import run.endive.runtime.Instance;
+import run.endive.runtime.Store;
+import run.endive.wasi.WasiOptions;
+import run.endive.wasi.WasiPreview1;
+import run.endive.wasm.types.MemoryLimits;
 
 /**
  * A single Python interpreter backed by a {@link CopyOnWriteMemory} view of the factory's golden

@@ -328,7 +328,7 @@ impl Build {
         self
     }
 
-    /// Enables the Java (Chicory) host adapter, written as
+    /// Enables the Java (Endive) host adapter, written as
     /// `<Name>HostFunctions.java` under `out_dir` in the given package's
     /// directory layout. Note this writes directly into the given Java
     /// source tree from `build.rs`; running the `boomslang-hostgen` CLI
@@ -443,7 +443,7 @@ pub fn read_abi(path: &Path) -> Result<Manifest, Box<dyn Error>> {
     Ok(manifest)
 }
 
-/// Generates Java (Chicory) host function bindings from an ABI JSON file.
+/// Generates Java (Endive) host function bindings from an ABI JSON file.
 ///
 /// Reads and validates the manifest at `abi_path`, then writes
 /// `<Name>HostFunctions.java` under the Java source root `out_dir`, in the
@@ -1253,9 +1253,9 @@ struct JavaFunctionTemplate {
     needs_memory: bool,
 }
 
-/// Renders the Java (Chicory) host adapter source for a manifest: a
+/// Renders the Java (Endive) host adapter source for a manifest: a
 /// `<Name>HostFunctions` class in the given package, with typed handler
-/// interfaces and Chicory `HostFunction` registrations. Unlike
+/// interfaces and Endive `HostFunction` registrations. Unlike
 /// [`generate_java`], this function does not validate the manifest.
 pub fn generate_java_code(m: &Manifest, package: &str) -> String {
     let ext_name = &m.extension.name;

@@ -1,10 +1,10 @@
 package com.hubspot.boomslang.tests;
 
-import com.dylibso.chicory.runtime.HostFunction;
 import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
 import com.hubspot.boomslang.HostBridge;
 import java.nio.file.Path;
+import run.endive.runtime.HostFunction;
 
 class SharedTestSetup {
 

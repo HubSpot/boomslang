@@ -1,10 +1,5 @@
 package com.hubspot.boomslang;
 
-import com.dylibso.chicory.runtime.HostFunction;
-import com.dylibso.chicory.runtime.Instance;
-import com.dylibso.chicory.runtime.Machine;
-import com.dylibso.chicory.wasm.Parser;
-import com.dylibso.chicory.wasm.WasmModule;
 import com.google.common.io.ByteStreams;
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,6 +34,11 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import run.endive.runtime.HostFunction;
+import run.endive.runtime.Instance;
+import run.endive.runtime.Machine;
+import run.endive.wasm.Parser;
+import run.endive.wasm.WasmModule;
 
 /**
  * Entry point for executing Python from Java. The factory extracts the bundled Python runtime,
@@ -335,7 +335,7 @@ public class PythonExecutorFactory {
 
   /**
    * Returns whether an AOT-compiled machine is in use. When false, the WASM module runs in
-   * Chicory's interpreter, which is significantly slower.
+   * Endive's interpreter, which is significantly slower.
    */
   public boolean isAotAvailable() {
     return aotAvailable;

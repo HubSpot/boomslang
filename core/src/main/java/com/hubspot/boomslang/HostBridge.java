@@ -1,11 +1,11 @@
 package com.hubspot.boomslang;
 
-import com.dylibso.chicory.runtime.HostFunction;
 import com.hubspot.boomslang.generated.BoomslangHostHostFunctions;
 import java.util.Map;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import run.endive.runtime.HostFunction;
 
 /**
  * Implements the {@code boomslang.call} and {@code boomslang.log} host function imports that the

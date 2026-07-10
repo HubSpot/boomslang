@@ -24,7 +24,7 @@
 
   <properties>
     <project.build.targetJdk>21</project.build.targetJdk>
-    <dep.chicory.version>1.7.5</dep.chicory.version>
+    <dep.endive.version>1.0.1</dep.endive.version>
     <dep.jimfs.version>1.3.0</dep.jimfs.version>
     <dep.jmh.version>1.37</dep.jmh.version>
     <basepom.check.skip-spotbugs>true</basepom.check.skip-spotbugs>
@@ -38,21 +38,21 @@
         <version>${project.version}</version>
       </dependency>
 
-      <!-- Chicory WASM runtime -->
+      <!-- Endive WASM runtime -->
       <dependency>
-        <groupId>com.dylibso.chicory</groupId>
+        <groupId>run.endive</groupId>
         <artifactId>runtime</artifactId>
-        <version>${dep.chicory.version}</version>
+        <version>${dep.endive.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.dylibso.chicory</groupId>
+        <groupId>run.endive</groupId>
         <artifactId>wasi</artifactId>
-        <version>${dep.chicory.version}</version>
+        <version>${dep.endive.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.dylibso.chicory</groupId>
+        <groupId>run.endive</groupId>
         <artifactId>wasm</artifactId>
-        <version>${dep.chicory.version}</version>
+        <version>${dep.endive.version}</version>
       </dependency>
 
       <!-- Jimfs (in-memory filesystem) -->
@@ -87,9 +87,9 @@
           </configuration>
         </plugin>
         <plugin>
-          <groupId>com.dylibso.chicory</groupId>
-          <artifactId>chicory-compiler-maven-plugin</artifactId>
-          <version>${dep.chicory.version}</version>
+          <groupId>run.endive</groupId>
+          <artifactId>endive-compiler-maven-plugin</artifactId>
+          <version>${dep.endive.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>

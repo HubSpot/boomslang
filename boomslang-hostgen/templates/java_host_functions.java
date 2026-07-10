@@ -1,9 +1,9 @@
 package {{ package }};
 
-import com.dylibso.chicory.runtime.HostFunction;
-import com.dylibso.chicory.runtime.Instance;
-import com.dylibso.chicory.runtime.Memory;
-import com.dylibso.chicory.wasm.types.ValueType;
+import run.endive.runtime.HostFunction;
+import run.endive.runtime.Instance;
+import run.endive.runtime.Memory;
+import run.endive.wasm.types.ValueType;
 {% if has_async -%}
 import com.hubspot.boomslang.AsyncHostRegistry;
 {% endif -%}
