@@ -1,5 +1,5 @@
 // Re-export all WASM exports from boomslang-host-core.
-// These are the functions Chicory calls: alloc, dealloc, execute, compile, etc.
+// These are the functions Endive calls: alloc, dealloc, execute, compile, etc.
 pub use boomslang_host_core::export::*;
 pub use boomslang_host_core::stubs::*;
 

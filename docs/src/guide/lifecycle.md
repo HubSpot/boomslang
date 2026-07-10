@@ -2,7 +2,7 @@
 
 ## The threading model
 
-All WASM execution must go through `factory.runOnWasmThread(...)`. The factory maintains a dedicated thread pool (currently fixed at 10 threads) whose threads have an enlarged JVM stack — CPython's C stack lives on the JVM stack under Chicory, and deep Python recursion needs the headroom.
+All WASM execution must go through `factory.runOnWasmThread(...)`. The factory maintains a dedicated thread pool (currently fixed at 10 threads) whose threads have an enlarged JVM stack — CPython's C stack lives on the JVM stack under Endive, and deep Python recursion needs the headroom.
 
 `PythonInstance` is **not thread-safe**. Use one instance from one task at a time; create separate instances for concurrent executions (they're cheap — each is a copy-on-write view of the shared snapshot).
 

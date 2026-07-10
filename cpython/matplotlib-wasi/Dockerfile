@@ -133,7 +133,7 @@ RUN mkdir -p /build/wasi-libs \
 # Freetype's rasterizer files (ftraster.c, ftgrays.c) use setjmp/longjmp for
 # out-of-memory recovery. wasi-sdk 20's setjmp.h errors out at include time
 # unless -mllvm -wasm-enable-sjlj is used and the runtime supports the WASM
-# exception proposal (Chicory does not). Inject a shim that no-ops setjmp and
+# exception proposal (Endive does not). Inject a shim that no-ops setjmp and
 # maps longjmp -> abort. Error recovery becomes abort; for valid font files
 # the rasterizer never trips those branches, so this is benign in practice.
 #

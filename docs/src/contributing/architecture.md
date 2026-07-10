@@ -24,9 +24,9 @@ At runtime the Java host goes one step further. `RuntimeImage` instantiates the 
 
 This is why the factory should be a process-wide singleton (it pins the golden memory) while instances are disposable.
 
-## AOT execution (Chicory)
+## AOT execution (Endive)
 
-Chicory can interpret WASM, but boomslang ships ahead-of-time compiled JVM bytecode for the bundled module: the `chicory-compiler-maven-plugin` translates `boomslang.wasm` into `com.hubspot.boomslang.compiled.*` classes at build time. The factory uses them when present (`isAotAvailable()`) and falls back to the interpreter otherwise — roughly an order of magnitude slower, so a missing-AOT warning in logs deserves attention.
+Endive can interpret WASM, but boomslang ships ahead-of-time compiled JVM bytecode for the bundled module: the `endive-compiler-maven-plugin` translates `boomslang.wasm` into `com.hubspot.boomslang.compiled.*` classes at build time. The factory uses them when present (`isAotAvailable()`) and falls back to the interpreter otherwise — roughly an order of magnitude slower, so a missing-AOT warning in logs deserves attention.
 
 Python is thus executing as JVM bytecode, JIT-compiled by HotSpot like everything else — no JNI, no native memory outside the Java heap.
 

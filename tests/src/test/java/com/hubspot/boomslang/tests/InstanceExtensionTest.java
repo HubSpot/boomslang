@@ -3,7 +3,6 @@ package com.hubspot.boomslang.tests;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.dylibso.chicory.runtime.HostFunction;
 import com.hubspot.boomslang.BoomslangExtension;
 import com.hubspot.boomslang.HostBridge;
 import com.hubspot.boomslang.PythonExecutorFactory;
@@ -15,6 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import run.endive.runtime.HostFunction;
 
 class InstanceExtensionTest {
 

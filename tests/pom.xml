@@ -22,7 +22,7 @@
       <artifactId>boomslang</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.dylibso.chicory</groupId>
+      <groupId>run.endive</groupId>
       <artifactId>runtime</artifactId>
     </dependency>
     <dependency>

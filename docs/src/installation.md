@@ -17,7 +17,7 @@ The default jar includes everything needed to run Python:
 - the Java API
 - the bundled `boomslang.wasm` (CPython 3.14 for `wasm32-wasip1`)
 - Python resources: the stdlib plus NumPy, Pandas, Matplotlib, Pillow, Pydantic, ijson, and Jinja2
-- generated Chicory AOT classes (`com.hubspot.boomslang.compiled.*`), so the runtime executes as JVM bytecode
+- generated Endive AOT classes (`com.hubspot.boomslang.compiled.*`), so the runtime executes as JVM bytecode
 
 The tradeoff is size: the jar is roughly 100 MB. For most applications that's a fine price for a zero-setup Python runtime; if it isn't, use the classifier below.
 
