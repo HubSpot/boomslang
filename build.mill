@@ -542,16 +542,19 @@ object artifacts extends Module {
       "annotated-types>=0.6.0",
       "typing-extensions>=4.14.1",
       "typing-inspection>=0.4.2",
+      "openpyxl==3.1.5",
+      "et-xmlfile>=1.0.1",
+      "xlrd==2.0.2",
       "--no-deps",
       "-d", downloadDir,
       "--quiet"
-    ), env = Map("PIP_DISABLE_PIP_VERSION_CHECK" -> "1"))
+    ), env = Map("PIP_DISABLE_PIP_VERSION_CHECK" -> "1", "PIP_CONSTRAINT" -> ""))
 
     for (wheel <- os.list(downloadDir) if wheel.ext == "whl") {
       runLogged((defaultPython, "-m", "zipfile", "-e", wheel, extractedDir))
     }
 
-    for (pkg <- Seq("pydantic", "annotated_types", "typing_inspection")) {
+    for (pkg <- Seq("pydantic", "annotated_types", "typing_inspection", "openpyxl", "et_xmlfile", "xlrd")) {
       val src = extractedDir / pkg
       if (os.exists(src)) copyPath(src, packagesDir / pkg)
     }
@@ -634,7 +637,7 @@ object artifacts extends Module {
     copyPath(cpythonWasi().path / "usr" / "local" / "lib" / "python3.14", siteRoot)
     copyPath(pydanticCorePython().path, siteRoot / "pydantic_core")
 
-    for (pkg <- Seq("pydantic", "annotated_types", "typing_inspection")) {
+    for (pkg <- Seq("pydantic", "annotated_types", "typing_inspection", "openpyxl", "et_xmlfile", "xlrd")) {
       val src = pipPackages().path / pkg
       if (os.exists(src)) copyPath(src, siteRoot / pkg)
     }

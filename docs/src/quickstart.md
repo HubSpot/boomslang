@@ -58,7 +58,7 @@ The first factory build extracts the Python resources to `stdlibPath` and takes 
 
 ## 3. Use the batteries
 
-The bundled runtime includes NumPy, Pandas, Matplotlib, Pillow, Pydantic, ijson, and Jinja2:
+The bundled runtime includes NumPy, Pandas, Matplotlib, Pillow, Pydantic, ijson, Jinja2, openpyxl, and xlrd:
 
 ```java
 PythonResult result = factory.runOnWasmThread(() -> {

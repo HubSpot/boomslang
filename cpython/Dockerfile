@@ -81,7 +81,7 @@ RUN set -ex \
     && cp cpython/build/output/boomslang.wasm /tmp/staging/bin/ \
     && cp -r cpython/build/cpython-wasi/usr/local/lib/python3.14 /tmp/staging/usr/local/lib/ \
     && cp -r extensions/host-bridge/lib/boomslang_host /tmp/staging/usr/local/lib/python3.14/ \
-    && for pkg in pydantic typing_inspection; do \
+    && for pkg in pydantic typing_inspection openpyxl et_xmlfile xlrd; do \
          [ -d cpython/lib/pip-packages/$pkg ] && cp -r cpython/lib/pip-packages/$pkg /tmp/staging/usr/local/lib/python3.14/; \
        done \
     && tar czf /artifact.tgz -C /tmp/staging . \

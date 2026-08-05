@@ -9,7 +9,7 @@ Python code executes in a fully sandboxed WebAssembly memory space: it sees only
 The default Maven artifact ships with:
 
 - CPython 3.14 built for `wasm32-wasip1`
-- the Python stdlib plus NumPy, Pandas, Matplotlib, Pillow, Pydantic, ijson, and Jinja2
+- the Python stdlib plus NumPy, Pandas, Matplotlib, Pillow, Pydantic, ijson, Jinja2, openpyxl, and xlrd
 - `python/bin/boomslang.wasm`, the runtime module
 - generated Chicory AOT classes, so the WASM runs as compiled JVM bytecode instead of being interpreted
 - copy-on-write memory snapshots: the interpreter is pre-initialized at build time ([Wizer](https://github.com/bytecodealliance/wizer)), so creating a `PythonInstance` is a memory copy measured in milliseconds, not a full CPython startup

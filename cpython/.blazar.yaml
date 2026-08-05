@@ -45,17 +45,17 @@ before:
         cp -r ../boomslang-hostgen vendor/boomslang-hostgen
 
         # Download pip packages
-        pip_packages="pydantic==2.12.5 typing-inspection>=0.4.2"
+        pip_packages="pydantic==2.12.5 typing-inspection>=0.4.2 openpyxl==3.1.5 et-xmlfile>=1.0.1 xlrd==2.0.2"
         pip_tmp="/tmp/pip-packages"
         rm -rf "$pip_tmp" && mkdir -p "$pip_tmp"
-        python3 -m pip download $pip_packages --no-deps -d "$pip_tmp" --quiet
+        PIP_CONSTRAINT= python3 -m pip download $pip_packages --no-deps -d "$pip_tmp" --quiet
         for whl in "$pip_tmp"/*.whl; do
           [ -f "$whl" ] || continue
           python3 -m zipfile -e "$whl" "$pip_tmp/extracted"
         done
 
         mkdir -p vendor/pip-packages
-        for pkg in pydantic typing_inspection; do
+        for pkg in pydantic typing_inspection openpyxl et_xmlfile xlrd; do
           [ -d "$pip_tmp/extracted/$pkg" ] && cp -r "$pip_tmp/extracted/$pkg" vendor/pip-packages/
         done
         ls -la vendor/pip-packages/

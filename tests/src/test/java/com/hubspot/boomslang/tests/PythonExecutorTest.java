@@ -167,4 +167,35 @@ class PythonExecutorTest {
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(result.stdout().trim()).isEqualTo("6");
   }
+
+  @Test
+  void itImportsOpenpyxl() {
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
+      return instance.execute(
+        String.join(
+          "\n",
+          "from openpyxl import Workbook",
+          "wb = Workbook()",
+          "ws = wb.active",
+          "ws['A1'] = 42",
+          "print(ws['A1'].value)"
+        )
+      );
+    });
+
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("42");
+  }
+
+  @Test
+  void itImportsXlrd() {
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
+      return instance.execute("import xlrd; print(xlrd.__version__)");
+    });
+
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("2.0.2");
+  }
 }

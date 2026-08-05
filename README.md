@@ -2,7 +2,7 @@
 
 Python, but Java.
 
-Boomslang runs CPython 3.14 from a WASI build. The default artifact embeds that runtime in Java through [Chicory](https://github.com/dylibso/chicory), so Python runs inside the JVM without JNI, subprocesses, or a system Python install — sandboxed, with the stdlib plus NumPy, Pandas, Matplotlib, Pillow, Pydantic, ijson, and Jinja2 included. The same runtime is also packaged as a Python wheel (`boomslang-py/`, executed with wasmtime) and embeddable from Rust or any WASM runtime via a language-neutral ABI.
+Boomslang runs CPython 3.14 from a WASI build. The default artifact embeds that runtime in Java through [Chicory](https://github.com/dylibso/chicory), so Python runs inside the JVM without JNI, subprocesses, or a system Python install — sandboxed, with the stdlib plus NumPy, Pandas, Matplotlib, Pillow, Pydantic, ijson, Jinja2, openpyxl, and xlrd included. The same runtime is also packaged as a Python wheel (`boomslang-py/`, executed with wasmtime) and embeddable from Rust or any WASM runtime via a language-neutral ABI.
 
 **Documentation: <https://github.hubspot.com/boomslang/>**
 
