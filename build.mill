@@ -102,7 +102,7 @@ private def configuredContainerCli(): Option[String] = {
 }
 
 private val runtimeResources = "core/src/main/resources/python"
-private val defaultPython = "/usr/bin/python3"
+private val defaultPython = sys.env.getOrElse("PYTHON", "python3")
 
 object artifacts extends Module {
   override def moduleDir: os.Path = BuildCtx.workspaceRoot
