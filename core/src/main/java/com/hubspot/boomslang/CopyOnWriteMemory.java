@@ -12,6 +12,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -555,6 +556,80 @@ public final class CopyOnWriteMemory implements Memory {
     totalPages = Math.max(goldenPages, limits.initialPages());
     newPageCount = 0;
     copiedPageCount = 0;
+  }
+
+  /**
+   * A captured warm memory baseline: the private-page delta over the shared golden snapshot (each
+   * value a 4 KiB COW page, keyed by its global COW-page index) plus the total WASM page count at
+   * capture time. Reverting an instance to this with {@link #rebaseline(Snapshot)} restores a warm
+   * interpreter (e.g. one with a heavy package already imported) instead of the cold golden state.
+   * The captured pages are copies, so a single {@code Snapshot} is safe to share as a per-pod
+   * baseline that many instances rebaseline from concurrently.
+   */
+  public record Snapshot(Map<Integer, byte[]> privatePages, int totalPages) {}
+
+  /**
+   * Captures the current private-page delta over the golden snapshot as a reusable warm baseline.
+   * Only the pages this instance has actually written are copied (typically a small fraction of the
+   * heap), so the snapshot is far smaller than full linear memory.
+   */
+  public Snapshot snapshotPrivatePages() {
+    Map<Integer, byte[]> delta = new HashMap<>();
+    for (int wasmPageIndex = 0; wasmPageIndex < privatePages.length; wasmPageIndex++) {
+      byte[][] subPages = privatePages[wasmPageIndex];
+      if (subPages == null) {
+        continue;
+      }
+      for (
+        int cowSubPageIndex = 0;
+        cowSubPageIndex < COW_PAGES_PER_WASM_PAGE;
+        cowSubPageIndex++
+      ) {
+        byte[] page = subPages[cowSubPageIndex];
+        if (page != null) {
+          int globalCowIndex =
+            (wasmPageIndex * COW_PAGES_PER_WASM_PAGE) + cowSubPageIndex;
+          delta.put(globalCowIndex, page.clone());
+        }
+      }
+    }
+    return new Snapshot(delta, totalPages);
+  }
+
+  /**
+   * Reverts this memory to a captured warm baseline: like {@link #reset()}, but restores the
+   * snapshot's private pages over golden instead of dropping to the cold golden view. Pages absent
+   * from the snapshot read through to golden (or to zero beyond it), exactly as they did in the
+   * instance the snapshot was captured from. The snapshot's pages are copied, leaving it unmodified
+   * for reuse across instances.
+   */
+  public void rebaseline(Snapshot snapshot) {
+    Map<Integer, byte[]> warmPrivatePages = snapshot.privatePages();
+    int maxWasmPages = maximumPages();
+    validateInitialPrivatePages(warmPrivatePages, maxWasmPages);
+
+    Arrays.fill(privatePages, null);
+    newPageCount = 0;
+    copiedPageCount = 0;
+
+    warmPrivatePages.forEach((globalCowIndex, pageData) -> {
+      int wasmPageIndex = globalCowIndex / COW_PAGES_PER_WASM_PAGE;
+      int cowSubPageIndex = globalCowIndex % COW_PAGES_PER_WASM_PAGE;
+      if (wasmPageIndex < maxWasmPages) {
+        if (privatePages[wasmPageIndex] == null) {
+          privatePages[wasmPageIndex] = new byte[COW_PAGES_PER_WASM_PAGE][];
+        }
+        privatePages[wasmPageIndex][cowSubPageIndex] = pageData.clone();
+        if (wasmPageIndex < goldenPages) {
+          copiedPageCount++;
+        } else {
+          newPageCount++;
+        }
+      }
+    });
+
+    int floor = Math.max(goldenPages, limits.initialPages());
+    this.totalPages = Math.min(Math.max(snapshot.totalPages(), floor), maxWasmPages);
   }
 
   @Override
