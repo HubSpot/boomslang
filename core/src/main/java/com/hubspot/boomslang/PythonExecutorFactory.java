@@ -86,7 +86,10 @@ public class PythonExecutorFactory {
     );
     this.extractedPythonPath =
       extractPythonResourcesToPath(stdlibPath, builder.wasmResource);
-    this.module = loadWasmModule(builder.wasmResource);
+    this.module =
+      builder.wasmModule != null
+        ? builder.wasmModule
+        : loadWasmModule(builder.wasmResource);
     this.executorService = createWasmExecutorService();
     this.factoryHostFunctions = builder.hostFunctions.toArray(new HostFunction[0]);
     this.extensionFactories = List.copyOf(builder.extensionFactories);
@@ -624,6 +627,7 @@ public class PythonExecutorFactory {
     private final List<Supplier<BoomslangExtension>> extensionFactories =
       new ArrayList<>();
     private String wasmResource = DEFAULT_WASM_RESOURCE;
+    private WasmModule wasmModule;
     private Function<Instance, Machine> machineFactory;
     private Path stdlibPath;
     private String pythonHome = "/usr/local";
@@ -639,6 +643,20 @@ public class PythonExecutorFactory {
      */
     public Builder withWasmResource(String resourcePath) {
       this.wasmResource = resourcePath;
+      return this;
+    }
+
+    /**
+     * Provides an already-parsed WASM module, bypassing the classpath parse of {@link
+     * #withWasmResource(String)}. Intended for handing in a chicory {@code CompiledModule}'s stripped
+     * {@code .meta} module (AOT function bodies removed) alongside its AOT {@link
+     * #withMachineFactory(Function) machine factory}: execution runs on the compiled machine, so the
+     * heavy interpreter IR of the full binary never needs to be parsed or retained. When set, the
+     * module's classpath resource is still extracted (for the stdlib layout) but not parsed. When
+     * unset, the module is parsed from {@link #withWasmResource(String)} as before.
+     */
+    public Builder withWasmModule(WasmModule module) {
+      this.wasmModule = module;
       return this;
     }
 
