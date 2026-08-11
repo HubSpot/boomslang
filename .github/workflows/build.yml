@@ -43,6 +43,11 @@ jobs:
           java-version: "21"
           cache: maven
 
+      - name: Rust tests
+        run: |
+          cargo test --locked --manifest-path boomslang-hostgen/Cargo.toml
+          cargo test --locked --manifest-path examples/rust-host/Cargo.toml
+
       - name: Report initial disk usage
         run: |
           df -h
