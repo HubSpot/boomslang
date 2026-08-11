@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 from pydantic import BaseModel
+from openpyxl import Workbook
+import xlrd
 ```
 
 Notes:

@@ -105,6 +105,7 @@ fn prewarm_stdlib(py: Python) {
         "pandas",
         "matplotlib", "matplotlib.pyplot",
         "ijson",
+        "openpyxl", "xlrd",
     ];
 
     py.run(

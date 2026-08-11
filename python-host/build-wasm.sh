@@ -145,7 +145,7 @@ do_wizer() {
     local pip_packages="$CPYTHON_DIR/lib/pip-packages"
     if [ -d "$pip_packages" ]; then
         echo "Copying pip packages from $pip_packages"
-        for pkg in pydantic typing_inspection typing_extensions.py annotated_types; do
+        for pkg in pydantic typing_inspection typing_extensions.py annotated_types openpyxl et_xmlfile xlrd; do
             [ -e "$pip_packages/$pkg" ] && cp -r "$pip_packages/$pkg" "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
         done
     fi
