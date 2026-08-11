@@ -10,6 +10,8 @@ pip install https://github.com/HubSpot/boomslang/releases/download/<tag>/boomsla
 
 From a source checkout: `just fetch-main-wasm && just python-stage`, then `pip install -e boomslang-py`.
 
+wasmtime is pinned to `>=36,<46`: 47.x aborts while compiling `boomslang.wasm`, whose 100,000 data segments overflow the `u16` `MemFlags` index introduced in [wasmtime#13615](https://github.com/bytecodealliance/wasmtime/pull/13615).
+
 ## Quickstart
 
 ```python

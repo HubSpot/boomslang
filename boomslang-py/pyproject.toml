@@ -8,7 +8,9 @@ dynamic = ["version"]
 description = "Sandboxed CPython 3.14 execution via WebAssembly (wasmtime)"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["wasmtime>=36"]
+# Upper bound is deliberate: wasmtime 47.x aborts while compiling boomslang.wasm
+# (bytecodealliance/wasmtime#13615).
+dependencies = ["wasmtime>=36,<46"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
