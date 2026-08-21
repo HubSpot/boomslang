@@ -648,7 +648,7 @@ public class PythonExecutorFactory {
 
     /**
      * Provides an already-parsed WASM module, bypassing the classpath parse of {@link
-     * #withWasmResource(String)}. Intended for handing in a chicory {@code CompiledModule}'s stripped
+     * #withWasmResource(String)}. Intended for handing in an Endive {@code CompiledModule}'s stripped
      * {@code .meta} module (AOT function bodies removed) alongside its AOT {@link
      * #withMachineFactory(Function) machine factory}: execution runs on the compiled machine, so the
      * heavy interpreter IR of the full binary never needs to be parsed or retained. When set, the

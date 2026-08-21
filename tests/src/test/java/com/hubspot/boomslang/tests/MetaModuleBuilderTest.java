@@ -2,8 +2,6 @@ package com.hubspot.boomslang.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.dylibso.chicory.wasm.Parser;
-import com.dylibso.chicory.wasm.WasmModule;
 import com.hubspot.boomslang.PythonExecutorFactory;
 import com.hubspot.boomslang.PythonInstance;
 import com.hubspot.boomslang.PythonResult;
@@ -11,6 +9,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import org.junit.jupiter.api.Test;
+import run.endive.wasm.Parser;
+import run.endive.wasm.WasmModule;
 
 /**
  * Verifies the {@code Builder.withWasmModule(WasmModule)} plumbing: when a pre-parsed module is
