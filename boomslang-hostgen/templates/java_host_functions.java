@@ -86,6 +86,12 @@ public final class {{ class_name }} {
       };
     }
 
+{% for function in functions %}
+    {{ function.handler_type }} get{{ function.upper_name }}() {
+      return {{ function.field }};
+    }
+
+{% endfor %}
     private IllegalStateException missingHandler(String functionName) {
       return new IllegalStateException(
         "No handler registered for host function " + MODULE + "::" + functionName
