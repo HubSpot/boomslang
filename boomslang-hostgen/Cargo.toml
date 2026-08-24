@@ -5,7 +5,7 @@ edition = "2021"
 license = "Apache-2.0"
 description = "Code generator for boomslang host function extensions (Python-in-Java via WASM)"
 repository = "https://github.com/HubSpot/boomslang"
-keywords = ["python", "wasm", "chicory", "codegen"]
+keywords = ["python", "wasm", "endive", "codegen"]
 categories = ["development-tools::build-utils"]
 
 [dependencies]

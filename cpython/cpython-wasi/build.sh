@@ -61,10 +61,10 @@ CONFIG_SITE=./Tools/wasm/wasi/config.site-wasm32-wasi \
     --without-doc-strings \
     --with-tail-call-interp
 
-# Split add_ast_annotations() (266 KB) into sub-functions so Chicory's AOT
+# Split add_ast_annotations() (266 KB) into sub-functions so Endive's AOT
 # can compile them. The function is auto-generated from the ASDL grammar;
 # post-processing is simpler than patching the generator.
-log "Splitting add_ast_annotations for Chicory AOT..."
+log "Splitting add_ast_annotations for Endive AOT..."
 python3 /build/split-ast-annotations.py
 
 python3 - <<'PY'

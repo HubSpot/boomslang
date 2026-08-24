@@ -1,7 +1,7 @@
 package com.hubspot.boomslang;
 
-import com.dylibso.chicory.runtime.Memory;
 import java.time.Duration;
+import run.endive.runtime.Memory;
 
 /**
  * Per-instance resource limits, passed to {@link PythonExecutorFactory}{@code .createInstance}.

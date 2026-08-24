@@ -5,7 +5,7 @@ edition = "2024"
 license = "Apache-2.0"
 description = "Built-in host bridge extension for boomslang — generic Java↔Python function calls"
 repository = "https://github.com/HubSpot/boomslang"
-keywords = ["python", "wasm", "chicory"]
+keywords = ["python", "wasm", "endive"]
 categories = ["wasm"]
 
 [lib]

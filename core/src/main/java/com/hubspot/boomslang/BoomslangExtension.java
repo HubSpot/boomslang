@@ -1,6 +1,6 @@
 package com.hubspot.boomslang;
 
-import com.dylibso.chicory.runtime.HostFunction;
+import run.endive.runtime.HostFunction;
 
 /**
  * A named bundle of WASM host functions that a Python runtime build imports. Register extensions

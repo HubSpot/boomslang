@@ -1,18 +1,18 @@
 package com.hubspot.boomslang;
 
-import com.dylibso.chicory.runtime.ExportFunction;
-import com.dylibso.chicory.runtime.HostFunction;
-import com.dylibso.chicory.runtime.Instance;
-import com.dylibso.chicory.runtime.Machine;
-import com.dylibso.chicory.runtime.Store;
-import com.dylibso.chicory.wasi.WasiOptions;
-import com.dylibso.chicory.wasi.WasiPreview1;
-import com.dylibso.chicory.wasm.WasmModule;
 import java.nio.file.Path;
 import java.util.function.Function;
 import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import run.endive.runtime.ExportFunction;
+import run.endive.runtime.HostFunction;
+import run.endive.runtime.Instance;
+import run.endive.runtime.Machine;
+import run.endive.runtime.Store;
+import run.endive.wasi.WasiOptions;
+import run.endive.wasi.WasiPreview1;
+import run.endive.wasm.WasmModule;
 
 /**
  * The shared, immutable runtime state behind a {@link PythonExecutorFactory}: the parsed WASM

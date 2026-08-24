@@ -2,17 +2,17 @@ package com.hubspot.boomslang;
 
 import static java.lang.Math.min;
 
-import com.dylibso.chicory.runtime.Instance;
-import com.dylibso.chicory.runtime.Memory;
-import com.dylibso.chicory.runtime.WasmRuntimeException;
-import com.dylibso.chicory.wasm.types.DataSegment;
-import com.dylibso.chicory.wasm.types.MemoryLimits;
-import com.dylibso.chicory.wasm.types.PassiveDataSegment;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Map;
+import run.endive.runtime.Instance;
+import run.endive.runtime.Memory;
+import run.endive.runtime.WasmRuntimeException;
+import run.endive.wasm.types.DataSegment;
+import run.endive.wasm.types.MemoryLimits;
+import run.endive.wasm.types.PassiveDataSegment;
 
 /**
  * Copy-on-write WASM linear memory backed by the {@link RuntimeImage} golden snapshot. Reads are

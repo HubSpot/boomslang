@@ -2,7 +2,7 @@
  * aviator-cpython: replacement for wasi-sdk 20's <setjmp.h>. The sysroot
  * header emits an unconditional #error unless -mllvm -wasm-enable-sjlj is
  * set and the runtime implements the WASM exception-handling proposal.
- * Chicory (our runtime) doesn't.
+ * Endive (our runtime) doesn't.
  *
  * This header is installed at /build/ft_include/setjmp.h and that path is
  * placed first in the compiler's include search path, so every

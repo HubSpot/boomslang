@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Post-process Python/Python-ast.c to split add_ast_annotations() into
-smaller sub-functions so each stays under Chicory's 64KB AOT limit.
+smaller sub-functions so each stays under Endive's 64KB AOT limit.
 
 The generated function is ~4300 lines / 266 KB of WASM — a single giant
 sequence of 113 independent annotation-setup blocks. We split it into N
