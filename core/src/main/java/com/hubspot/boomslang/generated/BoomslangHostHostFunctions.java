@@ -78,6 +78,14 @@ public final class BoomslangHostHostFunctions {
       };
     }
 
+    CallHandler getCall() {
+      return call;
+    }
+
+    LogHandler getLog() {
+      return log;
+    }
+
     private IllegalStateException missingHandler(String functionName) {
       return new IllegalStateException(
         "No handler registered for host function " + MODULE + "::" + functionName
