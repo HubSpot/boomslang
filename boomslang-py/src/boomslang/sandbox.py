@@ -121,7 +121,7 @@ def _default_on_log(level: int, message: str) -> None:
 
 
 class Sandbox:
-    """A sandboxed CPython 3.14 interpreter running in WebAssembly.
+    """A sandboxed CPython 3.15 interpreter running in WebAssembly.
 
     Each Sandbox is an isolated interpreter instantiated from the bundled
     Wizer-pre-initialized runtime image. Interpreter state persists across

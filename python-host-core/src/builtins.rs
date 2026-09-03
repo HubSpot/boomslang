@@ -1,4 +1,4 @@
-// C extension init functions statically linked into libpython3.14.a
+// C extension init functions statically linked into libpython3.15.a
 // These are registered via PyImport_AppendInittab so Python's import
 // system finds them as builtins without needing .so files on disk.
 

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM python:3.14.5-bookworm AS builder
+FROM python:3.15.0a7-bookworm AS builder
 
 RUN set -eux; \
     for tool in gcc g++ make git curl xz tar python3; do \
@@ -29,19 +29,19 @@ ENV PATH="/opt/wasi-sdk/bin:${PATH}"
 
 WORKDIR /build
 
-ARG PILLOW_TAG=12.2.0
+ARG PILLOW_TAG=12.3.0
 RUN git clone --depth 1 --branch ${PILLOW_TAG} https://github.com/python-pillow/Pillow /build/staging/Pillow \
     && echo "${PILLOW_TAG}" > /build/pillow_tag.txt
 
 COPY _sysconfigdata__wasi_wasm32-wasi.py /build/_sysconfigdata__wasi_wasm32-wasi.py
 COPY pyconfig-wasi.h /build/pyconfig-wasi.h
-RUN mkdir -p /tmp/cpython-wasi/include/python3.14 /tmp/cpython-wasi/usr/local/lib/python3.14 \
-    && curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.5.tar.gz | tar xz -C /tmp \
-    && cp -r /tmp/cpython-3.14.5/Include/* /tmp/cpython-wasi/include/python3.14/ \
-    && cp /build/pyconfig-wasi.h /tmp/cpython-wasi/include/python3.14/pyconfig.h \
-    && cp /build/_sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/usr/local/lib/python3.14/ \
-    && rm -rf /tmp/cpython-3.14.5 \
-    && test -f /tmp/cpython-wasi/include/python3.14/pyconfig.h
+RUN mkdir -p /tmp/cpython-wasi/include/python3.15 /tmp/cpython-wasi/usr/local/lib/python3.15 \
+    && curl -sL https://github.com/python/cpython/archive/refs/tags/v3.15.0a7.tar.gz | tar xz -C /tmp \
+    && cp -r /tmp/cpython-3.15.0a7/Include/* /tmp/cpython-wasi/include/python3.15/ \
+    && cp /build/pyconfig-wasi.h /tmp/cpython-wasi/include/python3.15/pyconfig.h \
+    && cp /build/_sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/usr/local/lib/python3.15/ \
+    && rm -rf /tmp/cpython-3.15.0a7 \
+    && test -f /tmp/cpython-wasi/include/python3.15/pyconfig.h
 
 RUN mkdir -p /build/wasi-libs \
     && curl -sL "https://github.com/vmware-labs/webassembly-language-runtimes/releases/download/libs%2Fzlib%2F1.2.13%2B20230623-2993864/libz-1.2.13-wasi-sdk-20.0.tar.gz" \
@@ -62,7 +62,7 @@ ENV WASI_CFLAGS="-Os \
 RUN set -ex; \
     cd /build/staging/Pillow; \
     mkdir -p /build/obj/pillow/libImaging /build/obj/pillow/ext; \
-    common_includes="-I/tmp/cpython-wasi/include/python3.14 -Isrc -Isrc/libImaging -I/build/wasi-libs/include"; \
+    common_includes="-I/tmp/cpython-wasi/include/python3.15 -Isrc -Isrc/libImaging -I/build/wasi-libs/include"; \
     for src in src/libImaging/*.c; do \
         name=$(basename "$src" .c); \
         echo "Compiling libImaging/${name}.c"; \

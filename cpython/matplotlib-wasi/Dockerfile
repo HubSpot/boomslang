@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM ubuntu:22.04 AS builder
+FROM ubuntu:24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -20,27 +20,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # wasm32-wasi freetype is built from source below and installed to
 # /build/wasi-libs; matplotlib's meson picks it up via pkg-config.
 
-# Blazar mounts an HS-internal pip.conf as a build secret. Without consuming it,
-# pip hits pypi.org directly and gets connection-refused from inside the build
-# container. Matplotlib 3.10.x pyproject.toml requires meson-python and pybind11
-# at build time; numpy is needed so `matplotlib/meson.build` can resolve
-# `numpy.get_include()` for the host. setuptools_scm is invoked by matplotlib's
-# version-generation logic at meson setup.
-# Pin pybind11 < 2.13. 2.13+ added unconditional <thread> and <mutex>
-# includes to detail/internals.h (for free-threaded Python support); wasi-sdk
-# 20's libc++ is built without thread support and <thread> emits a hard
-# error. matplotlib 3.9.x accepts pybind11 >= 2.6, so 2.12.x is fine.
+# Keep build tooling isolated from Ubuntu's externally managed Python.
+RUN python3 -m venv /opt/build-venv
+ENV PATH="/opt/build-venv/bin:${PATH}"
+
+# pybind11 3.1 supports Python 3.15. Its C++ locks are adapted below to
+# Boomslang's single-threaded WASI runtime; subinterpreter TLS is disabled in
+# the cross file because each instance owns one interpreter.
+# Blazar supplies its internal pip index with the pipconf build secret.
 RUN --mount=type=secret,id=pipconf,target=/etc/pip.conf \
     pip3 install --no-cache-dir --prefer-binary \
-        'meson>=1.2.1,<2' 'meson-python>=0.17.1,<1' 'pybind11>=2.12,<2.13' \
-        'setuptools_scm>=8'
+        'meson==1.12.0' 'meson-python==0.20.0' 'pybind11==3.1.0' \
+        'setuptools_scm>=8,<10'
 # Build-time numpy only supplies headers (via numpy.get_include()). Matplotlib's
 # _path extension pulls the numpy C API; ft2font uses it transitively. We overlay
 # numpy-wasi's patched headers on top below, so the host numpy version isn't
 # load-bearing.
 RUN --mount=type=secret,id=pipconf,target=/etc/pip.conf \
     pip3 install --no-cache-dir --prefer-binary --no-build-isolation \
-        'numpy>=2.0.0'
+        'numpy==2.5.2'
 
 # wasi-sdk selection — mirror pandas-wasi's dual-arch support. wasi-sdk-20
 # amd64 in Blazar; wasi-sdk-24 arm64 for local dev on Apple Silicon. ABI
@@ -78,8 +76,8 @@ ENV PATH="/opt/wasi-sdk/bin:${PATH}"
 WORKDIR /build
 
 # ---- Layer: clone matplotlib (cached by MATPLOTLIB_TAG arg)
-# Pin matplotlib 3.9.x. 3.10+ requires pybind11 >= 2.13.2 which pulls in
-# <thread> unconditionally. 3.9.x accepts pybind11 >= 2.6 (no thread deps).
+# Keep the existing Matplotlib/mpld3 API pairing while upgrading the C API
+# bindings. All shipped C++ extensions are rebuilt with pybind11 3.1.
 ARG MATPLOTLIB_TAG=v3.9.3
 RUN git clone --depth 1 --branch ${MATPLOTLIB_TAG} https://github.com/matplotlib/matplotlib /build/staging/matplotlib \
     && cd /build/staging/matplotlib \
@@ -92,13 +90,19 @@ RUN git clone --depth 1 --branch ${MATPLOTLIB_TAG} https://github.com/matplotlib
 # configure time.
 COPY _sysconfigdata__wasi_wasm32-wasi.py /build/_sysconfigdata__wasi_wasm32-wasi.py
 COPY pyconfig-wasi.h /build/pyconfig-wasi.h
-RUN mkdir -p /tmp/cpython-wasi/include/python3.14 /tmp/cpython-wasi/usr/local/lib/python3.14 \
-    && curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.5.tar.gz | tar xz -C /tmp \
-    && cp -r /tmp/cpython-3.14.5/Include/* /tmp/cpython-wasi/include/python3.14/ \
-    && cp /build/pyconfig-wasi.h /tmp/cpython-wasi/include/python3.14/pyconfig.h \
-    && cp /build/_sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/usr/local/lib/python3.14/ \
-    && rm -rf /tmp/cpython-3.14.5 \
-    && test -f /tmp/cpython-wasi/include/python3.14/pyconfig.h
+RUN mkdir -p /tmp/cpython-wasi/include/python3.15 /tmp/cpython-wasi/usr/local/lib/python3.15 \
+    && curl -sL https://github.com/python/cpython/archive/refs/tags/v3.15.0a7.tar.gz | tar xz -C /tmp \
+    && cp -r /tmp/cpython-3.15.0a7/Include/* /tmp/cpython-wasi/include/python3.15/ \
+    && cp /build/pyconfig-wasi.h /tmp/cpython-wasi/include/python3.15/pyconfig.h \
+    && cp /build/_sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/usr/local/lib/python3.15/ \
+    && rm -rf /tmp/cpython-3.15.0a7 \
+    && test -f /tmp/cpython-wasi/include/python3.15/pyconfig.h
+
+# Run build scripts with host Python while exposing the WASI target's ABI
+# to Meson/sysconfig. Python's extension loader still uses its native suffix,
+# so build-time NumPy/Cython remain host executables.
+ENV _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata__wasi_wasm32-wasi
+ENV PYTHONPATH=/tmp/cpython-wasi/usr/local/lib/python3.15
 
 # ---- Layer: overlay numpy-wasi's patched headers onto host numpy.
 # matplotlib's _path extension uses the numpy C API. Host numpy's npy_cpu.h
@@ -145,7 +149,7 @@ RUN mkdir -p /build/wasi-libs \
 # WOFF2 decompression.
 # Shadow wasi-sdk's <setjmp.h> by putting our stub at a higher-priority
 # include dir. See shim-include/setjmp.h for the rationale.
-COPY shim-include/setjmp.h /build/shim-include/setjmp.h
+COPY shim-include/ /build/shim-include/
 ARG FREETYPE_VERSION=2.13.3
 ARG FREETYPE_TAG=VER-2-13-3
 # Blazar containers allow github.com (cpython-wasi already uses it) but block
@@ -180,6 +184,8 @@ RUN cd /build/freetype-${FREETYPE_VERSION} \
 # pixels. Skipping _backend_agg / _image / _tri / _qhull / _ttconv avoids
 # building the Agg C++ rendering pipeline + qhull + associated headers.
 # See patch.py.
+COPY patch-pybind11.py /build/patch-pybind11.py
+RUN python3 /build/patch-pybind11.py
 COPY patch.py /build/patch.py
 RUN cd /build/staging/matplotlib && python3 /build/patch.py
 
@@ -220,7 +226,10 @@ RUN cd /build/staging/matplotlib; \
     ninja -C build -k 0 > /build/ninja.log 2>&1; ninja_exit=$?; \
     tail -n 300 /build/ninja.log; \
     echo "ninja exit $ninja_exit"; \
-    test "$ninja_exit" -eq 0 -o "$ninja_exit" -eq 1
+    test "$ninja_exit" -eq 0 -o "$ninja_exit" -eq 1 || exit "$ninja_exit"; \
+    if grep '^FAILED:' /build/ninja.log | grep -vE '^FAILED: [^ ]+\.so[[:space:]]*$'; then \
+        echo "Non-link build failures are not allowed"; exit 1; \
+    fi
 
 # ---- Layer: harvest + verify + package
 COPY harvest.sh /build/harvest.sh

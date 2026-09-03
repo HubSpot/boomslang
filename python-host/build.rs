@@ -21,7 +21,7 @@ fn main() {
     );
     println!("cargo:rustc-link-lib=static=clang_rt.builtins-wasm32");
 
-    println!("cargo:rustc-link-lib=static=python3.14");
+    println!("cargo:rustc-link-lib=static=python3.15");
 
     println!("cargo:rustc-link-lib=static=_matplotlib_ft2font");
     println!("cargo:rustc-link-lib=static=_matplotlib_image");

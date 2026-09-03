@@ -172,6 +172,7 @@ object artifacts extends Module {
 
   private val pydanticCoreWasiEntries = Seq(
     "_sysconfigdata__wasi_wasm32-wasi.py",
+    "pyconfig-wasi.h",
     "wheels",
     "build-local.sh",
     "hubspot.build.json",
@@ -198,6 +199,7 @@ object artifacts extends Module {
     "patch.py"
   )
   private val matplotlibWasiEntries = Seq(
+    "patch-pybind11.py",
     "_sysconfigdata__wasi_wasm32-wasi.py",
     "shim-include",
     "cross-wasi.ini",
@@ -221,6 +223,7 @@ object artifacts extends Module {
     "pyconfig-wasi.h"
   )
   private val cpythonWasiEntries = Seq(
+    "patch-lazy-imports.py",
     "main.c",
     "build.sh",
     "split-ast-annotations.py",
@@ -314,6 +317,7 @@ object artifacts extends Module {
 
   def pydanticCoreWasiContext = Task.Sources(
     "cpython/pydantic-core-wasi/_sysconfigdata__wasi_wasm32-wasi.py",
+    "cpython/pydantic-core-wasi/pyconfig-wasi.h",
     "cpython/pydantic-core-wasi/wheels",
     "cpython/pydantic-core-wasi/build-local.sh",
     "cpython/pydantic-core-wasi/hubspot.build.json",
@@ -340,6 +344,7 @@ object artifacts extends Module {
     "cpython/pandas-wasi/patch.py"
   )
   def matplotlibWasiContext = Task.Sources(
+    "cpython/matplotlib-wasi/patch-pybind11.py",
     "cpython/matplotlib-wasi/_sysconfigdata__wasi_wasm32-wasi.py",
     "cpython/matplotlib-wasi/shim-include",
     "cpython/matplotlib-wasi/cross-wasi.ini",
@@ -363,6 +368,7 @@ object artifacts extends Module {
     "cpython/ijson-wasi/pyconfig-wasi.h"
   )
   def cpythonWasiContext = Task.Sources(
+    "cpython/cpython-wasi/patch-lazy-imports.py",
     "cpython/cpython-wasi/main.c",
     "cpython/cpython-wasi/build.sh",
     "cpython/cpython-wasi/split-ast-annotations.py",
@@ -536,16 +542,19 @@ object artifacts extends Module {
     os.makeDir.all(extractedDir)
     os.makeDir.all(packagesDir)
 
+    // Resolve guest resources independently of the build host's Python and constraints.
     runLogged((
       defaultPython, "-m", "pip", "download",
-      "pydantic==2.12.5",
+      "pydantic==2.13.5",
+      "--python-version", "3.15",
+      "--only-binary=:all:",
       "annotated-types>=0.6.0",
       "typing-extensions>=4.14.1",
       "typing-inspection>=0.4.2",
       "--no-deps",
       "-d", downloadDir,
       "--quiet"
-    ), env = Map("PIP_DISABLE_PIP_VERSION_CHECK" -> "1"))
+    ), env = Map("PIP_DISABLE_PIP_VERSION_CHECK" -> "1", "PIP_CONSTRAINT" -> ""))
 
     for (wheel <- os.list(downloadDir) if wheel.ext == "whl") {
       runLogged((defaultPython, "-m", "zipfile", "-e", wheel, extractedDir))
@@ -629,9 +638,9 @@ object artifacts extends Module {
   def resources = Task {
     val pythonRoot = Task.dest / "python"
     val libRoot = pythonRoot / "usr" / "local" / "lib"
-    val siteRoot = libRoot / "python3.14"
+    val siteRoot = libRoot / "python3.15"
     os.makeDir.all(libRoot)
-    copyPath(cpythonWasi().path / "usr" / "local" / "lib" / "python3.14", siteRoot)
+    copyPath(cpythonWasi().path / "usr" / "local" / "lib" / "python3.15", siteRoot)
     copyPath(pydanticCorePython().path, siteRoot / "pydantic_core")
 
     for (pkg <- Seq("pydantic", "annotated_types", "typing_inspection")) {
