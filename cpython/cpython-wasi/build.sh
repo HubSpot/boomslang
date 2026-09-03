@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PYTHON_VERSION=3.14.5
-CPYTHON_TAG=v3.14.5
+PYTHON_VERSION=3.15.0a7
+CPYTHON_TAG=v3.15.0a7
 
 WASI_SDK_PATH="${WASI_SDK_PATH:-/opt/wasi-sdk}"
 BUILD_DIR="/build/staging"
@@ -53,12 +53,14 @@ export LDFLAGS="-L${DEPS_LIBDIR}"
 export PKG_CONFIG_PATH="${DEPS_LIBDIR}/pkgconfig"
 export PKG_CONFIG_LIBDIR="${DEPS_LIBDIR}/pkgconfig"
 
-CONFIG_SITE=./Tools/wasm/wasi/config.site-wasm32-wasi \
+CONFIG_SITE=./Platforms/WASI/config.site-wasm32-wasi \
+    HOSTRUNNER="wasmtime run --wasm max-wasm-stack=16777216 --wasi preview2=n --dir .::/" \
     ./configure -C \
     --host=wasm32-wasip1 \
     --build=$(./config.guess) \
     --with-build-python=python3 \
     --without-doc-strings \
+    --without-system-libmpdec \
     --with-tail-call-interp
 
 # Split add_ast_annotations() (266 KB) into sub-functions so Endive's AOT
@@ -71,41 +73,35 @@ python3 - <<'PY'
 from pathlib import Path
 path = Path('Python/ceval_macros.h')
 text = path.read_text()
-old = (
-    "#   if defined(__clang__) || defined(__GNUC__)\n"
-    "#       if !_Py__has_attribute(preserve_none) || !_Py__has_attribute(musttail)\n"
-    "#           error \"This compiler does not have support for efficient tail calling.\"\n"
-    "#       endif\n"
-    "#   elif defined(_MSC_VER)\n"
-    "#       error \"Tail calling not supported for MSVC.\"\n"
-    "#   endif\n"
-    "\n"
-    "    // Note: [[clang::musttail]] works for GCC 15, but not __attribute__((musttail)) at the moment.\n"
-    "#   define Py_MUSTTAIL [[clang::musttail]]\n"
-    "#   define Py_PRESERVE_NONE_CC __attribute__((preserve_none))"
-)
-new = (
-    "#   if defined(__wasm32__) && (defined(__clang__) || defined(__GNUC__))\n"
-    "#       if !_Py__has_attribute(musttail)\n"
-    "#           error \"This compiler does not have support for tail calling.\"\n"
-    "#       endif\n"
-    "#       define Py_PRESERVE_NONE_CC\n"
-    "#   elif defined(__clang__) || defined(__GNUC__)\n"
-    "#       if !_Py__has_attribute(preserve_none) || !_Py__has_attribute(musttail)\n"
-    "#           error \"This compiler does not have support for efficient tail calling.\"\n"
-    "#       endif\n"
-    "#       define Py_PRESERVE_NONE_CC __attribute__((preserve_none))\n"
-    "#   elif defined(_MSC_VER)\n"
-    "#       error \"Tail calling not supported for MSVC.\"\n"
-    "#   endif\n"
-    "\n"
-    "    // Note: [[clang::musttail]] works for GCC 15, but not __attribute__((musttail)) at the moment.\n"
-    "#   define Py_MUSTTAIL [[clang::musttail]]"
-)
+old = """#   if defined(__clang__) || defined(__GNUC__)
+#       if !_Py__has_attribute(preserve_none) || !_Py__has_attribute(musttail)
+#           error "This compiler does not have support for efficient tail calling."
+#       endif
+#   elif defined(_MSC_VER) && (_MSC_VER < 1950)
+#       error "You need at least VS 2026 / PlatformToolset v145 for tail calling."
+#   endif
+#   if defined(_MSC_VER) && !defined(__clang__)
+#      define Py_MUSTTAIL [[msvc::musttail]]
+#      define Py_PRESERVE_NONE_CC __preserve_none
+#   else
+#       define Py_MUSTTAIL __attribute__((musttail))
+#       define Py_PRESERVE_NONE_CC __attribute__((preserve_none))
+#   endif"""
+new = """#   if defined(__wasm32__) && defined(__clang__)
+#       if !_Py__has_attribute(musttail)
+#           error "This compiler does not have support for tail calling."
+#       endif
+#       define Py_MUSTTAIL __attribute__((musttail))
+#       define Py_PRESERVE_NONE_CC
+#   else
+""" + old + "\n#   endif"
 if old not in text:
     raise SystemExit('Could not patch ceval_macros.h for WASI tail calls')
 path.write_text(text.replace(old, new))
 PY
+
+log "Patching Python 3.15a7 lazy dotted-import aliases..."
+python3 /build/patch-lazy-imports.py "${SOURCE_DIR}"
 
 log "Building CPython..."
 # Pass -mtail-call at make time (not configure time) so the WASM tail-call
@@ -133,14 +129,14 @@ else
     ls -la /build/vendor/ 2>/dev/null || echo "vendor/ does not exist"
     exit 1
 fi
-cp -r "${PYDANTIC_LIB}/python/pydantic_core" usr/local/lib/python3.14/
+cp -r "${PYDANTIC_LIB}/python/pydantic_core" usr/local/lib/python3.15/
 log "pydantic-core static lib: $(ls -lh ${PYDANTIC_LIB}/lib/lib_pydantic_core.a)"
 
 log "Building custom python.wasm with pydantic-core..."
 ${CC} -Os -Wno-int-conversion \
     -I. -IInclude -IInclude/internal -I$(cat pybuilddir.txt) \
     /build/main.c \
-    -L. -lpython3.14 \
+    -L. -lpython3.15 \
     -L${PYDANTIC_LIB}/lib -l_pydantic_core \
     -L${DEPS_LIBDIR} -lz -lbz2 -lsqlite3 -luuid \
     -LModules/expat -lexpat \
@@ -157,7 +153,7 @@ wasm-opt -O2 -o python-optimized.wasm python-pydantic.wasm
 # _pydantic_core is registered as a top-level builtin via PyImport_AppendInittab,
 # but pydantic_core/__init__.py imports it as a relative submodule (from ._pydantic_core).
 # This shim bridges the two.
-cat > usr/local/lib/python3.14/pydantic_core/_pydantic_core.py <<'SHIMEOF'
+cat > usr/local/lib/python3.15/pydantic_core/_pydantic_core.py <<'SHIMEOF'
 import _pydantic_core
 import sys
 sys.modules[__name__] = _pydantic_core
@@ -177,12 +173,12 @@ else
     ls -la /build/vendor/ 2>/dev/null || echo "vendor/ does not exist"
     exit 1
 fi
-cp -r "${NUMPY_LIB}/python/numpy" usr/local/lib/python3.14/
+cp -r "${NUMPY_LIB}/python/numpy" usr/local/lib/python3.15/
 log "numpy archives: $(ls ${NUMPY_LIB}/lib/wasm32-wasi/ | wc -l) files, $(du -sh ${NUMPY_LIB}/lib/wasm32-wasi/ | cut -f1) total"
 cat "${NUMPY_LIB}/manifest.txt"
 
 # Strip Cython/C++ source files that aren't needed at runtime.
-find usr/local/lib/python3.14/numpy -type f \( \
+find usr/local/lib/python3.15/numpy -type f \( \
         -name '*.pyx' -o -name '*.pxd' -o -name '*.pyx.in' -o -name '*.pxd.in' \
         -o -name '*.c.in' -o -name '*.h.in' \
     \) -delete
@@ -196,9 +192,9 @@ find usr/local/lib/python3.14/numpy -type f \( \
 NPY_VER=$(sed 's/^v//' "${NUMPY_LIB}/version.txt" 2>/dev/null || echo "unknown")
 log "numpy-wasi artifact reports version: ${NPY_VER}"
 
-if [ ! -f usr/local/lib/python3.14/numpy/version.py ]; then
+if [ ! -f usr/local/lib/python3.15/numpy/version.py ]; then
     log "Generating numpy/version.py stub (v=${NPY_VER})..."
-    cat > usr/local/lib/python3.14/numpy/version.py <<VEREOF
+    cat > usr/local/lib/python3.15/numpy/version.py <<VEREOF
 # Fabricated at cpython-wasi build time; numpy's real version.py is meson-generated.
 version = "${NPY_VER}"
 __version__ = "${NPY_VER}"
@@ -209,9 +205,9 @@ release = True
 VEREOF
 fi
 
-if [ ! -f usr/local/lib/python3.14/numpy/__config__.py ]; then
+if [ ! -f usr/local/lib/python3.15/numpy/__config__.py ]; then
     log "Generating numpy/__config__.py stub..."
-    cat > usr/local/lib/python3.14/numpy/__config__.py <<'CFGEOF'
+    cat > usr/local/lib/python3.15/numpy/__config__.py <<'CFGEOF'
 # Fabricated at cpython-wasi build time. numpy.show_config() reads this.
 CONFIG = {
     "Compilers": {
@@ -228,7 +224,7 @@ CONFIG = {
         "blas": {"name": "none", "found": False},
         "lapack": {"name": "none", "found": False},
     },
-    "Python Information": {"path": "/usr/bin/python3", "version": "3.14"},
+    "Python Information": {"path": "/usr/bin/python3", "version": "3.15"},
     "SIMD Extensions": {"baseline": [], "found": [], "not found": []},
 }
 
@@ -260,17 +256,17 @@ else
     ls -la /build/vendor/ 2>/dev/null || echo "vendor/ does not exist"
     exit 1
 fi
-cp -r "${PANDAS_LIB}/python/pandas" usr/local/lib/python3.14/
+cp -r "${PANDAS_LIB}/python/pandas" usr/local/lib/python3.15/
 log "pandas archives: $(ls ${PANDAS_LIB}/lib/wasm32-wasi/ | wc -l) files, $(du -sh ${PANDAS_LIB}/lib/wasm32-wasi/ | cut -f1) total"
 cat "${PANDAS_LIB}/manifest.txt"
 
 # Strip Cython/C sources we don't need at runtime.
-find usr/local/lib/python3.14/pandas -type f \( \
+find usr/local/lib/python3.15/pandas -type f \( \
         -name '*.pyx' -o -name '*.pxd' -o -name '*.pxi' -o -name '*.pxi.in' \
         -o -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \
     \) -delete
 # Drop the test tree — huge and not used by the sandbox.
-rm -rf usr/local/lib/python3.14/pandas/tests 2>/dev/null || true
+rm -rf usr/local/lib/python3.15/pandas/tests 2>/dev/null || true
 
 PANDAS_VER=$(sed 's/^v//' "${PANDAS_LIB}/version.txt" 2>/dev/null || echo "unknown")
 log "pandas-wasi artifact reports version: ${PANDAS_VER}"
@@ -278,7 +274,7 @@ log "pandas-wasi artifact reports version: ${PANDAS_VER}"
 # Install pandas's pure-Python dependencies from wheels. python-dateutil
 # pulls in six transitively. Pandas's top-level `import pandas` chain reaches
 # pandas/_libs/tslibs/timezones.pyx -> dateutil.tz -> six, so both must be
-# present at module load. tzdata is optional (zoneinfo is in stdlib 3.14 but
+# present at module load. tzdata is optional (zoneinfo is in stdlib 3.15 but
 # WASI has no /usr/share/zoneinfo; include it so ZoneInfo lookups work).
 log "Downloading python-dateutil, six, tzdata..."
 # Blazar containers can't reach pythonhosted.org directly — curl gets exit 7.
@@ -292,7 +288,7 @@ pip3 download --no-cache-dir --no-deps --prefer-binary \
     "python-dateutil>=2.8.2" "six>=1.16" "tzdata"
 python3 -c "
 import zipfile, glob
-target = '${SOURCE_DIR}/usr/local/lib/python3.14'
+target = '${SOURCE_DIR}/usr/local/lib/python3.15'
 for whl in glob.glob('/tmp/wheels-pandas/*.whl'):
     print(f'Extracting {whl}')
     with zipfile.ZipFile(whl) as z:
@@ -308,9 +304,9 @@ for whl in glob.glob('/tmp/wheels-pandas/*.whl'):
 # .mmap class raises on instantiation is sufficient to let pandas import and
 # keeps the isinstance(x, mmap.mmap) checks against normal file objects safe
 # (they just return False).
-if [ ! -f usr/local/lib/python3.14/mmap.py ]; then
+if [ ! -f usr/local/lib/python3.15/mmap.py ]; then
     log "Writing mmap stub for WASI..."
-    cat > usr/local/lib/python3.14/mmap.py <<'MMAPEOF'
+    cat > usr/local/lib/python3.15/mmap.py <<'MMAPEOF'
 """Stub mmap module for the WASI sandbox.
 
 cpython-wasi doesn't build the mmap C extension — WASI has no real mmap
@@ -353,10 +349,10 @@ else
     ls -la /build/vendor/ 2>/dev/null || echo "vendor/ does not exist"
     exit 1
 fi
-cp -r "${MATPLOTLIB_LIB}/python/matplotlib" usr/local/lib/python3.14/
+cp -r "${MATPLOTLIB_LIB}/python/matplotlib" usr/local/lib/python3.15/
 # mpl_toolkits is a sibling top-level package shipped by matplotlib.
 if [ -d "${MATPLOTLIB_LIB}/python/mpl_toolkits" ]; then
-    cp -r "${MATPLOTLIB_LIB}/python/mpl_toolkits" usr/local/lib/python3.14/
+    cp -r "${MATPLOTLIB_LIB}/python/mpl_toolkits" usr/local/lib/python3.15/
 fi
 # mpld3 + its pure-Python deps (jinja2, markupsafe) are unpacked into
 # python/ by matplotlib-wasi/harvest.sh. Copy whatever landed there.
@@ -370,17 +366,17 @@ for pkg in "${MATPLOTLIB_LIB}"/python/*/; do
     case "$name" in
         matplotlib|mpl_toolkits) continue ;;  # already copied above
     esac
-    cp -r "$pkg" usr/local/lib/python3.14/
+    cp -r "$pkg" usr/local/lib/python3.15/
     log "  staged python/${name}"
 done
 log "matplotlib archives: $(ls ${MATPLOTLIB_LIB}/lib/wasm32-wasi/ | wc -l) files, $(du -sh ${MATPLOTLIB_LIB}/lib/wasm32-wasi/ | cut -f1) total"
 cat "${MATPLOTLIB_LIB}/manifest.txt"
 
 # Strip source files we don't need at runtime.
-find usr/local/lib/python3.14/matplotlib -type f \( \
+find usr/local/lib/python3.15/matplotlib -type f \( \
         -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \
     \) -delete
-rm -rf usr/local/lib/python3.14/matplotlib/tests 2>/dev/null || true
+rm -rf usr/local/lib/python3.15/matplotlib/tests 2>/dev/null || true
 
 MATPLOTLIB_VER=$(sed 's/^v//' "${MATPLOTLIB_LIB}/version.txt" 2>/dev/null || echo "unknown")
 log "matplotlib-wasi artifact reports version: ${MATPLOTLIB_VER}"
@@ -396,13 +392,13 @@ else
     ls -la /build/vendor/ 2>/dev/null || echo "vendor/ does not exist"
     exit 1
 fi
-cp -r "${PILLOW_LIB}/python/PIL" usr/local/lib/python3.14/
+cp -r "${PILLOW_LIB}/python/PIL" usr/local/lib/python3.15/
 log "Pillow archives: $(ls ${PILLOW_LIB}/lib/wasm32-wasi/ | wc -l) files, $(du -sh ${PILLOW_LIB}/lib/wasm32-wasi/ | cut -f1) total"
 cat "${PILLOW_LIB}/manifest.txt"
-find usr/local/lib/python3.14/PIL -type f \( \
+find usr/local/lib/python3.15/PIL -type f \( \
         -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \
     \) -delete
-rm -rf usr/local/lib/python3.14/PIL/tests 2>/dev/null || true
+rm -rf usr/local/lib/python3.15/PIL/tests 2>/dev/null || true
 
 PILLOW_VER=$(sed 's/^v//' "${PILLOW_LIB}/version.txt" 2>/dev/null || echo "unknown")
 log "pillow-wasi artifact reports version: ${PILLOW_VER}"
@@ -411,7 +407,7 @@ log "Writing kiwisolver stub..."
 
 # kiwisolver stub — matplotlib's layout engine (constrained_layout).
 # Real kiwisolver is a C extension. mpld3 doesn't exercise layout.
-cat > usr/local/lib/python3.14/kiwisolver.py <<'STUB'
+cat > usr/local/lib/python3.15/kiwisolver.py <<'STUB'
 __version__ = "1.4.5"
 class Variable:
     def __init__(self, *a, **k): pass
@@ -439,14 +435,14 @@ else
     ls -la /build/vendor/ 2>/dev/null || echo "vendor/ does not exist"
     exit 1
 fi
-cp -r "${IJSON_LIB}/python/ijson" usr/local/lib/python3.14/
+cp -r "${IJSON_LIB}/python/ijson" usr/local/lib/python3.15/
 log "ijson archive: $(ls -lh ${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a)"
 cat "${IJSON_LIB}/manifest.txt"
 
-find usr/local/lib/python3.14/ijson -type f \( \
+find usr/local/lib/python3.15/ijson -type f \( \
         -name '*.c' -o -name '*.h' -o -name '*.so' \
     \) -delete
-rm -rf usr/local/lib/python3.14/ijson/tests 2>/dev/null || true
+rm -rf usr/local/lib/python3.15/ijson/tests 2>/dev/null || true
 
 IJSON_VER=$(sed 's/^v//' "${IJSON_LIB}/version.txt" 2>/dev/null || echo "unknown")
 log "ijson-wasi artifact reports version: ${IJSON_VER}"
@@ -465,7 +461,7 @@ else
 fi
 python3 -c "
 import zipfile, glob
-target = '${SOURCE_DIR}/usr/local/lib/python3.14'
+target = '${SOURCE_DIR}/usr/local/lib/python3.15'
 for whl in glob.glob('/tmp/wheels/*.whl'):
     print(f'Extracting {whl}')
     with zipfile.ZipFile(whl) as z:
@@ -489,13 +485,13 @@ cp -v python-optimized.wasm "${OUTPUT_DIR}/bin/python-${PYTHON_VERSION}.wasm"
 # default pod disk budget (the log truncates mid-copy with a corrupt docker
 # error message).
 log "Pre-copy stdlib size (before prune):"
-du -sh usr/local/lib/python3.14 | awk '{print "  " $0}'
-find usr/local/lib/python3.14 -depth -type d -name tests -exec rm -rf {} + 2>/dev/null || true
-find usr/local/lib/python3.14 -depth -type d -name test -exec rm -rf {} + 2>/dev/null || true
-find usr/local/lib/python3.14 -type f -name '*.pyi' -delete 2>/dev/null || true
-find usr/local/lib/python3.14 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+du -sh usr/local/lib/python3.15 | awk '{print "  " $0}'
+find usr/local/lib/python3.15 -depth -type d -name tests -exec rm -rf {} + 2>/dev/null || true
+find usr/local/lib/python3.15 -depth -type d -name test -exec rm -rf {} + 2>/dev/null || true
+find usr/local/lib/python3.15 -type f -name '*.pyi' -delete 2>/dev/null || true
+find usr/local/lib/python3.15 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 log "Post-copy stdlib size (after prune):"
-du -sh usr/local/lib/python3.14 | awk '{print "  " $0}'
+du -sh usr/local/lib/python3.15 | awk '{print "  " $0}'
 
 # Use cp without -v (less log spam) and without -T (portable):
 # copy CONTENTS of usr/ into OUTPUT_DIR/usr/ preserving structure.
@@ -525,8 +521,8 @@ for ma in ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_matplotlib_*.a; do echo "    add
 log "  pydantic-core intentionally remains separate; the Rust host links it as a Cargo dependency."
 
 (${AR} -M <<EOF
-create libpython3.14-aio.a
-addlib libpython3.14.a
+create libpython3.15-aio.a
+addlib libpython3.15.a
 addlib ${DEPS_LIBDIR}/libz.a
 addlib ${DEPS_LIBDIR}/libbz2.a
 addlib ${DEPS_LIBDIR}/libsqlite3.a
@@ -568,7 +564,7 @@ if [ "$ar_exit" -ne 0 ]; then
     exit $ar_exit
 fi
 
-cp -v libpython3.14-aio.a "${OUTPUT_DIR}/lib/wasm32-wasi/libpython3.14.a"
+cp -v libpython3.15-aio.a "${OUTPUT_DIR}/lib/wasm32-wasi/libpython3.15.a"
 
 # Also ship numpy/pandas archives separately for downstream visibility.
 cp -v "${NUMPY_LIB}/lib/wasm32-wasi/"lib_numpy_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
@@ -579,15 +575,15 @@ cp -v "${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a" "${OUTPUT_DIR}/lib/wasm32
 
 log "Generating pkg-config file..."
 mkdir -p "${OUTPUT_DIR}/lib/wasm32-wasi/pkgconfig"
-cat > "${OUTPUT_DIR}/lib/wasm32-wasi/pkgconfig/libpython3.14.pc" <<PCEOF
+cat > "${OUTPUT_DIR}/lib/wasm32-wasi/pkgconfig/libpython3.15.pc" <<PCEOF
 prefix=\${pcfiledir}/../..
 libdir=\${prefix}/lib/wasm32-wasi
-includedir=\${prefix}/include/python3.14
+includedir=\${prefix}/include/python3.15
 
-Name: libpython3.14
-Description: libpython3.14 allows embedding the CPython interpreter
+Name: libpython3.15
+Description: libpython3.15 allows embedding the CPython interpreter
 Version: ${PYTHON_VERSION}
-Libs: -L\${libdir} -lpython3.14 -Wl,-z,stack-size=524288 -Wl,--stack-first -Wl,--initial-memory=10485760 -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks
+Libs: -L\${libdir} -lpython3.15 -Wl,-z,stack-size=524288 -Wl,--stack-first -Wl,--initial-memory=10485760 -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks
 Cflags: -I\${includedir}
 PCEOF
 

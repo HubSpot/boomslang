@@ -65,7 +65,7 @@ public class PythonExecutorFactory {
   private static final String PYTHON_OVERLAY_RESOURCE_PREFIX = "/python-overlay";
   private static final String AOT_CLASS_NAME =
     "com.hubspot.boomslang.compiled.PythonWasmMachine";
-  private static final String PYTHON_LIB_DIR = "usr/local/lib/python3.14";
+  private static final String PYTHON_LIB_DIR = "usr/local/lib/python3.15";
   private static final long WASM_THREAD_STACK_SIZE = 16L * 1024 * 1024;
 
   private final WasmModule module;
@@ -673,7 +673,7 @@ public class PythonExecutorFactory {
      * Sets the host-side extraction root for Python resources. This is not the guest-visible stdlib
      * directory. Boomslang copies resources under this root while preserving their layout after the
      * {@code python/} resource prefix; for example, the CPython stdlib is extracted to {@code
-     * <stdlibPath>/usr/local/lib/python3.14}. The caller must make that extracted tree visible to
+     * <stdlibPath>/usr/local/lib/python3.15}. The caller must make that extracted tree visible to
      * the WASM instance at the paths expected by {@link #withPythonHome(String)} and {@link
      * #withPythonPath(String)}, usually by passing an appropriate root filesystem to {@link
      * PythonExecutorFactory#createInstance(Path)}.
@@ -685,7 +685,7 @@ public class PythonExecutorFactory {
 
     /**
      * Sets Python's guest-visible {@code PYTHONHOME}. The default is {@code /usr/local}, so CPython
-     * expects its stdlib at {@code /usr/local/lib/python3.14} inside the filesystem passed to
+     * expects its stdlib at {@code /usr/local/lib/python3.15} inside the filesystem passed to
      * {@link PythonExecutorFactory#createInstance(Path)}.
      */
     public Builder withPythonHome(String pythonHome) {

@@ -30,8 +30,8 @@ if [ ! -f "$runtime_root/bin/boomslang.wasm" ]; then
   exit 1
 fi
 
-if [ ! -d "$runtime_root/usr/local/lib/python3.14" ]; then
-  echo "ERROR: $runtime_root/usr/local/lib/python3.14 not found." >&2
+if [ ! -d "$runtime_root/usr/local/lib/python3.15" ]; then
+  echo "ERROR: $runtime_root/usr/local/lib/python3.15 not found." >&2
   echo "Run 'just fetch-main-wasm' (or 'just resources' after a local build) first." >&2
   exit 1
 fi
@@ -55,7 +55,7 @@ import sys
 
 dest = pathlib.Path(sys.argv[1])
 wasm = dest / "bin" / "boomslang.wasm"
-stdlib = dest / "usr" / "local" / "lib" / "python3.14"
+stdlib = dest / "usr" / "local" / "lib" / "python3.15"
 
 if wasm.read_bytes()[:4] != b"\0asm":
     raise SystemExit("staged boomslang.wasm is not a WASM binary")
@@ -69,8 +69,8 @@ if leftover is not None:
 PY
 
 wasm_size="$(wc -c < "$dest/bin/boomslang.wasm" | tr -d ' ')"
-stdlib_paths="$(find "$dest/usr/local/lib/python3.14" | wc -l | tr -d ' ')"
+stdlib_paths="$(find "$dest/usr/local/lib/python3.15" | wc -l | tr -d ' ')"
 
 echo "Staged Python runtime into $dest"
 echo "  wasm: $dest/bin/boomslang.wasm ($wasm_size bytes)"
-echo "  stdlib: $dest/usr/local/lib/python3.14 ($stdlib_paths paths)"
+echo "  stdlib: $dest/usr/local/lib/python3.15 ($stdlib_paths paths)"

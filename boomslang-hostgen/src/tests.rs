@@ -127,18 +127,8 @@ fn py_log(level: i32, message: &str) -> PyResult<()> {
     }
 }
 
-unsafe extern "C" {
-    #[allow(non_snake_case)]
-    fn PyInit__boomslang_host() -> *mut pyo3::ffi::PyObject;
-}
-
 pub fn register() {
-    unsafe {
-        pyo3::ffi::PyImport_AppendInittab(
-            b"_boomslang_host\0".as_ptr() as *const i8,
-            Some(PyInit__boomslang_host),
-        );
-    }
+    pyo3::append_to_inittab!(_boomslang_host);
 }
 
 pub fn prewarm(py: Python) {

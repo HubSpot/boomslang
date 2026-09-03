@@ -77,12 +77,12 @@ setup_wizer() {
 }
 
 check_prerequisites() {
-    if [ ! -f "$BUILD_DIR/cpython-wasi/lib/wasm32-wasi/libpython3.14.a" ]; then
+    if [ ! -f "$BUILD_DIR/cpython-wasi/lib/wasm32-wasi/libpython3.15.a" ]; then
         echo "ERROR: libpython not found. Build cpython-wasi first."
         exit 1
     fi
 
-    if [ ! -f "$BUILD_DIR/cpython-wasi/usr/local/lib/python3.14/os.py" ]; then
+    if [ ! -f "$BUILD_DIR/cpython-wasi/usr/local/lib/python3.15/os.py" ]; then
         echo "ERROR: Python stdlib not found. Build cpython-wasi first."
         exit 1
     fi
@@ -94,12 +94,12 @@ do_build() {
     setup_wasi_sdk
     check_prerequisites
 
-    cp "$BUILD_DIR"/cpython-wasi/usr/local/lib/python3.14/_sysconfigdata*.py \
+    cp "$BUILD_DIR"/cpython-wasi/usr/local/lib/python3.15/_sysconfigdata*.py \
        "$BUILD_DIR/cpython-wasi/lib/wasm32-wasi/"
 
     export CC_wasm32_wasip1="$WASI_SDK_PATH/bin/clang"
-    export CFLAGS_wasm32_wasip1="--sysroot=$WASI_SDK_PATH/share/wasi-sysroot -I$BUILD_DIR/cpython-wasi/include/python3.14 -Dmi_align_up_ptr=_mi_align_up_ptr"
-    export PYO3_CROSS_PYTHON_VERSION=3.14
+    export CFLAGS_wasm32_wasip1="--sysroot=$WASI_SDK_PATH/share/wasi-sysroot -I$BUILD_DIR/cpython-wasi/include/python3.15 -Dmi_align_up_ptr=_mi_align_up_ptr"
+    export PYO3_CROSS_PYTHON_VERSION=3.15
     export PYO3_CROSS_LIB_DIR="$BUILD_DIR/cpython-wasi/lib/wasm32-wasi"
     export PYTHON_PATH="$BUILD_DIR/cpython-wasi/lib/wasm32-wasi"
     export CPYTHON_WASI_DIR="$BUILD_DIR/cpython-wasi"
@@ -136,17 +136,17 @@ do_wizer() {
     mkdir -p "$BUILD_DIR/wizer-fs/work"
     mkdir -p "$BUILD_DIR/wizer-fs/lib"
     mkdir -p "$BUILD_DIR/wizer-fs/tmp"
-    cp -r "$BUILD_DIR/cpython-wasi/usr/local/lib/python3.14" "$BUILD_DIR/wizer-fs/usr/local/lib/" || true
+    cp -r "$BUILD_DIR/cpython-wasi/usr/local/lib/python3.15" "$BUILD_DIR/wizer-fs/usr/local/lib/" || true
 
     # Copy pydantic_core Python stubs
-    [ -d "$CPYTHON_DIR/lib/pydantic_core" ] && cp -r "$CPYTHON_DIR/lib/pydantic_core" "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/"
+    [ -d "$CPYTHON_DIR/lib/pydantic_core" ] && cp -r "$CPYTHON_DIR/lib/pydantic_core" "$BUILD_DIR/wizer-fs/usr/local/lib/python3.15/"
 
     # Copy pip packages for prewarm
     local pip_packages="$CPYTHON_DIR/lib/pip-packages"
     if [ -d "$pip_packages" ]; then
         echo "Copying pip packages from $pip_packages"
         for pkg in pydantic typing_inspection typing_extensions.py annotated_types; do
-            [ -e "$pip_packages/$pkg" ] && cp -r "$pip_packages/$pkg" "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
+            [ -e "$pip_packages/$pkg" ] && cp -r "$pip_packages/$pkg" "$BUILD_DIR/wizer-fs/usr/local/lib/python3.15/" 2>/dev/null || true
         done
     fi
 
@@ -154,7 +154,7 @@ do_wizer() {
     for ext_lib_dir in "$PROJECT_DIR"/extensions/*/lib; do
         if [ -d "$ext_lib_dir" ]; then
             echo "Copying built-in extension packages from $ext_lib_dir"
-            cp -r "$ext_lib_dir/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
+            cp -r "$ext_lib_dir/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.15/" 2>/dev/null || true
         fi
     done
 
@@ -165,7 +165,7 @@ do_wizer() {
             local abs_ext_dir="$PROJECT_DIR/$ext_dir"
             if [ -d "$abs_ext_dir/lib" ]; then
                 echo "Copying extension packages from $abs_ext_dir/lib"
-                cp -r "$abs_ext_dir/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.14/" 2>/dev/null || true
+                cp -r "$abs_ext_dir/lib/"* "$BUILD_DIR/wizer-fs/usr/local/lib/python3.15/" 2>/dev/null || true
             fi
         done
     fi

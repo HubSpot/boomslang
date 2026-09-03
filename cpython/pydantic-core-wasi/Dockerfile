@@ -3,7 +3,7 @@
 # Build pydantic-core as a static library for wasm32-wasip1.
 # Produces: lib_pydantic_core.a + Python stubs + dependency wheels
 #
-FROM rust:1.86-bookworm AS builder
+FROM rust:1.95.0-bookworm AS builder
 
 # WASI SDK 24 (arch-aware)
 ARG TARGETARCH
@@ -20,50 +20,27 @@ RUN rustup target add wasm32-wasip1
 WORKDIR /build
 
 # Clone pydantic-core source
-ARG PYDANTIC_CORE_TAG=v2.41.5
-RUN git clone --depth 1 --branch ${PYDANTIC_CORE_TAG} \
-    https://github.com/pydantic/pydantic-core /build/pydantic-core
+ARG PYDANTIC_TAG=v2.13.5
+RUN git clone --depth 1 --branch ${PYDANTIC_TAG} \
+    https://github.com/pydantic/pydantic /build/pydantic
 
-WORKDIR /build/pydantic-core
+WORKDIR /build/pydantic/pydantic-core
 
 # Patch crate-type to staticlib only (WASI doesn't support cdylib)
 RUN sed -i '/crate-type/s/.*/crate-type = ["staticlib"]/' Cargo.toml
 
-# CPython 3.14 headers for PyO3 cross-compilation
-RUN curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.5.tar.gz | tar xz -C /tmp \
-    && mkdir -p /tmp/cpython-wasi/include/python3.14 \
-    && cp -r /tmp/cpython-3.14.5/Include/* /tmp/cpython-wasi/include/python3.14/ \
-    && rm -rf /tmp/cpython-3.14.5
+# CPython 3.15 headers for PyO3 cross-compilation
+RUN curl -sL https://github.com/python/cpython/archive/refs/tags/v3.15.0a7.tar.gz | tar xz -C /tmp \
+    && mkdir -p /tmp/cpython-wasi/include/python3.15 \
+    && cp -r /tmp/cpython-3.15.0a7/Include/* /tmp/cpython-wasi/include/python3.15/ \
+    && rm -rf /tmp/cpython-3.15.0a7
 
-# Minimal pyconfig.h for wasm32-wasi cross-compilation
-RUN PYH=/tmp/cpython-wasi/include/python3.14/pyconfig.h \
-    && echo "#ifndef Py_PYCONFIG_H" > $PYH \
-    && echo "#define Py_PYCONFIG_H" >> $PYH \
-    && echo "#define SIZEOF_VOID_P 4" >> $PYH \
-    && echo "#define SIZEOF_SHORT 2" >> $PYH \
-    && echo "#define SIZEOF_INT 4" >> $PYH \
-    && echo "#define SIZEOF_LONG 4" >> $PYH \
-    && echo "#define SIZEOF_LONG_LONG 8" >> $PYH \
-    && echo "#define SIZEOF_FLOAT 4" >> $PYH \
-    && echo "#define SIZEOF_DOUBLE 8" >> $PYH \
-    && echo "#define SIZEOF_SIZE_T 4" >> $PYH \
-    && echo "#define SIZEOF_OFF_T 8" >> $PYH \
-    && echo "#define SIZEOF_WCHAR_T 4" >> $PYH \
-    && echo "#define SIZEOF_PID_T 4" >> $PYH \
-    && echo "#define HAVE_STDINT_H 1" >> $PYH \
-    && echo "#define HAVE_STDLIB_H 1" >> $PYH \
-    && echo "#define HAVE_STRING_H 1" >> $PYH \
-    && echo "#define HAVE_UNISTD_H 1" >> $PYH \
-    && echo "#define HAVE_WCHAR_H 1" >> $PYH \
-    && echo '#define PY_FORMAT_LONG_LONG "ll"' >> $PYH \
-    && echo "#define Py_GIL_DISABLED 0" >> $PYH \
-    && echo "#define DOUBLE_IS_IEEE_754_BINARY64_LE 1" >> $PYH \
-    && echo "#define ALIGNOF_MAX_ALIGN_T 8" >> $PYH \
-    && echo "#endif" >> $PYH
+# Use the generated configuration for the same CPython WASI target.
+COPY pyconfig-wasi.h /tmp/cpython-wasi/include/python3.15/pyconfig.h
 
 # Empty libpython stub (PyO3 needs it to link check, actual linking happens later)
 RUN mkdir -p /tmp/cpython-wasi/lib/wasm32-wasi \
-    && ar rcs /tmp/cpython-wasi/lib/wasm32-wasi/libpython3.14.a
+    && ar rcs /tmp/cpython-wasi/lib/wasm32-wasi/libpython3.15.a
 
 # Copy sysconfigdata and wheels from repo
 COPY _sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/lib/wasm32-wasi/
@@ -71,8 +48,8 @@ COPY wheels/ /build/wheels/
 
 # Build pydantic-core
 ENV CC_wasm32_wasip1="/opt/wasi-sdk/bin/clang"
-ENV CFLAGS_wasm32_wasip1="--sysroot=/opt/wasi-sdk/share/wasi-sysroot -I/tmp/cpython-wasi/include/python3.14"
-ENV PYO3_CROSS_PYTHON_VERSION=3.14
+ENV CFLAGS_wasm32_wasip1="--sysroot=/opt/wasi-sdk/share/wasi-sysroot -I/tmp/cpython-wasi/include/python3.15"
+ENV PYO3_CROSS_PYTHON_VERSION=3.15
 ENV PYO3_CROSS_LIB_DIR="/tmp/cpython-wasi/lib/wasm32-wasi"
 
 RUN cargo build --target wasm32-wasip1 --release --lib
@@ -81,7 +58,7 @@ RUN cargo build --target wasm32-wasip1 --release --lib
 RUN mkdir -p /tmp/artifact/lib /tmp/artifact/python /tmp/artifact/wheels \
     && cp target/wasm32-wasip1/release/lib_pydantic_core.a /tmp/artifact/lib/ \
     && cp -r python/pydantic_core /tmp/artifact/python/ \
-    && cp /build/wheels/*.whl /tmp/artifact/wheels/ 2>/dev/null || true \
+    && cp /build/wheels/*.whl /tmp/artifact/wheels/ \
     && cd /tmp/artifact && tar czf /artifact.tgz .
 
 FROM scratch

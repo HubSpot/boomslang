@@ -15,7 +15,7 @@ Boomslang is published to [Maven Central](https://central.sonatype.com/artifact/
 The default jar includes everything needed to run Python:
 
 - the Java API
-- the bundled `boomslang.wasm` (CPython 3.14 for `wasm32-wasip1`)
+- the bundled `boomslang.wasm` (CPython 3.15 for `wasm32-wasip1`)
 - Python resources: the stdlib plus NumPy, Pandas, Matplotlib, Pillow, Pydantic, ijson, and Jinja2
 - generated Endive AOT classes (`com.hubspot.boomslang.compiled.*`), so the runtime executes as JVM bytecode
 
@@ -37,7 +37,7 @@ Use this when your application â€” or another artifact in your dependency tree â
 This classifier excludes `python/**` and `com/hubspot/boomslang/compiled/**`; the Java API stays in the artifact. Your application then needs to provide:
 
 - a WASM binary, usually at the classpath location `python/bin/boomslang.wasm`
-- Python resources under `python/usr/local/lib/python3.14`
+- Python resources under `python/usr/local/lib/python3.15`
 - an AOT machine factory if you want AOT instead of interpreter fallback
 
 If your WASM is not at the default classpath location, point the factory at it with `withWasmResource(...)`.
