@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.2
+# syntax=docker/dockerfile:1.4
 #
 # boomslang WASM builder image
 # Provides: Rust toolchain, WASI SDK, Wizer, Binaryen for building
@@ -41,8 +41,9 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") \
     && ln -s /opt/binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt /usr/local/bin/wasm-opt \
     && wasm-opt --version
 
-# Rust WASM target (HubSpot base image has rustup configured for internal network)
-RUN rustup target add wasm32-wasip1
+# Rust WASM target
+RUN --mount=type=secret,id=cargo,target=/usr/local/cargo/config.toml \
+    rustup target add wasm32-wasip1
 
 # wabt (wasm-strip) — download from GitHub since apt is not reachable from Blazar
 ARG WABT_VERSION=1.0.40
