@@ -186,6 +186,34 @@ public class PythonExecutorFactory {
     );
   }
 
+  /**
+   * Creates a new Python instance forked from a captured warm baseline (see {@link
+   * PythonInstance#captureWarmSnapshot()}) rather than the cold golden snapshot, so packages
+   * imported into the baseline are already present in the returned instance's {@code sys.modules}.
+   * Everything else matches {@link #createInstance(Path)}.
+   *
+   * @param rootPath host directory mounted as the guest's root filesystem ({@code /})
+   * @param warmSnapshot the warm memory baseline to fork from
+   */
+  public PythonInstance createWarmInstance(
+    Path rootPath,
+    CopyOnWriteMemory.Snapshot warmSnapshot
+  ) {
+    PythonInstance instance = createInstance(rootPath);
+    instance.resetToWarm(warmSnapshot);
+    return instance;
+  }
+
+  public PythonInstance createWarmInstance(
+    Path rootPath,
+    ResourceLimits limits,
+    CopyOnWriteMemory.Snapshot warmSnapshot
+  ) {
+    PythonInstance instance = createInstance(rootPath, limits);
+    instance.resetToWarm(warmSnapshot);
+    return instance;
+  }
+
   private HostFunction[] createValidatedHostFunctions() {
     return validateHostFunctions(createHostFunctions());
   }

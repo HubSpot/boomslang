@@ -412,6 +412,39 @@ public class PythonInstance implements AutoCloseable {
   }
 
   /**
+   * Captures this interpreter's current memory as a reusable warm baseline — typically taken once,
+   * right after importing a heavy package (e.g. a generated client), and BEFORE any tenant-specific
+   * work. Fresh or {@link #resetToWarm(CopyOnWriteMemory.Snapshot) reset-to-warm} instances forked
+   * from the returned snapshot skip re-importing that package. Run this on the WASM thread, like the
+   * other instance operations.
+   *
+   * @throws IllegalStateException if the instance has been closed or poisoned
+   */
+  public synchronized CopyOnWriteMemory.Snapshot captureWarmSnapshot() {
+    checkNotClosed();
+    return cowMemory.snapshotPrivatePages();
+  }
+
+  /**
+   * Like {@link #reset()}, but reverts to a captured warm baseline instead of the cold golden
+   * snapshot, leaving the package(s) captured in {@code warmSnapshot} already imported. The snapshot
+   * is copied in, so one baseline can be shared across many instances. Same cleanliness guarantee as
+   * {@link #reset()}: only memory present in the snapshot survives, so tenant state written after the
+   * capture point does not carry over.
+   *
+   * @throws IllegalStateException if the instance has been closed
+   */
+  public synchronized void resetToWarm(CopyOnWriteMemory.Snapshot warmSnapshot) {
+    if (closed.get()) {
+      throw new IllegalStateException("PythonInstance has been closed");
+    }
+    cowMemory.rebaseline(warmSnapshot);
+    codeLoaded.set(false);
+    poisoned.set(false);
+    clearStdin();
+  }
+
+  /**
    * Marks this instance unusable (e.g. after a timeout left it in an unknown state). Subsequent
    * execute/compile/load calls throw {@link IllegalStateException} until {@link #reset()}.
    */
