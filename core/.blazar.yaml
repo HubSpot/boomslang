@@ -3,6 +3,7 @@ depends:
 
 env:
   SKIP_DEPLOY_WHEN_ARTIFACT_MATCHES_EXISTING: false
+  MAVEN_BUILD_OPTS: -Xmx32g
 
 buildResources:
   cpus: 32
