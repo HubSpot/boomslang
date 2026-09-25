@@ -88,10 +88,10 @@ cat "${MANIFEST}"
 log "Archives:"
 ls -lh "${OUTPUT_DIR}/lib/wasm32-wasi/"
 log "Python sources staged:"
-ls "${OUTPUT_DIR}/python/lxml/" | head -20
+ls "${OUTPUT_DIR}/python/lxml/" | sed -n 1,20p
 
 # Package artifact.
 log "Packaging artifact..."
 tar czf /artifact.tgz -C "${OUTPUT_DIR}" .
 log "Artifact contents:"
-tar tzf /artifact.tgz | head -30
+tar tzf /artifact.tgz | sed -n 1,30p
