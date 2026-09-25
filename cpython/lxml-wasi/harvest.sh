@@ -75,6 +75,12 @@ find "${OUTPUT_DIR}/python/lxml" -type d -name __pycache__ -exec rm -rf {} + 2>/
 find "${OUTPUT_DIR}/python/lxml" -type d -name tests -exec rm -rf {} + 2>/dev/null || true
 rm -rf "${OUTPUT_DIR}/python/lxml/includes" 2>/dev/null || true
 
+# Bundle libxml2 and libxslt so that downstream consumers (e.g. aviator-cpython)
+# that don't carry these libs in their own cpython-wasi can link against them.
+log "Bundling libxml2 and libxslt static archives..."
+cp /build/wasi-libs/lib/wasm32-wasi/libxml2.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
+cp /build/xslt-install/lib/libxslt.a          "${OUTPUT_DIR}/lib/wasm32-wasi/"
+
 echo "${LXML_TAG}" > "${OUTPUT_DIR}/version.txt"
 
 log "DONE. Manifest:"
