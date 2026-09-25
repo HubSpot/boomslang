@@ -607,6 +607,9 @@ addlib ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_freetype.a
 addlib ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_png.a
 addlib ${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a
 $(for la in ${LXML_LIB}/lib/wasm32-wasi/lib_lxml_*.a; do echo "addlib ${la}"; done)
+addlib ${LXML_LIB}/lib/wasm32-wasi/libxslt.a
+addlib ${LXML_LIB}/lib/wasm32-wasi/libexslt.a
+addlib ${LXML_LIB}/lib/wasm32-wasi/libxml2.a
 save
 end
 EOF
@@ -626,7 +629,7 @@ cp -v "${PANDAS_LIB}/lib/wasm32-wasi/"lib_pandas_*.a "${OUTPUT_DIR}/lib/wasm32-w
 cp -v "${MATPLOTLIB_LIB}/lib/wasm32-wasi/"lib_matplotlib_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 cp -v "${PILLOW_LIB}/lib/wasm32-wasi/"lib_pillow_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 cp -v "${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a" "${OUTPUT_DIR}/lib/wasm32-wasi/"
-cp -v "${LXML_LIB}/lib/wasm32-wasi/"lib_lxml_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
+cp -v "${LXML_LIB}/lib/wasm32-wasi/"lib_lxml_*.a "${LXML_LIB}/lib/wasm32-wasi/"lib{xml2,xslt,exslt}.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 
 log "Generating pkg-config file..."
 mkdir -p "${OUTPUT_DIR}/lib/wasm32-wasi/pkgconfig"
