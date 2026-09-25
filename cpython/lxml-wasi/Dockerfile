@@ -105,7 +105,8 @@ RUN set -ex; \
 
 # ── lxml: download sdist (ships pre-generated C, no Cython needed) ───────────
 ARG LXML_VERSION=5.3.2
-RUN mkdir -p /tmp/lxml-sdist \
+RUN --mount=type=secret,id=pipconf,target=/etc/pip.conf \
+    mkdir -p /tmp/lxml-sdist \
     && pip3 download --no-binary :all: --no-deps --no-cache-dir \
         "lxml==${LXML_VERSION}" \
         -d /tmp/lxml-sdist \
