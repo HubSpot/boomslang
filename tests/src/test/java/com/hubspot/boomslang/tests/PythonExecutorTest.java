@@ -167,4 +167,66 @@ class PythonExecutorTest {
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(result.stdout().trim()).isEqualTo("6");
   }
+
+  @Test
+  void itQueriesXmlWithLxml() {
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
+      return instance.execute(
+        String.join(
+          "\n",
+          "from lxml import etree",
+          "root = etree.fromstring('<r><n>1</n><n>2</n><n>3</n></r>')",
+          "print(sum(int(n) for n in root.xpath('//n/text()')))"
+        )
+      );
+    });
+
+    assertThat(result.exitCode()).as(result.stderr()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("6");
+  }
+
+  @Test
+  void itTransformsXmlWithExsltThroughLxml() {
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
+      return instance.execute(
+        String.join(
+          "\n",
+          "from lxml import etree",
+          "xslt = etree.XSLT(etree.fromstring(\"\"\"",
+          "<xsl:stylesheet version='1.0'",
+          "    xmlns:xsl='http://www.w3.org/1999/XSL/Transform'",
+          "    xmlns:math='http://exslt.org/math'",
+          "    extension-element-prefixes='math'>",
+          "  <xsl:output method='text'/>",
+          "  <xsl:template match='/'><xsl:value-of select='math:max(//n)'/></xsl:template>",
+          "</xsl:stylesheet>\"\"\"))",
+          "print(str(xslt(etree.fromstring('<r><n>1</n><n>3</n><n>2</n></r>'))))"
+        )
+      );
+    });
+
+    assertThat(result.exitCode()).as(result.stderr()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("3");
+  }
+
+  @Test
+  void itParsesSlideXmlWithPythonPptx() {
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
+      return instance.execute(
+        String.join(
+          "\n",
+          "from pptx.oxml import parse_xml",
+          "from pptx.oxml.ns import nsdecls",
+          "run = parse_xml('<a:r %s><a:t>Hello</a:t></a:r>' % nsdecls('a'))",
+          "print(type(run).__name__, run.text)"
+        )
+      );
+    });
+
+    assertThat(result.exitCode()).as(result.stderr()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("CT_RegularTextRun Hello");
+  }
 }
