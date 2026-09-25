@@ -41,6 +41,7 @@ cpython/pandas-wasi/artifact.tgz
 cpython/matplotlib-wasi/artifact.tgz
 cpython/pillow-wasi/artifact.tgz
 cpython/ijson-wasi/artifact.tgz
+cpython/lxml-wasi/artifact.tgz
 
 # Pip packages (downloaded at build time)
 cpython/lib/pip-packages/
