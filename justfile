@@ -79,6 +79,11 @@ build-ijson-wasi:
     ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
     ./mill artifacts.installIjsonWasi
 
+# Build lxml C extensions (with libxml2/libxslt) for wasm32-wasip1
+build-lxml-wasi:
+    ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
+    ./mill artifacts.installLxmlWasi
+
 # Build cpython-wasi and extract it to cpython/build/cpython-wasi
 build-cpython-wasi:
     ./mill artifacts.setContainerCli --cli "$${BOOMSLANG_CONTAINER_CLI:-docker}"
@@ -178,7 +183,7 @@ clean:
     rm -rf {{runtime_resources}}/bin {{runtime_resources}}/usr
     rm -rf cpython/build
     rm -rf python-host/target
-    rm -f cpython/pydantic-core-wasi/artifact.tgz cpython/numpy-wasi/artifact.tgz cpython/pandas-wasi/artifact.tgz cpython/matplotlib-wasi/artifact.tgz cpython/pillow-wasi/artifact.tgz cpython/ijson-wasi/artifact.tgz cpython/cpython-wasi/artifact.tgz
+    rm -f cpython/pydantic-core-wasi/artifact.tgz cpython/numpy-wasi/artifact.tgz cpython/pandas-wasi/artifact.tgz cpython/matplotlib-wasi/artifact.tgz cpython/pillow-wasi/artifact.tgz cpython/ijson-wasi/artifact.tgz cpython/lxml-wasi/artifact.tgz cpython/cpython-wasi/artifact.tgz
     rm -rf cpython/cpython-wasi/vendor
     rm -rf cpython/lib/pip-packages
     mvn clean || true

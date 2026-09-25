@@ -8,6 +8,7 @@ depends:
   - matplotlib-wasi
   - pillow-wasi
   - ijson-wasi
+  - lxml-wasi
 
 buildpack:
   name: Buildpack-Docker
@@ -138,6 +139,25 @@ before:
             exit 1
         fi
         ls -lh vendor/ijson-wasi.tgz
+
+  - description: "Download lxml-wasi artifact"
+    commands:
+      - |
+        set -ex
+        COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-${GIT_BRANCH}-lxml-wasi_amd64"
+        MAIN_COORDS="${GIT_HOST}-${GIT_USER}-${GIT_REPO}-main-lxml-wasi_amd64"
+        mkdir -p vendor
+        if download-artifact -n "$COORDS" -b "$BUILD_NUMBER" -o vendor/lxml-wasi.tgz 2>/dev/null; then
+            echo "Downloaded lxml-wasi from same build"
+        elif download-artifact -n "$COORDS" -o vendor/lxml-wasi.tgz 2>/dev/null; then
+            echo "Downloaded lxml-wasi from branch"
+        elif download-artifact -n "$MAIN_COORDS" -o vendor/lxml-wasi.tgz 2>/dev/null; then
+            echo "Downloaded lxml-wasi from main"
+        else
+            echo "ERROR: Could not download lxml-wasi artifact"
+            exit 1
+        fi
+        ls -lh vendor/lxml-wasi.tgz
 
 after:
   onSuccess:

@@ -83,6 +83,10 @@ unsafe extern "C" {
 
     // ijson
     pub fn PyInit__yajl2() -> *mut pyo3::ffi::PyObject;
+
+    // lxml
+    pub fn PyInit_etree() -> *mut pyo3::ffi::PyObject;
+    pub fn PyInit_objectify() -> *mut pyo3::ffi::PyObject;
 }
 
 pub(crate) fn register_all() {
@@ -165,6 +169,8 @@ pub(crate) fn register_all() {
             (b"PIL._imagingmath\0".as_slice(), PyInit__imagingmath as _),
             (b"PIL._imagingmorph\0".as_slice(), PyInit__imagingmorph as _),
             (b"ijson.backends._yajl2\0".as_slice(), PyInit__yajl2 as _),
+            (b"lxml.etree\0".as_slice(), PyInit_etree as _),
+            (b"lxml.objectify\0".as_slice(), PyInit_objectify as _),
         ] {
             PyImport_AppendInittab(name.as_ptr() as _, Some(init));
         }

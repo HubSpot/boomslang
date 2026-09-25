@@ -114,6 +114,7 @@ object artifacts extends Module {
     DagNode("matplotlibWasi", Seq("containerCli", "matplotlibWasiContext", "numpyWasi")),
     DagNode("pillowWasi", Seq("containerCli", "pillowWasiContext")),
     DagNode("ijsonWasi", Seq("containerCli", "ijsonWasiContext")),
+    DagNode("lxmlWasi", Seq("containerCli", "lxmlWasiContext")),
     DagNode(
       "cpythonWasiTgz",
       Seq(
@@ -124,7 +125,8 @@ object artifacts extends Module {
         "pandasWasi",
         "matplotlibWasi",
         "pillowWasi",
-        "ijsonWasi"
+        "ijsonWasi",
+        "lxmlWasi"
       )
     ),
     DagNode("cpythonWasi", Seq("cpythonWasiTgz")),
@@ -144,6 +146,7 @@ object artifacts extends Module {
         "matplotlibWasi",
         "pillowWasi",
         "ijsonWasi",
+        "lxmlWasi",
         "cpythonWasiTgz",
         "cpythonWasi",
         "pipPackages",
@@ -161,6 +164,7 @@ object artifacts extends Module {
     CacheEntry("matplotlibWasi", "out/artifacts/matplotlibWasi.dest/artifact.tgz"),
     CacheEntry("pillowWasi", "out/artifacts/pillowWasi.dest/artifact.tgz"),
     CacheEntry("ijsonWasi", "out/artifacts/ijsonWasi.dest/artifact.tgz"),
+    CacheEntry("lxmlWasi", "out/artifacts/lxmlWasi.dest/artifact.tgz"),
     CacheEntry("cpythonWasiTgz", "out/artifacts/cpythonWasiTgz.dest/artifact.tgz"),
     CacheEntry("cpythonWasi", "out/artifacts/cpythonWasi.dest/extracted"),
     CacheEntry("pipPackages", "out/artifacts/pipPackages.dest/pip-packages"),
@@ -220,6 +224,12 @@ object artifacts extends Module {
     "hubspot.build.json",
     "pyconfig-wasi.h"
   )
+  private val lxmlWasiEntries = Seq(
+    "harvest.sh",
+    "Dockerfile",
+    "hubspot.build.json",
+    "pyconfig-wasi.h"
+  )
   private val cpythonWasiEntries = Seq(
     "main.c",
     "build.sh",
@@ -235,6 +245,7 @@ object artifacts extends Module {
   private val matplotlibWasiSpecs = specs("cpython/matplotlib-wasi", matplotlibWasiEntries)
   private val pillowWasiSpecs = specs("cpython/pillow-wasi", pillowWasiEntries)
   private val ijsonWasiSpecs = specs("cpython/ijson-wasi", ijsonWasiEntries)
+  private val lxmlWasiSpecs = specs("cpython/lxml-wasi", lxmlWasiEntries)
   private val cpythonWasiSpecs = specs("cpython/cpython-wasi", cpythonWasiEntries)
   private val builderImageSpecs = specs("cpython/builder", builderImageEntries)
 
@@ -361,6 +372,12 @@ object artifacts extends Module {
     "cpython/ijson-wasi/Dockerfile",
     "cpython/ijson-wasi/hubspot.build.json",
     "cpython/ijson-wasi/pyconfig-wasi.h"
+  )
+  def lxmlWasiContext = Task.Sources(
+    "cpython/lxml-wasi/harvest.sh",
+    "cpython/lxml-wasi/Dockerfile",
+    "cpython/lxml-wasi/hubspot.build.json",
+    "cpython/lxml-wasi/pyconfig-wasi.h"
   )
   def cpythonWasiContext = Task.Sources(
     "cpython/cpython-wasi/main.c",
@@ -502,6 +519,17 @@ object artifacts extends Module {
     )
   }
 
+  def lxmlWasi = Task {
+    buildContainerArtifact(
+      "lxml-wasi",
+      "boomslang-lxml-wasi",
+      lxmlWasiSpecs,
+      lxmlWasiContext(),
+      containerCli(),
+      Task.dest
+    )
+  }
+
   def cpythonWasiTgz = Task {
     buildContainerArtifact(
       "cpython-wasi",
@@ -516,7 +544,8 @@ object artifacts extends Module {
         "pandas-wasi.tgz" -> pandasWasi(),
         "matplotlib-wasi.tgz" -> matplotlibWasi(),
         "pillow-wasi.tgz" -> pillowWasi(),
-        "ijson-wasi.tgz" -> ijsonWasi()
+        "ijson-wasi.tgz" -> ijsonWasi(),
+        "lxml-wasi.tgz" -> lxmlWasi()
       )
     )
   }
@@ -669,6 +698,10 @@ object artifacts extends Module {
     installCopy(ijsonWasi().path, "cpython/ijson-wasi/artifact.tgz")
   }
 
+  def installLxmlWasi() = Task.Command {
+    installCopy(lxmlWasi().path, "cpython/lxml-wasi/artifact.tgz")
+  }
+
   def installNativeTgzs() = Task.Command {
     installCopy(pydanticCoreWasi().path, "cpython/pydantic-core-wasi/artifact.tgz")
     installCopy(numpyWasi().path, "cpython/numpy-wasi/artifact.tgz")
@@ -676,6 +709,7 @@ object artifacts extends Module {
     installCopy(matplotlibWasi().path, "cpython/matplotlib-wasi/artifact.tgz")
     installCopy(pillowWasi().path, "cpython/pillow-wasi/artifact.tgz")
     installCopy(ijsonWasi().path, "cpython/ijson-wasi/artifact.tgz")
+    installCopy(lxmlWasi().path, "cpython/lxml-wasi/artifact.tgz")
   }
 
   def installCpythonWasi() = Task.Command {
@@ -714,6 +748,7 @@ object artifacts extends Module {
     installCopy(matplotlibWasi().path, "cpython/matplotlib-wasi/artifact.tgz")
     installCopy(pillowWasi().path, "cpython/pillow-wasi/artifact.tgz")
     installCopy(ijsonWasi().path, "cpython/ijson-wasi/artifact.tgz")
+    installCopy(lxmlWasi().path, "cpython/lxml-wasi/artifact.tgz")
     installCopy(cpythonWasiTgz().path, "cpython/cpython-wasi/artifact.tgz")
     BuildCtx.withFilesystemCheckerDisabled {
       val cpythonDest = BuildCtx.workspaceRoot / "cpython" / "build" / "cpython-wasi"
