@@ -451,6 +451,55 @@ rm -rf usr/local/lib/python3.14/ijson/tests 2>/dev/null || true
 IJSON_VER=$(sed 's/^v//' "${IJSON_LIB}/version.txt" 2>/dev/null || echo "unknown")
 log "ijson-wasi artifact reports version: ${IJSON_VER}"
 
+##############################
+# lxml (from Blazar artifact)
+##############################
+LXML_LIB="${BUILD_DIR}/lxml-lib"
+
+log "Extracting lxml from vendor artifact..."
+mkdir -p "${LXML_LIB}"
+if [ -f /build/vendor/lxml-wasi.tgz ]; then
+    tar xzf /build/vendor/lxml-wasi.tgz -C "${LXML_LIB}"
+else
+    log "ERROR: lxml artifact not found in /build/vendor/lxml-wasi.tgz"
+    ls -la /build/vendor/ 2>/dev/null || echo "vendor/ does not exist"
+    exit 1
+fi
+cp -r "${LXML_LIB}/python/lxml" usr/local/lib/python3.14/
+log "lxml archives: $(ls ${LXML_LIB}/lib/wasm32-wasi/ | wc -l) files, $(du -sh ${LXML_LIB}/lib/wasm32-wasi/ | cut -f1) total"
+cat "${LXML_LIB}/manifest.txt"
+
+find usr/local/lib/python3.14/lxml -type f \( \
+        -name '*.c' -o -name '*.h' -o -name '*.so' -o -name '*.pyx' -o -name '*.pxd' \
+    \) -delete
+rm -rf usr/local/lib/python3.14/lxml/tests 2>/dev/null || true
+
+LXML_VER=$(cat "${LXML_LIB}/version.txt" 2>/dev/null || echo "unknown")
+log "lxml-wasi artifact reports version: ${LXML_VER}"
+
+##############################
+# python-pptx (pure-Python, from pip mirror)
+##############################
+log "Downloading python-pptx and its pure-Python deps..."
+mkdir -p /tmp/wheels-pptx
+# XlsxWriter is a new dep not yet present; typing_extensions is already staged
+# via pydantic-core but including it again is harmless (wheel-unpack is idempotent).
+pip3 download --no-cache-dir --no-deps --prefer-binary \
+    -d /tmp/wheels-pptx \
+    "python-pptx>=1.0.2" "XlsxWriter"
+python3 -c "
+import zipfile, glob
+target = '${SOURCE_DIR}/usr/local/lib/python3.14'
+for whl in glob.glob('/tmp/wheels-pptx/*.whl'):
+    print(f'Extracting {whl}')
+    with zipfile.ZipFile(whl) as z:
+        for name in z.namelist():
+            if '.dist-info/' in name:
+                continue
+            z.extract(name, target)
+            print(f'  extracted {name}')
+"
+
 log "Installing typing_extensions and annotated_types from vendor..."
 WHEELS_DIR="${PYDANTIC_LIB}/wheels"
 ls -la "${WHEELS_DIR}/" 2>/dev/null || log "No wheels dir, downloading from PyPI..."
@@ -557,6 +606,7 @@ $(for pa in ${PILLOW_LIB}/lib/wasm32-wasi/lib_pillow_*.a; do echo "addlib ${pa}"
 addlib ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_freetype.a
 addlib ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_png.a
 addlib ${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a
+$(for la in ${LXML_LIB}/lib/wasm32-wasi/lib_lxml_*.a; do echo "addlib ${la}"; done)
 save
 end
 EOF
@@ -576,6 +626,7 @@ cp -v "${PANDAS_LIB}/lib/wasm32-wasi/"lib_pandas_*.a "${OUTPUT_DIR}/lib/wasm32-w
 cp -v "${MATPLOTLIB_LIB}/lib/wasm32-wasi/"lib_matplotlib_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 cp -v "${PILLOW_LIB}/lib/wasm32-wasi/"lib_pillow_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 cp -v "${IJSON_LIB}/lib/wasm32-wasi/lib_ijson_yajl2.a" "${OUTPUT_DIR}/lib/wasm32-wasi/"
+cp -v "${LXML_LIB}/lib/wasm32-wasi/"lib_lxml_*.a "${OUTPUT_DIR}/lib/wasm32-wasi/"
 
 log "Generating pkg-config file..."
 mkdir -p "${OUTPUT_DIR}/lib/wasm32-wasi/pkgconfig"
