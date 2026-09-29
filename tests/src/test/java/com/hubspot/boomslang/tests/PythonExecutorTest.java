@@ -212,14 +212,14 @@ class PythonExecutorTest {
   }
 
   @Test
-  void itParsesSlideXmlWithPythonPptx() {
+  void itParsesSlideXmlWithPowerPptx() {
     PythonResult result = factory.runOnWasmThread(() -> {
       PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
       return instance.execute(
         String.join(
           "\n",
-          "from pptx.oxml import parse_xml",
-          "from pptx.oxml.ns import nsdecls",
+          "from power_pptx.oxml import parse_xml",
+          "from power_pptx.oxml.ns import nsdecls",
           "run = parse_xml('<a:r %s><a:t>Hello</a:t></a:r>' % nsdecls('a'))",
           "print(type(run).__name__, run.text)"
         )

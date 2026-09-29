@@ -93,6 +93,11 @@ fn install_stream_handlers(py: Python) -> PyResult<()> {
     Ok(())
 }
 
+/// Modules whose init functions are too large for Endive to AOT-compile. They
+/// must run at snapshot bake, so that the interpreted init never runs per
+/// instance.
+const SNAPSHOT_REQUIRED: [&str; 2] = ["lxml.etree", "lxml.objectify"];
+
 fn prewarm_stdlib(py: Python) {
     let modules = [
         "sys", "io", "os", "pathlib", "json", "importlib",
@@ -106,7 +111,7 @@ fn prewarm_stdlib(py: Python) {
         "matplotlib", "matplotlib.pyplot",
         "ijson",
         "lxml.etree", "lxml.objectify",
-        "pptx",
+        "power_pptx",
     ];
 
     py.run(
@@ -117,6 +122,9 @@ fn prewarm_stdlib(py: Python) {
     for name in modules {
         match py.import(name) {
             Ok(_) => eprintln!("[prewarm] OK: {}", name),
+            Err(e) if SNAPSHOT_REQUIRED.contains(&name) => {
+                panic!("[prewarm] FAILED: {} - {:?}", name, e)
+            }
             Err(e) => eprintln!("[prewarm] FAILED: {} - {:?}", name, e),
         }
     }
