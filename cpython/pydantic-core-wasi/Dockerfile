@@ -75,7 +75,8 @@ ENV CFLAGS_wasm32_wasip1="--sysroot=/opt/wasi-sdk/share/wasi-sysroot -I/tmp/cpyt
 ENV PYO3_CROSS_PYTHON_VERSION=3.14
 ENV PYO3_CROSS_LIB_DIR="/tmp/cpython-wasi/lib/wasm32-wasi"
 
-RUN cargo build --target wasm32-wasip1 --release --lib
+RUN --mount=type=secret,id=cargo,target=/usr/local/cargo/config.toml \
+    cargo build --target wasm32-wasip1 --release --lib
 
 # Package artifact
 RUN mkdir -p /tmp/artifact/lib /tmp/artifact/python /tmp/artifact/wheels \
