@@ -1,0 +1,90 @@
+--- a/xmlIO.c
++++ b/xmlIO.c
+@@ -77,6 +77,15 @@
+     xmlInputCloseCallback closecallback;
+ } xmlInputCallback;
+ 
++/* WASI preview 1 has no dup(). */
++#ifdef __wasi__
++static int
++dup(int fd ATTRIBUTE_UNUSED) {
++    errno = ENOTSUP;
++    return(-1);
++}
++#endif
++
+ /* This dummy function only marks default IO in the callback table */
+ static int
+ xmlIODefaultMatch(const char *filename);
+@@ -1170,7 +1179,23 @@
+ }
+ 
+ #endif /* defined(LIBXML_ZLIB_ENABLED) */
++
++static xmlParserErrors
++xmlInputFromOwnedFd(xmlParserInputBuffer *buf, int fd) {
++    xmlFdIOCtxt *fdctxt;
++
++    fdctxt = xmlMalloc(sizeof(*fdctxt));
++    if (fdctxt == NULL)
++        return(XML_ERR_NO_MEMORY);
++    fdctxt->fd = fd;
+ 
++    buf->context = fdctxt;
++    buf->readcallback = xmlFdRead;
++    buf->closecallback = xmlFdClose;
++
++    return(XML_ERR_OK);
++}
++
+ /**
+  * Update the buffer to read from `fd`. Supports the XML_INPUT_UNZIP
+  * flag.
+@@ -1183,7 +1208,7 @@
+ xmlParserErrors
+ xmlInputFromFd(xmlParserInputBuffer *buf, int fd,
+                xmlParserInputFlags flags) {
+-    xmlFdIOCtxt *fdctxt;
++    xmlParserErrors ret;
+     int copy;
+ 
+     (void) flags;
+@@ -1231,18 +1256,11 @@
+     if (copy == -1)
+         return(xmlIOErr(errno));
+ 
+-    fdctxt = xmlMalloc(sizeof(*fdctxt));
+-    if (fdctxt == NULL) {
++    ret = xmlInputFromOwnedFd(buf, copy);
++    if (ret != XML_ERR_OK)
+         close(copy);
+-        return(XML_ERR_NO_MEMORY);
+-    }
+-    fdctxt->fd = copy;
+ 
+-    buf->context = fdctxt;
+-    buf->readcallback = xmlFdRead;
+-    buf->closecallback = xmlFdClose;
+-
+-    return(XML_ERR_OK);
++    return(ret);
+ }
+ 
+ #ifdef LIBXML_OUTPUT_ENABLED
+@@ -1526,8 +1544,16 @@
+             ret = xmlFdOpen(URI, 0, &fd);
+ 
+             if (ret == XML_ERR_OK) {
++#ifdef __wasi__
++                /* WASI preview 1 has no dup(): hand over the fd instead. */
++                (void) flags;
++                ret = xmlInputFromOwnedFd(buf, fd);
++                if (ret != XML_ERR_OK)
++                    close(fd);
++#else
+                 ret = xmlInputFromFd(buf, fd, flags);
+                 close(fd);
++#endif
+                 break;
+             } else if (ret != XML_IO_ENOENT) {
+                 break;

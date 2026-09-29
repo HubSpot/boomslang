@@ -2,11 +2,8 @@
 # Cross-compile lxml (etree + objectify) for wasm32-wasip1.
 #
 # Strategy:
-#   - libxml2: reuse the prebuilt WASI static lib from vmware-labs/webassembly-language-runtimes
-#     (same source already used for libuuid/zlib/sqlite/bzip2 in cpython-wasi/build.sh).
-#   - libxslt: no prebuilt available; clone and cross-compile from source against the
-#     prebuilt libxml2. libxslt is required because lxml/etree.c unconditionally includes
-#     <libxslt/xslt.h> even when XSLT transforms aren't used at runtime.
+#   - libxml2, libxslt: cross-compile from release tarballs. libxslt is required
+#     because lxml/etree.c unconditionally includes <libxslt/xslt.h>.
 #   - lxml:    download the sdist (pre-generated C, no Cython needed). Compile
 #              src/lxml/etree.c → lib_lxml_etree.a and
 #              src/lxml/objectify.c → lib_lxml_objectify.a.
@@ -50,15 +47,6 @@ RUN mkdir -p /tmp/cpython-wasi/include/python3.14 /tmp/cpython-wasi/usr/local/li
     && rm -rf /tmp/cpython-3.14.5 \
     && test -f /tmp/cpython-wasi/include/python3.14/pyconfig.h
 
-# ── libxml2: prebuilt wasm32-wasi static archive from vmware-labs ───────────
-# Same vendor used for libuuid/zlib/sqlite/bzip2 in cpython-wasi/build.sh.
-# wasi-sdk-20.0 ABI is compatible with wasi-sdk-25 (same wasm32-wasip1 target).
-RUN mkdir -p /build/wasi-libs \
-    && curl -sL "https://github.com/vmware-labs/webassembly-language-runtimes/releases/download/libs%2Flibxml2%2F2.11.4%2B20230623-2993864/libxml2-2.11.4-wasi-sdk-20.0.tar.gz" \
-        | tar xz -C /build/wasi-libs \
-    && test -f /build/wasi-libs/lib/wasm32-wasi/libxml2.a \
-    && test -f /build/wasi-libs/include/libxml2/libxml/parser.h
-
 ENV WASI_CFLAGS="-Os \
     --target=wasm32-wasi \
     --sysroot=/opt/wasi-sdk/share/wasi-sysroot \
@@ -67,19 +55,60 @@ ENV WASI_CFLAGS="-Os \
     -D_WASI_EMULATED_GETPID \
     -D_WASI_EMULATED_PROCESS_CLOCKS"
 
-# ── libxslt: cross-compile from source ───────────────────────────────────────
-# No prebuilt wasm32-wasi libxslt exists. lxml's etree.c unconditionally
-# includes <libxslt/xslt.h>, so we must provide headers + a static archive.
-# EXSLT is included in the libxslt source tree; lxml links it when available.
-ARG LIBXSLT_TAG=v1.1.42
-RUN git clone --depth 1 --branch "${LIBXSLT_TAG}" \
-    https://github.com/GNOME/libxslt /build/staging/libxslt \
-    && echo "${LIBXSLT_TAG}" > /build/libxslt_tag.txt
+# ── libxml2 + libxslt: cross-compile from release tarballs ─────────────────
+# Release tarballs ship a generated configure, so no autoreconf is needed.
+# libxslt 1.1.43 is the first release that builds against libxml2 2.14+.
+# lxml's etree.c unconditionally includes <libxslt/xslt.h>, and links EXSLT
+# when it is available.
+ARG LIBXML2_VERSION=2.15.4
+ARG LIBXML2_SHA256=98087fd181d9070724f3fbc65c7377db03038eb92bd882374daff44940138821
+ARG LIBXSLT_VERSION=1.1.45
+ARG LIBXSLT_SHA256=9acfe68419c4d06a45c550321b3212762d92f41465062ca4ea19e632ee5d216e
+RUN set -ex; \
+    mkdir -p /build/staging; \
+    cd /build/staging; \
+    curl -sLo libxml2.tar.xz "https://download.gnome.org/sources/libxml2/${LIBXML2_VERSION%.*}/libxml2-${LIBXML2_VERSION}.tar.xz"; \
+    curl -sLo libxslt.tar.xz "https://download.gnome.org/sources/libxslt/${LIBXSLT_VERSION%.*}/libxslt-${LIBXSLT_VERSION}.tar.xz"; \
+    echo "${LIBXML2_SHA256}  libxml2.tar.xz" | sha256sum -c; \
+    echo "${LIBXSLT_SHA256}  libxslt.tar.xz" | sha256sum -c; \
+    tar xf libxml2.tar.xz; \
+    tar xf libxslt.tar.xz
+
+# WASI preview 1 has no dup(). The patch hands the fd that libxml2's default
+# file opener just opened to the input buffer instead of duplicating it.
+COPY libxml2-wasi-no-dup.patch /build/libxml2-wasi-no-dup.patch
+
+# WASI has no threads, dlopen or usable iconv. Without iconv, libxml2 falls
+# back to its built-in UTF-8/UTF-16/ISO-8859-x codecs. Schematron is off by
+# default since 2.15; enable it to keep lxml.isoschematron working.
+RUN set -ex; \
+    cd /build/staging/libxml2-${LIBXML2_VERSION}; \
+    patch -p1 < /build/libxml2-wasi-no-dup.patch; \
+    ./configure \
+        --host=wasm32-wasip1 \
+        --build="$(./config.guess)" \
+        --prefix=/build/xml2-install \
+        --disable-shared \
+        --enable-static \
+        --without-python \
+        --without-threads \
+        --without-modules \
+        --without-iconv \
+        --without-zlib \
+        --with-schematron \
+        CC="${CC}" \
+        AR="${AR}" \
+        RANLIB="${RANLIB}" \
+        CFLAGS="${WASI_CFLAGS}" \
+        LDFLAGS="--sysroot=/opt/wasi-sdk/share/wasi-sysroot" \
+    ; \
+    make -j$(nproc) libxml2.la; \
+    make install-libLTLIBRARIES install-data; \
+    test -f /build/xml2-install/lib/libxml2.a; \
+    test -f /build/xml2-install/include/libxml2/libxml/parser.h
 
 RUN set -ex; \
-    cd /build/staging/libxslt; \
-    # autogen.sh calls autoreconf which regenerates configure from configure.ac
-    ./autogen.sh; \
+    cd /build/staging/libxslt-${LIBXSLT_VERSION}; \
     ./configure \
         --host=wasm32-wasip1 \
         --build="$(./config.guess)" \
@@ -95,16 +124,19 @@ RUN set -ex; \
         RANLIB="${RANLIB}" \
         CFLAGS="${WASI_CFLAGS}" \
         LDFLAGS="--sysroot=/opt/wasi-sdk/share/wasi-sysroot" \
-        LIBXML_CFLAGS="-I/build/wasi-libs/include/libxml2" \
-        LIBXML_LIBS="-L/build/wasi-libs/lib/wasm32-wasi -lxml2" \
+        LIBXML_CFLAGS="-I/build/xml2-install/include/libxml2" \
+        LIBXML_LIBS="-L/build/xml2-install/lib -lxml2" \
     ; \
-    make -j$(nproc); \
-    make install; \
+    make -j$(nproc) -C libxslt; \
+    make -j$(nproc) -C libexslt; \
+    make -C libxslt install; \
+    make -C libexslt install; \
     test -f /build/xslt-install/lib/libxslt.a; \
+    test -f /build/xslt-install/lib/libexslt.a; \
     test -f /build/xslt-install/include/libxslt/xslt.h
 
 # ── lxml: download sdist (ships pre-generated C, no Cython needed) ───────────
-ARG LXML_VERSION=5.3.2
+ARG LXML_VERSION=6.1.3
 RUN --mount=type=secret,id=pipconf,target=/etc/pip.conf \
     mkdir -p /tmp/lxml-sdist \
     && env -u CC -u AR -u RANLIB -u NM \
@@ -124,8 +156,7 @@ RUN cd /build/staging \
 #   - src/lxml/           — lxml's own headers (etree.h, lxml-version.h, …)
 #   - src/lxml/includes/  — lxml C API helpers (etree_api.h, …)
 #   - CPython 3.14 headers
-#   - libxml2 headers     — from vmware-labs prebuilt
-#   - libxslt headers     — from our cross-compiled build
+#   - libxml2 and libxslt headers — from our cross-compiled builds
 RUN set -ex; \
     LXML_SRC=$(ls -d /build/staging/lxml-*/src/lxml); \
     LXML_ROOT=$(ls -d /build/staging/lxml-*); \
@@ -134,7 +165,7 @@ RUN set -ex; \
         -I${LXML_SRC} \
         -I${LXML_SRC}/includes \
         -I/tmp/cpython-wasi/include/python3.14 \
-        -I/build/wasi-libs/include/libxml2 \
+        -I/build/xml2-install/include/libxml2 \
         -I/build/xslt-install/include \
         -DPYREX_WITHOUT_ASSERTIONS \
         -DLXML_FIXED_COMPILATION \
