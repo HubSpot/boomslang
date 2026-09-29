@@ -55,24 +55,25 @@ ENV WASI_CFLAGS="-Os \
     -D_WASI_EMULATED_GETPID \
     -D_WASI_EMULATED_PROCESS_CLOCKS"
 
-# ── libxml2 + libxslt: cross-compile from release tarballs ─────────────────
-# Release tarballs ship a generated configure, so no autoreconf is needed.
+# ── libxml2 + libxslt: cross-compile from GitHub tag archives ──────────────
+# Blazar cannot reach download.gnome.org, so we use the GitHub mirrors. Tag
+# archives carry no generated configure; autoreconf creates it.
 # libxslt 1.1.43 is the first release that builds against libxml2 2.14+.
 # lxml's etree.c unconditionally includes <libxslt/xslt.h>, and links EXSLT
 # when it is available.
 ARG LIBXML2_VERSION=2.15.4
-ARG LIBXML2_SHA256=98087fd181d9070724f3fbc65c7377db03038eb92bd882374daff44940138821
+ARG LIBXML2_SHA256=bb01bd9ac9a7403f9706816fd6d3e7888041d32b0211075feb20e755d2a9f29d
 ARG LIBXSLT_VERSION=1.1.45
-ARG LIBXSLT_SHA256=9acfe68419c4d06a45c550321b3212762d92f41465062ca4ea19e632ee5d216e
+ARG LIBXSLT_SHA256=023900618fbf789dba364f38f184a0fe2d3ebad2b2ab06003ffd2d1ee2d5461c
 RUN set -ex; \
     mkdir -p /build/staging; \
     cd /build/staging; \
-    curl -sLo libxml2.tar.xz "https://download.gnome.org/sources/libxml2/${LIBXML2_VERSION%.*}/libxml2-${LIBXML2_VERSION}.tar.xz"; \
-    curl -sLo libxslt.tar.xz "https://download.gnome.org/sources/libxslt/${LIBXSLT_VERSION%.*}/libxslt-${LIBXSLT_VERSION}.tar.xz"; \
-    echo "${LIBXML2_SHA256}  libxml2.tar.xz" | sha256sum -c; \
-    echo "${LIBXSLT_SHA256}  libxslt.tar.xz" | sha256sum -c; \
-    tar xf libxml2.tar.xz; \
-    tar xf libxslt.tar.xz
+    curl -fsSLo libxml2.tar.gz "https://github.com/GNOME/libxml2/archive/refs/tags/v${LIBXML2_VERSION}.tar.gz"; \
+    curl -fsSLo libxslt.tar.gz "https://github.com/GNOME/libxslt/archive/refs/tags/v${LIBXSLT_VERSION}.tar.gz"; \
+    echo "${LIBXML2_SHA256}  libxml2.tar.gz" | sha256sum -c; \
+    echo "${LIBXSLT_SHA256}  libxslt.tar.gz" | sha256sum -c; \
+    tar xzf libxml2.tar.gz; \
+    tar xzf libxslt.tar.gz
 
 # WASI preview 1 has no dup(). The patch hands the fd that libxml2's default
 # file opener just opened to the input buffer instead of duplicating it.
@@ -84,6 +85,7 @@ COPY libxml2-wasi-no-dup.patch /build/libxml2-wasi-no-dup.patch
 RUN set -ex; \
     cd /build/staging/libxml2-${LIBXML2_VERSION}; \
     patch -p1 < /build/libxml2-wasi-no-dup.patch; \
+    autoreconf -fi; \
     ./configure \
         --host=wasm32-wasip1 \
         --build="$(./config.guess)" \
@@ -109,6 +111,7 @@ RUN set -ex; \
 
 RUN set -ex; \
     cd /build/staging/libxslt-${LIBXSLT_VERSION}; \
+    autoreconf -fi; \
     ./configure \
         --host=wasm32-wasip1 \
         --build="$(./config.guess)" \
