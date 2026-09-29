@@ -228,6 +228,7 @@ object artifacts extends Module {
     "harvest.sh",
     "Dockerfile",
     "hubspot.build.json",
+    "libxml2-wasi-no-dup.patch",
     "pyconfig-wasi.h"
   )
   private val cpythonWasiEntries = Seq(
@@ -377,6 +378,7 @@ object artifacts extends Module {
     "cpython/lxml-wasi/harvest.sh",
     "cpython/lxml-wasi/Dockerfile",
     "cpython/lxml-wasi/hubspot.build.json",
+    "cpython/lxml-wasi/libxml2-wasi-no-dup.patch",
     "cpython/lxml-wasi/pyconfig-wasi.h"
   )
   def cpythonWasiContext = Task.Sources(
