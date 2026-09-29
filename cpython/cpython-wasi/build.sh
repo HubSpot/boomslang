@@ -478,15 +478,15 @@ LXML_VER=$(cat "${LXML_LIB}/version.txt" 2>/dev/null || echo "unknown")
 log "lxml-wasi artifact reports version: ${LXML_VER}"
 
 ##############################
-# python-pptx (pure-Python, from pip mirror)
+# power-pptx (pure-Python, from pip mirror)
 ##############################
-log "Downloading python-pptx and its pure-Python deps..."
+log "Downloading power-pptx and its pure-Python deps..."
 mkdir -p /tmp/wheels-pptx
 # XlsxWriter is a new dep not yet present; typing_extensions is already staged
 # via pydantic-core but including it again is harmless (wheel-unpack is idempotent).
 pip3 download --no-cache-dir --no-deps --prefer-binary \
     -d /tmp/wheels-pptx \
-    "python-pptx>=1.0.2" "XlsxWriter"
+    "power-pptx==2.12.0" "XlsxWriter"
 python3 -c "
 import zipfile, glob
 target = '${SOURCE_DIR}/usr/local/lib/python3.14'
