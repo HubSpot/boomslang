@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2024"
 links = "boomslang_host_core"
 license = "Apache-2.0"
-description = "Core library for building boomslang WASM hosts — CPython 3.14 + PyO3 exports for Java"
+description = "Core library for building boomslang WASM hosts — CPython 3.15 + PyO3 exports for Java"
 repository = "https://github.com/HubSpot/boomslang"
 keywords = ["python", "wasm", "endive", "pyo3"]
 categories = ["wasm"]
@@ -13,7 +13,7 @@ categories = ["wasm"]
 crate-type = ["rlib"]
 
 [dependencies]
-pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
+pyo3 = { version = "0.28.3", default-features = false, features = ["macros"] }
 libmimalloc-sys = "0.1"
 
 [build-dependencies]

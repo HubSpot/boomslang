@@ -1,4 +1,4 @@
-"""Sandboxed CPython 3.14 execution via WebAssembly.
+"""Sandboxed CPython 3.15 execution via WebAssembly.
 
 Quickstart:
 

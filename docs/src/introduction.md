@@ -1,6 +1,6 @@
 # Introduction
 
-Boomslang runs CPython 3.14 from a WASI build. The default artifact embeds that runtime in Java through [Endive](https://github.com/bytecodealliance/endive), so Python runs inside the JVM without JNI, subprocesses, or a system Python install.
+Boomslang runs CPython 3.15 from a WASI build. The default artifact embeds that runtime in Java through [Endive](https://github.com/bytecodealliance/endive), so Python runs inside the JVM without JNI, subprocesses, or a system Python install.
 
 Python code executes in a fully sandboxed WebAssembly memory space: it sees only the filesystem you give it, calls only the host functions you register, and a misbehaving script cannot take down the JVM.
 
@@ -8,7 +8,7 @@ Python code executes in a fully sandboxed WebAssembly memory space: it sees only
 
 The default Maven artifact ships with:
 
-- CPython 3.14 built for `wasm32-wasip1`
+- CPython 3.15 built for `wasm32-wasip1`
 - the Python stdlib plus NumPy, Pandas, Matplotlib, Pillow, Pydantic, ijson, and Jinja2
 - `python/bin/boomslang.wasm`, the runtime module
 - generated Endive AOT classes, so the WASM runs as compiled JVM bytecode instead of being interpreted

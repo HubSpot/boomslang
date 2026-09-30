@@ -6,24 +6,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PYDANTIC_CORE_TAG="v2.41.5"
+PYDANTIC_TAG="v2.13.5"
 CPYTHON_HEADERS="${CPYTHON_HEADERS:-/tmp/cpython-wasi}"
 
 # Step 1: Clone pydantic-core source if not present
-if [ ! -f src/lib.rs ]; then
-    echo "==> Cloning pydantic-core ${PYDANTIC_CORE_TAG}..."
+if [ ! -f src/lib.rs ] || [ "$(cat .pydantic-source-tag 2>/dev/null || true)" != "$PYDANTIC_TAG" ]; then
+    echo "==> Cloning pydantic-core ${PYDANTIC_TAG}..."
     CLONE_DIR="$SCRIPT_DIR/.pydantic-core-src"
     rm -rf "$CLONE_DIR"
-    git clone --depth 1 --branch "${PYDANTIC_CORE_TAG}" \
-        https://github.com/pydantic/pydantic-core "$CLONE_DIR"
-    cp "$CLONE_DIR/Cargo.toml" .
-    cp "$CLONE_DIR/Cargo.lock" .
-    cp "$CLONE_DIR/build.rs" .
-    cp -r "$CLONE_DIR/src" .
-    cp -r "$CLONE_DIR/python" .
+    git clone --depth 1 --branch "${PYDANTIC_TAG}" \
+        https://github.com/pydantic/pydantic "$CLONE_DIR"
+    cp "$CLONE_DIR/pydantic-core/Cargo.toml" .
+    cp "$CLONE_DIR/pydantic-core/Cargo.lock" .
+    cp "$CLONE_DIR/pydantic-core/build.rs" .
+    rm -rf src python
+    cp -r "$CLONE_DIR/pydantic-core/src" .
+    cp -r "$CLONE_DIR/pydantic-core/python" .
     rm -rf "$CLONE_DIR"
     # Patch crate-type to staticlib only
-    sed -i '' '/crate-type/s/.*/crate-type = ["staticlib"]/' Cargo.toml
+    python3 - <<'PATCH'
+from pathlib import Path
+p = Path("Cargo.toml")
+p.write_text(p.read_text().replace('crate-type = ["cdylib", "rlib"]', 'crate-type = ["staticlib"]'))
+PATCH
+    printf '%s\n' "$PYDANTIC_TAG" > .pydantic-source-tag
     echo "Patched crate-type: $(grep crate-type Cargo.toml)"
 fi
 
@@ -44,9 +50,9 @@ if [ -z "${WASI_SDK_PATH:-}" ]; then
 fi
 
 # CPython headers — try aviator's extracted artifact
-if [ ! -d "$CPYTHON_HEADERS/include/python3.14" ]; then
+if [ ! -d "$CPYTHON_HEADERS/include/python3.15" ]; then
     AVIATOR_HEADERS="$SCRIPT_DIR/../../aviator/cpython/build/cpython-wasi"
-    if [ -d "$AVIATOR_HEADERS/include/python3.14" ]; then
+    if [ -d "$AVIATOR_HEADERS/include/python3.15" ]; then
         CPYTHON_HEADERS="$AVIATOR_HEADERS"
     else
         echo "ERROR: CPython headers not found at $CPYTHON_HEADERS or $AVIATOR_HEADERS"
@@ -55,8 +61,8 @@ if [ ! -d "$CPYTHON_HEADERS/include/python3.14" ]; then
 fi
 
 export CC_wasm32_wasip1="$WASI_SDK_PATH/bin/clang"
-export CFLAGS_wasm32_wasip1="--sysroot=$WASI_SDK_PATH/share/wasi-sysroot -I$CPYTHON_HEADERS/include/python3.14"
-export PYO3_CROSS_PYTHON_VERSION=3.14
+export CFLAGS_wasm32_wasip1="--sysroot=$WASI_SDK_PATH/share/wasi-sysroot -I$CPYTHON_HEADERS/include/python3.15"
+export PYO3_CROSS_PYTHON_VERSION=3.15
 export PYO3_CROSS_LIB_DIR="$CPYTHON_HEADERS/lib/wasm32-wasi"
 
 echo "==> Building pydantic-core for wasm32-wasip1..."

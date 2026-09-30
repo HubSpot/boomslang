@@ -19,7 +19,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 RUST_HOST_DIR="$PROJECT_DIR/../python-host"
 
-PYTHON_VERSION="3.14.5"
+PYTHON_VERSION="3.15.0a7"
 
 CMD="${1:-build}"
 
@@ -91,7 +91,7 @@ setup_wizer() {
 }
 
 check_cpython_wasi() {
-    if [ ! -f "$BUILD_DIR/cpython-wasi/lib/wasm32-wasi/libpython3.14.a" ]; then
+    if [ ! -f "$BUILD_DIR/cpython-wasi/lib/wasm32-wasi/libpython3.15.a" ]; then
         echo "ERROR: cpython-wasi artifact not found at $BUILD_DIR/cpython-wasi/"
         echo "In CI, the Blazar before step downloads this automatically."
         echo "For local dev, extract the cpython-wasi artifact to $BUILD_DIR/cpython-wasi/"

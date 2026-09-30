@@ -14,7 +14,7 @@
   <packaging>pom</packaging>
 
   <name>${project.groupId}:${project.artifactId}</name>
-  <description>Execute Python 3.14 from Java via WebAssembly</description>
+  <description>Execute Python 3.15 from Java via WebAssembly</description>
 
   <modules>
     <module>core</module>

@@ -30,6 +30,28 @@ class PythonExecutorTest {
   }
 
   @Test
+  void itRunsPython315WithLazyImports() {
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance(pythonRoot);
+      return instance.execute(
+        """
+        import sys
+        assert sys.version_info == (3, 15, 0, 'alpha', 7), sys.version
+        assert 'wave' not in sys.modules
+        lazy import wave
+        assert 'wave' not in sys.modules
+        assert wave.Error.__name__ == 'Error'
+        assert 'wave' in sys.modules
+        print(sys.implementation.cache_tag)
+        """
+      );
+    });
+
+    assertThat(result.exitCode()).as(result.stderr()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("cpython-315");
+  }
+
+  @Test
   void itRunsHelloWorld() {
     PythonResult result = factory.runOnWasmThread(() -> {
       PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
@@ -73,6 +95,27 @@ class PythonExecutorTest {
 
     assertThat(result.exitCode()).isEqualTo(0);
     assertThat(result.stdout().trim()).isEqualTo("6");
+  }
+
+  @Test
+  void itPlotsWithMatplotlib() {
+    PythonResult result = factory.runOnWasmThread(() -> {
+      PythonInstance instance = factory.createInstance(pythonRoot);
+      return instance.execute(
+        """
+        import io
+        from matplotlib.figure import Figure
+        figure = Figure()
+        figure.subplots().plot([1, 2, 3])
+        output = io.BytesIO()
+        figure.savefig(output, format='png')
+        print(output.getvalue()[:4].hex())
+        """
+      );
+    });
+
+    assertThat(result.exitCode()).as(result.stderr()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("89504e47");
   }
 
   @Test

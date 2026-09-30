@@ -26,8 +26,8 @@ def wasm_path() -> Path:
 
 
 def usr_host_dir() -> Path:
-    """Host directory bound to /usr in the guest (contains local/lib/python3.14)."""
+    """Host directory bound to /usr in the guest (contains local/lib/python3.15)."""
     path = runtime_dir() / "usr"
-    if not (path / "local" / "lib" / "python3.14").is_dir():
+    if not (path / "local" / "lib" / "python3.15").is_dir():
         raise RuntimeAssetsError(f"Python stdlib tree not found under {path}")
     return path

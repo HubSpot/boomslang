@@ -12,7 +12,7 @@ categories = ["wasm"]
 crate-type = ["rlib"]
 
 [dependencies]
-pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
+pyo3 = { version = "0.28.3", default-features = false, features = ["macros"] }
 
 [build-dependencies]
 boomslang-hostgen = { version = "0.0.1", path = "../../boomslang-hostgen", default-features = false }

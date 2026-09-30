@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.2
 #
-# Build the final boomslang WASM binary: Rust host linked against libpython3.14.a
+# Build the final boomslang WASM binary: Rust host linked against libpython3.15.a
 # Self-contained — includes toolchain setup (no external builder image needed).
 #
 
@@ -55,7 +55,7 @@ COPY vendor/cpython-wasi.tgz /tmp/cpython-wasi.tgz
 RUN mkdir -p cpython/build/cpython-wasi \
     && tar xzf /tmp/cpython-wasi.tgz -C cpython/build/cpython-wasi/ \
     && rm /tmp/cpython-wasi.tgz \
-    && ls -lh cpython/build/cpython-wasi/lib/wasm32-wasi/libpython3.14.a
+    && ls -lh cpython/build/cpython-wasi/lib/wasm32-wasi/libpython3.15.a
 
 # Copy pip packages
 COPY vendor/pip-packages/ cpython/lib/pip-packages/
@@ -79,10 +79,10 @@ RUN chmod +x cpython/scripts/build.sh \
 RUN set -ex \
     && mkdir -p /tmp/staging/bin /tmp/staging/usr/local/lib \
     && cp cpython/build/output/boomslang.wasm /tmp/staging/bin/ \
-    && cp -r cpython/build/cpython-wasi/usr/local/lib/python3.14 /tmp/staging/usr/local/lib/ \
-    && cp -r extensions/host-bridge/lib/boomslang_host /tmp/staging/usr/local/lib/python3.14/ \
+    && cp -r cpython/build/cpython-wasi/usr/local/lib/python3.15 /tmp/staging/usr/local/lib/ \
+    && cp -r extensions/host-bridge/lib/boomslang_host /tmp/staging/usr/local/lib/python3.15/ \
     && for pkg in pydantic typing_inspection; do \
-         [ -d cpython/lib/pip-packages/$pkg ] && cp -r cpython/lib/pip-packages/$pkg /tmp/staging/usr/local/lib/python3.14/; \
+         [ -d cpython/lib/pip-packages/$pkg ] && cp -r cpython/lib/pip-packages/$pkg /tmp/staging/usr/local/lib/python3.15/; \
        done \
     && tar czf /artifact.tgz -C /tmp/staging . \
     && ls -lh /artifact.tgz
