@@ -407,6 +407,7 @@ object artifacts extends Module {
   )
   def pydanticCorePython = Task.Source("cpython/lib/pydantic_core")
   def hostBridgePython = Task.Source("extensions/host-bridge/lib")
+  def bundledSysroot = Task.Source("cpython/bundled-sysroot.json")
 
   private def buildContainerArtifact(
       name: String,
@@ -554,6 +555,7 @@ object artifacts extends Module {
     val extracted = Task.dest / "extracted"
     os.makeDir.all(extracted)
     runLogged(("tar", "xzf", cpythonWasiTgz().path, "-C", extracted))
+    os.copy.over(bundledSysroot().path, extracted / "sysroot.json")
     PathRef(extracted)
   }
 

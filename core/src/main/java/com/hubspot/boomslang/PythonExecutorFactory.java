@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -34,6 +35,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import run.endive.runtime.CompiledModule;
 import run.endive.runtime.HostFunction;
 import run.endive.runtime.Instance;
 import run.endive.runtime.Machine;
@@ -60,14 +62,11 @@ public class PythonExecutorFactory {
 
   private static final Logger LOG = LoggerFactory.getLogger(PythonExecutorFactory.class);
   private static final Object JAR_EXTRACTION_LOCK = new Object();
-  private static final String DEFAULT_WASM_RESOURCE = "python/bin/boomslang.wasm";
-  private static final String PYTHON_RESOURCE_PREFIX = "python/";
   private static final String PYTHON_OVERLAY_RESOURCE_PREFIX = "/python-overlay";
-  private static final String AOT_CLASS_NAME =
-    "com.hubspot.boomslang.compiled.PythonWasmMachine";
   private static final String PYTHON_LIB_DIR = "usr/local/lib/python3.14";
   private static final long WASM_THREAD_STACK_SIZE = 16L * 1024 * 1024;
 
+  private final PythonImage image;
   private final WasmModule module;
   private final Path extractedPythonPath;
   private final ExecutorService executorService;
@@ -84,12 +83,18 @@ public class PythonExecutorFactory {
       builder.stdlibPath,
       "stdlibPath is required — call withStdlibPath() on the builder"
     );
-    this.extractedPythonPath =
-      extractPythonResourcesToPath(stdlibPath, builder.wasmResource);
+    this.image = builder.image;
+    String wasmResource = builder.wasmResource != null
+      ? builder.wasmResource
+      : image.wasmResource();
+    this.extractedPythonPath = extractPythonResourcesToPath(stdlibPath, wasmResource);
+    Optional<CompiledModule> compiled = image.compiledModule();
     this.module =
       builder.wasmModule != null
         ? builder.wasmModule
-        : loadWasmModule(builder.wasmResource);
+        : compiled
+          .map(CompiledModule::wasmModule)
+          .orElseGet(() -> loadWasmModule(wasmResource));
     this.executorService = createWasmExecutorService();
     this.factoryHostFunctions = builder.hostFunctions.toArray(new HostFunction[0]);
     this.extensionFactories = List.copyOf(builder.extensionFactories);
@@ -100,9 +105,9 @@ public class PythonExecutorFactory {
 
     installCustomLibraries(builder.libraries);
 
-    Function<Instance, Machine> machineFactory = resolveMachineFactory(
-      builder.machineFactory
-    );
+    Function<Instance, Machine> machineFactory = builder.machineFactory != null
+      ? builder.machineFactory
+      : compiled.map(CompiledModule::machineFactory).orElse(null);
     this.aotAvailable = machineFactory != null;
 
     this.runtimeImage =
@@ -388,41 +393,6 @@ public class PythonExecutorFactory {
     }
   }
 
-  private Function<Instance, Machine> resolveMachineFactory(
-    Function<Instance, Machine> configuredMachineFactory
-  ) {
-    if (configuredMachineFactory != null) {
-      LOG.debug("Using configured AOT machine factory");
-      return configuredMachineFactory;
-    }
-    return loadAotFactory();
-  }
-
-  private Function<Instance, Machine> loadAotFactory() {
-    try {
-      Class<?> aotClass = Class.forName(AOT_CLASS_NAME);
-      java.lang.reflect.Constructor<?> ctor = aotClass.getConstructor(Instance.class);
-      LOG.debug("AOT compiled Python WASM module is available");
-      return instance -> {
-        try {
-          return (Machine) ctor.newInstance(instance);
-        } catch (ReflectiveOperationException e) {
-          throw new RuntimeException("Failed to create AOT machine", e);
-        }
-      };
-    } catch (ClassNotFoundException e) {
-      LOG.warn(
-        "AOT compiled Python WASM module NOT found (class {} missing). " +
-        "Python execution will use interpreted mode which is significantly slower.",
-        AOT_CLASS_NAME
-      );
-      return null;
-    } catch (ReflectiveOperationException e) {
-      LOG.warn("Failed to load AOT factory, falling back to interpreter", e);
-      return null;
-    }
-  }
-
   private WasmModule loadWasmModule(String wasmResource) {
     Path wasmPath = extractedPythonPath.resolve(toExtractedRelativePath(wasmResource));
     if (!Files.exists(wasmPath)) {
@@ -455,7 +425,8 @@ public class PythonExecutorFactory {
   }
 
   private void extractPythonStdlib(Path tempDir) throws IOException {
-    URL resourceUrl = getClass().getResource("/python/" + PYTHON_LIB_DIR);
+    URL resourceUrl = getClass()
+      .getResource("/" + image.resourcePrefix() + PYTHON_LIB_DIR);
     if (resourceUrl == null) {
       LOG.warn("Python stdlib not found in resources");
       return;
@@ -570,10 +541,10 @@ public class PythonExecutorFactory {
     return normalized;
   }
 
-  private static String toExtractedRelativePath(String resourcePath) {
+  private String toExtractedRelativePath(String resourcePath) {
     String normalized = normalizeResourcePath(resourcePath).substring(1);
-    if (normalized.startsWith(PYTHON_RESOURCE_PREFIX)) {
-      return normalized.substring(PYTHON_RESOURCE_PREFIX.length());
+    if (normalized.startsWith(image.resourcePrefix())) {
+      return normalized.substring(image.resourcePrefix().length());
     }
     return normalized;
   }
@@ -626,7 +597,8 @@ public class PythonExecutorFactory {
     private final List<HostFunction> hostFunctions = new ArrayList<>();
     private final List<Supplier<BoomslangExtension>> extensionFactories =
       new ArrayList<>();
-    private String wasmResource = DEFAULT_WASM_RESOURCE;
+    private PythonImage image = PythonImage.bundled();
+    private String wasmResource;
     private WasmModule wasmModule;
     private Function<Instance, Machine> machineFactory;
     private Path stdlibPath;
@@ -636,10 +608,20 @@ public class PythonExecutorFactory {
     private Builder() {}
 
     /**
-     * Sets the classpath resource for the Python WASM binary. The default is {@code
-     * python/bin/boomslang.wasm}. Resources under the {@code python/} prefix are extracted relative
-     * to {@link #withStdlibPath(Path)}, so {@code /python/bin/boomslang.wasm} is written to {@code
-     * <stdlibPath>/bin/boomslang.wasm}.
+     * Sets the Python image: its WASM module, Python tree and AOT-compiled form. The default is
+     * {@link PythonImage#bundled()}. {@link #withWasmResource(String)}, {@link
+     * #withWasmModule(WasmModule)} and {@link #withMachineFactory(Function)} override its parts.
+     */
+    public Builder withImage(PythonImage image) {
+      this.image = Objects.requireNonNull(image, "image");
+      return this;
+    }
+
+    /**
+     * Sets the classpath resource for the Python WASM binary. The default is the image's {@link
+     * PythonImage#wasmResource()}, {@code python/bin/boomslang.wasm} for the bundled image.
+     * Resources under the image's prefix are extracted relative to {@link #withStdlibPath(Path)},
+     * so {@code /python/bin/boomslang.wasm} is written to {@code <stdlibPath>/bin/boomslang.wasm}.
      */
     public Builder withWasmResource(String resourcePath) {
       this.wasmResource = resourcePath;

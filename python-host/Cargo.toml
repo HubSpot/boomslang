@@ -15,6 +15,7 @@ opt-level = "s"
 lto = "thin"
 
 [dependencies]
+pyo3 = { version = "0.26.0", default-features = false, features = ["macros"] }
 boomslang-host-core = { version = "0.0.1", path = "../python-host-core" }
 boomslang-ext-host-bridge = { version = "0.0.1", path = "../extensions/host-bridge" }
 # Link pydantic-core here instead of merging it into libpython3.14.a so the

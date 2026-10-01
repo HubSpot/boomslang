@@ -178,8 +178,8 @@ do_wizer() {
         --mapdir /::$BUILD_DIR/wizer-fs \
         -o "$output_wasm" \
         "$input_wasm" || {
-            echo "WARNING: Wizer pre-initialization failed. Using non-wizered WASM."
-            return
+            echo "ERROR: Wizer pre-initialization failed."
+            exit 1
         }
 
     mv "$output_wasm" "$input_wasm"

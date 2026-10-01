@@ -93,44 +93,30 @@ fn install_stream_handlers(py: Python) -> PyResult<()> {
     Ok(())
 }
 
-fn prewarm_stdlib(py: Python) {
-    let modules = [
-        "sys", "io", "os", "pathlib", "json", "importlib",
-        "typing", "collections", "collections.abc", "functools",
-        "itertools", "dataclasses", "enum", "abc", "copy", "re",
-        "datetime", "decimal", "traceback", "warnings", "inspect",
-        "typing_extensions", "annotated_types",
-        "pydantic_core", "pydantic", "pydantic.main", "pydantic.fields", "pydantic.config",
-        "numpy", "numpy.linalg", "numpy.random", "numpy.fft",
-        "pandas",
-        "matplotlib", "matplotlib.pyplot",
-        "ijson",
-        "lxml.etree", "lxml.objectify",
-        "pptx",
-    ];
+const STDLIB_PREWARM: &[&str] = &[
+    "sys", "io", "os", "pathlib", "json", "importlib",
+    "typing", "collections", "collections.abc", "functools",
+    "itertools", "dataclasses", "enum", "abc", "copy", "re",
+    "datetime", "decimal", "traceback", "warnings", "inspect",
+];
 
+fn prewarm(py: Python) {
     py.run(
         c"import os; os.environ.setdefault('MPLCONFIGDIR', '/tmp/mplconfig')",
         None, None,
     ).ok();
 
-    for name in modules {
-        match py.import(name) {
+    for name in STDLIB_PREWARM.iter().chain(builtins::PREWARM) {
+        match py.import(*name) {
             Ok(_) => eprintln!("[prewarm] OK: {}", name),
             Err(e) => eprintln!("[prewarm] FAILED: {} - {:?}", name, e),
         }
     }
 
-    let warmup_code = c"
-from pydantic import BaseModel
-class _WizerWarmupModel(BaseModel):
-    x: int
-    y: str
-_WizerWarmupModel(x=1, y='test')
-";
-    match py.run(warmup_code, None, None) {
-        Ok(_) => eprintln!("[prewarm] OK: pydantic model creation"),
-        Err(e) => eprintln!("[prewarm] FAILED: pydantic model creation - {:?}", e),
+    for (name, reason) in builtins::SNAPSHOT_REQUIRED {
+        if let Err(e) = py.import(*name) {
+            panic!("[prewarm] {name} must be in the snapshot ({reason}), but its import failed: {e:?}");
+        }
     }
 }
 
@@ -139,7 +125,8 @@ _WizerWarmupModel(x=1, y='test')
 /// 1. Installs mimalloc as Python's memory allocator
 /// 2. Call `register_extensions` to register your extensions via `PyImport_AppendInittab`
 /// 3. Initializes CPython
-/// 4. Installs stream handlers, prewarns stdlib + libraries
+/// 4. Installs stream handlers, prewarms the stdlib and the image's packages; a failed
+///    `snapshotRequired` import panics, which fails the Wizer bake
 /// 5. Calls `prewarm_extensions` for extension-specific prewarm
 ///
 /// ```rust,ignore
@@ -179,7 +166,7 @@ where
     Python::initialize();
     Python::attach(|py| {
         install_stream_handlers(py).expect("Failed to install stream handlers");
-        prewarm_stdlib(py);
+        prewarm(py);
         prewarm_extensions(py);
     });
 }

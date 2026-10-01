@@ -71,6 +71,26 @@ export CPYTHON_WASI_DIR=../../cpython/build/cpython-wasi  # or omit to download 
 cargo build --target wasm32-wasip1 --release
 ```
 
+## Building against a package image
+
+`boomslang-host-core`'s `build.rs` reads `$CPYTHON_WASI_DIR/sysroot.json`, which a package image (for example from hubos-pkgs) writes beside its archives. From it the build generates:
+
+- the inittab: one `PyImport_AppendInittab` per entry in `builtins`;
+- the link line: the image's `linkLibs` in manifest order, then libpython and the archives its `python-3.14-embed.pc` names, libc++, the wasi-emulated libraries and `c-printscan-long-double`;
+- the Wizer prewarm: the stdlib, then the image's `prewarm`. A module in `snapshotRequired` that fails to import fails the bake.
+
+Without a `sysroot.json` the runtime is stdlib only. A `contract` other than `1` fails the build. The bundled runtime describes itself in `cpython/bundled-sysroot.json`.
+
+On the Java side, a `PythonImage` names an image's classpath prefix and its Endive AOT class, so several images can share one classpath:
+
+```java
+PythonExecutorFactory factory = PythonExecutorFactory
+    .builder()
+    .withImage(PythonImage.onClasspath("images/data/", "com.example.images.data.PythonWasm"))
+    .withStdlibPath(pythonRoot)
+    .build();
+```
+
 ## Generating host adapters
 
 Run the hostgen CLI against the ABI JSON your build emitted:

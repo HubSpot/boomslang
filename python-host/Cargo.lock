@@ -115,6 +115,8 @@ version = "0.0.1"
 dependencies = [
  "libmimalloc-sys",
  "pyo3",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -134,6 +136,7 @@ dependencies = [
  "boomslang-ext-host-bridge",
  "boomslang-host-core",
  "pydantic-core",
+ "pyo3",
 ]
 
 [[package]]
