@@ -117,6 +117,48 @@ PYBUILDDIR=$(cat pybuilddir.txt)
 touch "${PYBUILDDIR}/build-details.json"
 make libinstall DESTDIR=$(pwd)
 
+# Stub mmap so pandas.io.common's top-level `import mmap` succeeds. cpython-
+# wasi doesn't build the mmap C extension (WASI has no real mmap), but pandas
+# only uses it as an opt-in type for CSV memory-mapping; a stub module whose
+# .mmap class raises on instantiation is sufficient to let pandas import and
+# keeps the isinstance(x, mmap.mmap) checks against normal file objects safe
+# (they just return False).
+if [ ! -f usr/local/lib/python3.14/mmap.py ]; then
+    log "Writing mmap stub for WASI..."
+    cat > usr/local/lib/python3.14/mmap.py <<'MMAPEOF'
+"""Stub mmap module for the WASI sandbox.
+
+cpython-wasi doesn't build the mmap C extension — WASI has no real mmap
+syscall. Pandas (and other libs) do `import mmap` at module load, but only
+use it in opt-in code paths (CSV memory-mapping, isinstance checks against
+normal file objects). This stub lets those imports succeed; any actual
+mmap() call raises OSError.
+"""
+ACCESS_READ = 1
+ACCESS_WRITE = 2
+ACCESS_COPY = 3
+ACCESS_DEFAULT = 0
+PROT_READ = 1
+PROT_WRITE = 2
+PROT_EXEC = 4
+
+class mmap:
+    def __init__(self, *args, **kwargs):
+        raise OSError("mmap is not available on wasi")
+    @classmethod
+    def __class_getitem__(cls, item):
+        return cls
+
+class error(OSError):
+    pass
+MMAPEOF
+fi
+
+CORE_STDLIB="${BUILD_DIR}/core-stdlib"
+log "Snapshotting the package-free stdlib for cpython-core..."
+mkdir -p "${CORE_STDLIB}"
+cp -R usr/local/lib/python3.14 "${CORE_STDLIB}/"
+
 ##############################
 # pydantic-core (from Blazar artifact)
 ##############################
@@ -302,42 +344,6 @@ for whl in glob.glob('/tmp/wheels-pandas/*.whl'):
             z.extract(name, target)
 "
 
-# Stub mmap so pandas.io.common's top-level `import mmap` succeeds. cpython-
-# wasi doesn't build the mmap C extension (WASI has no real mmap), but pandas
-# only uses it as an opt-in type for CSV memory-mapping; a stub module whose
-# .mmap class raises on instantiation is sufficient to let pandas import and
-# keeps the isinstance(x, mmap.mmap) checks against normal file objects safe
-# (they just return False).
-if [ ! -f usr/local/lib/python3.14/mmap.py ]; then
-    log "Writing mmap stub for WASI..."
-    cat > usr/local/lib/python3.14/mmap.py <<'MMAPEOF'
-"""Stub mmap module for the WASI sandbox.
-
-cpython-wasi doesn't build the mmap C extension — WASI has no real mmap
-syscall. Pandas (and other libs) do `import mmap` at module load, but only
-use it in opt-in code paths (CSV memory-mapping, isinstance checks against
-normal file objects). This stub lets those imports succeed; any actual
-mmap() call raises OSError.
-"""
-ACCESS_READ = 1
-ACCESS_WRITE = 2
-ACCESS_COPY = 3
-ACCESS_DEFAULT = 0
-PROT_READ = 1
-PROT_WRITE = 2
-PROT_EXEC = 4
-
-class mmap:
-    def __init__(self, *args, **kwargs):
-        raise OSError("mmap is not available on wasi")
-    @classmethod
-    def __class_getitem__(cls, item):
-        return cls
-
-class error(OSError):
-    pass
-MMAPEOF
-fi
 
 ##############################
 # matplotlib (from Blazar artifact)
@@ -560,6 +566,96 @@ make inclinstall \
     libdir="${OUTPUT_DIR}/lib/wasm32-wasi" \
     pkgconfigdir="${OUTPUT_DIR}/lib/wasm32-wasi/pkgconfig"
 
+##############################
+# cpython-core: CPython without packages, for hubos-pkgs
+##############################
+CORE_DIR="${OUTPUT_DIR}/cpython-core"
+CORE_LIBDIR="${CORE_DIR}/lib/wasm32-wasi"
+CORE_PCDIR="${CORE_LIBDIR}/pkgconfig"
+
+write_pc() {
+    local name=$1 version=$2 libs=$3 description=$4
+    cat > "${CORE_PCDIR}/${name}.pc" <<PCEOF
+prefix=\${pcfiledir}/../../..
+libdir=\${prefix}/lib/wasm32-wasi
+includedir=\${prefix}/include
+
+Name: ${name}
+Description: ${description}
+Version: ${version}
+Libs: -L\${libdir} ${libs}
+Cflags: -I\${includedir}
+PCEOF
+}
+
+header_version() {
+    local header=$1; shift
+    local parts=()
+    for macro in "$@"; do
+        parts+=("$(sed -nE "s/^#[[:space:]]*define[[:space:]]+${macro}[[:space:]]+([0-9]+).*/\\1/p" "${header}")")
+    done
+    (IFS=.; echo "${parts[*]}")
+}
+
+log "Assembling cpython-core..."
+mkdir -p "${CORE_PCDIR}" "${CORE_DIR}/include/uuid" "${CORE_DIR}/usr/local/lib"
+make inclinstall \
+    prefix="${CORE_DIR}" \
+    libdir="${CORE_LIBDIR}" \
+    pkgconfigdir="${CORE_PCDIR}"
+cp -R "${CORE_STDLIB}/python3.14" "${CORE_DIR}/usr/local/lib/"
+find "${CORE_DIR}/usr/local/lib/python3.14" -depth -type d \( -name tests -o -name test -o -name __pycache__ \) -exec rm -rf {} + 2>/dev/null || true
+
+cp libpython3.14.a \
+    ${DEPS_LIBDIR}/lib{z,bz2,sqlite3,uuid}.a \
+    Modules/expat/libexpat.a \
+    Modules/_decimal/libmpdec/libmpdec.a \
+    Modules/_hacl/libHacl_{Hash_SHA2,Hash_BLAKE2,HMAC}.a \
+    "${CORE_LIBDIR}/"
+cp ${DEPS_INCLUDE}/{zlib,zconf,bzlib,sqlite3,sqlite3ext}.h "${CORE_DIR}/include/"
+cp ${DEPS_INCLUDE}/uuid/uuid.h "${CORE_DIR}/include/uuid/"
+cp Modules/expat/{expat,expat_external,pyexpatns}.h "${CORE_DIR}/include/"
+cp Modules/_decimal/libmpdec/mpdecimal.h "${CORE_DIR}/include/"
+
+write_pc zlib 1.2.13 "-lz" "zlib compression library"
+write_pc bzip2 1.0.8 "-lbz2" "bzip2 compression library"
+write_pc sqlite3 3.42.0 "-lsqlite3" "SQLite database engine"
+write_pc uuid 1.0.3 "-luuid" "Universally unique id library"
+write_pc expat "$(header_version Modules/expat/expat.h XML_MAJOR_VERSION XML_MINOR_VERSION XML_MICRO_VERSION)" \
+    "-lexpat" "expat XML parser, with CPython's PyExpat_ symbol prefix"
+write_pc libmpdec "$(header_version Modules/_decimal/libmpdec/mpdecimal.h MPD_MAJOR_VERSION MPD_MINOR_VERSION MPD_MICRO_VERSION)" \
+    "-lmpdec" "mpdecimal arbitrary precision decimal library"
+cat > "${CORE_PCDIR}/python-3.14.pc" <<PCEOF
+prefix=\${pcfiledir}/../../..
+includedir=\${prefix}/include/python3.14
+
+Name: python-3.14
+Description: CPython ${PYTHON_VERSION} for wasm32-wasi, for building extension modules
+Version: ${PYTHON_VERSION}
+Libs:
+Cflags: -I\${includedir}
+PCEOF
+cat > "${CORE_PCDIR}/python-3.14-embed.pc" <<PCEOF
+prefix=\${pcfiledir}/../../..
+libdir=\${prefix}/lib/wasm32-wasi
+includedir=\${prefix}/include/python3.14
+
+Name: python-3.14-embed
+Description: CPython ${PYTHON_VERSION} for wasm32-wasi, without bundled packages, for embedding
+Version: ${PYTHON_VERSION}
+Requires.private: zlib bzip2 sqlite3 uuid expat libmpdec
+Libs: -L\${libdir} -lpython3.14
+Libs.private: -lHacl_Hash_SHA2 -lHacl_Hash_BLAKE2 -lHacl_HMAC -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks
+Cflags: -I\${includedir}
+PCEOF
+rm -f "${CORE_PCDIR}/libpython3.14.pc"
+
+if ${NM} "${CORE_LIBDIR}/libpython3.14.a" 2>/dev/null | grep -E ' T PyInit_(_pydantic_core|_multiarray_umath|_ft2font|_imaging|_yajl2|etree)$'; then
+    log "ERROR: cpython-core libpython3.14.a defines a package's PyInit_"
+    exit 1
+fi
+log "cpython-core: $(du -sh "${CORE_DIR}" | cut -f1)"
+
 log "Creating combined static library..."
 # Diagnostics: verify every input archive exists before the ar -M merge. A
 # missing file causes llvm-ar -M to exit 1 with minimal output, which has
@@ -569,7 +665,6 @@ ls -lh ${MATPLOTLIB_LIB}/lib/wasm32-wasi/ 2>&1 || log "    MATPLOTLIB_LIB dir mi
 log "  Verifying pandas archives..."
 ls ${PANDAS_LIB}/lib/wasm32-wasi/ 2>&1 | head -5 || log "    PANDAS_LIB dir missing"
 log "  Generated addlib lines (sanity):"
-for pa in ${PANDAS_LIB}/lib/wasm32-wasi/lib_pandas_*.a; do echo "    addlib ${pa}"; done | head -3
 for ma in ${MATPLOTLIB_LIB}/lib/wasm32-wasi/lib_matplotlib_*.a; do echo "    addlib ${ma}"; done
 log "  pydantic-core intentionally remains separate; the Rust host links it as a Cargo dependency."
 

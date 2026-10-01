@@ -54,7 +54,7 @@ pip install https://github.com/HubSpot/boomslang/releases/download/<tag>/boomsla
 
 ## Runtime assets outside Maven
 
-Every release also publishes raw runtime assets to [GitHub Releases](https://github.com/HubSpot/boomslang/releases): the `boomslang.wasm` binary, a `boomslang-runtime-*.tar.gz` with the Python resource tree, and sha256 checksums. Per-commit prerelease builds from `main` are published as `build-<sha>` releases. These are what non-Java hosts (or `no-python-runtime` consumers who package resources themselves) consume.
+Every release also publishes raw runtime assets to [GitHub Releases](https://github.com/HubSpot/boomslang/releases): the `boomslang.wasm` binary, a `boomslang-runtime-*.tar.gz` with the Python resource tree, a `cpython-core-*.tar.gz` for building packages against (CPython's static library with no packages in it, headers, stdlib, and each C library the stdlib links as its own archive with a pkg-config file), and sha256 checksums. Per-commit prerelease builds from `main` are published as `build-<sha>` releases. These are what non-Java hosts (or `no-python-runtime` consumers who package resources themselves) consume.
 
 ## Requirements
 

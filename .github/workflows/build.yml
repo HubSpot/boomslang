@@ -114,9 +114,11 @@ jobs:
           cp -R core/src/main/resources/python/usr dist/stage/python/
           cp -R core/src/main/resources/python-overlay dist/stage/python-overlay
           tar -C dist/stage -czf "dist/boomslang-runtime-${GITHUB_SHA}.tar.gz" python python-overlay
+          tar -C out/artifacts/cpythonWasi.dest/extracted/cpython-core -czf "dist/cpython-core-${GITHUB_SHA}.tar.gz" .
           sha256sum \
             "dist/boomslang-${GITHUB_SHA}.wasm" \
             "dist/boomslang-runtime-${GITHUB_SHA}.tar.gz" \
+            "dist/cpython-core-${GITHUB_SHA}.tar.gz" \
             > "dist/boomslang-${GITHUB_SHA}.sha256"
           rm -rf dist/stage
 
