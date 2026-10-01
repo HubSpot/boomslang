@@ -107,4 +107,4 @@ Inspect the artifact DAG and caching:
 
 ## CI
 
-`.github/workflows/build.yml` rebuilds everything from source in containers, validates the generated runtime, runs the tests, and publishes runtime assets (wasm + resource tarball + checksums) to GitHub Releases — tagged releases for `v*` tags, `build-<sha>` prereleases for every `main` commit (these are what `fetch-main-wasm` consumes). `docs.yml` builds this book and deploys it to GitHub Pages on pushes to `main`.
+`.github/workflows/build.yml` rebuilds everything from source in containers, validates the generated runtime, runs the tests, and publishes runtime assets (wasm + resource tarball + `cpython-core` tarball + checksums) to GitHub Releases — tagged releases for `v*` tags, `build-<sha>` prereleases for every `main` commit (these are what `fetch-main-wasm` consumes). `docs.yml` builds this book and deploys it to GitHub Pages on pushes to `main`.
