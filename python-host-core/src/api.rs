@@ -1,7 +1,8 @@
 use std::ffi::CString;
 
+use pyo3::exceptions::PySystemExit;
 use pyo3::prelude::*;
-use pyo3::types::{PyCode, PyCodeMethods, PyTuple};
+use pyo3::types::{PyCode, PyCodeMethods, PyDict, PyInt, PyTuple};
 use pyo3::marshal;
 
 use crate::clear_buffers;
@@ -31,7 +32,7 @@ pub fn compile_source(py: Python, source: &str) -> Result<Vec<u8>, String> {
     Ok(bytecode.as_bytes().to_vec())
 }
 
-pub fn load_bytecode(py: Python, bytecode: &[u8]) -> Result<(), String> {
+pub fn load_bytecode(py: Python, bytecode: &[u8]) -> Result<i32, String> {
     clear_buffers();
 
     let unmarshalled = marshal::loads(py, bytecode).map_err(|e| {
@@ -46,19 +47,17 @@ pub fn load_bytecode(py: Python, bytecode: &[u8]) -> Result<(), String> {
     let main = py.import("__main__").map_err(|e| format!("Failed to import __main__: {}", e))?;
     let globals = main.dict();
 
-    code.run(Some(&globals), None).map_err(|e| {
-        e.print_and_set_sys_last_vars(py);
-        format!("Execution error: {}", e)
-    })?;
-
-    Ok(())
+    match code.run(Some(&globals), None) {
+        Ok(_) => Ok(0),
+        Err(e) => exit_status_or_print(py, e, "Execution error"),
+    }
 }
 
-pub fn execute_function(py: Python, func_name: &str, args_json: &str) -> Result<(), String> {
+pub fn execute_function(py: Python, func_name: &str, args_json: &str) -> Result<i32, String> {
     clear_buffers();
 
     if func_name == "__main__" {
-        return Ok(());
+        return Ok(0);
     }
 
     let main = py.import("__main__").map_err(|e| format!("Failed to import __main__: {}", e))?;
@@ -88,15 +87,13 @@ pub fn execute_function(py: Python, func_name: &str, args_json: &str) -> Result<
         }
     };
 
-    func.call1(args_tuple).map_err(|e| {
-        e.print_and_set_sys_last_vars(py);
-        format!("Function call error: {}", e)
-    })?;
-
-    Ok(())
+    match func.call1(args_tuple) {
+        Ok(_) => Ok(0),
+        Err(e) => exit_status_or_print(py, e, "Function call error"),
+    }
 }
 
-pub fn execute_legacy(py: Python, script: &str) -> Result<(), String> {
+pub fn execute_legacy(py: Python, script: &str) -> Result<i32, String> {
     clear_buffers();
 
     let script_cstr = CString::new(script).map_err(|e| format!("Invalid script: {}", e))?;
@@ -104,15 +101,13 @@ pub fn execute_legacy(py: Python, script: &str) -> Result<(), String> {
     let main = py.import("__main__").map_err(|e| format!("Failed to import __main__: {}", e))?;
     let main_dict = main.dict();
 
-    py.run(&script_cstr, Some(&main_dict), Some(&main_dict)).map_err(|e| {
-        e.print_and_set_sys_last_vars(py);
-        format!("Execution error: {}", e)
-    })?;
-
-    Ok(())
+    match py.run(&script_cstr, Some(&main_dict), Some(&main_dict)) {
+        Ok(()) => Ok(0),
+        Err(e) => exit_status_or_print(py, e, "Execution error"),
+    }
 }
 
-pub fn install_module(py: Python, module_name: &str, source: &str) -> Result<(), String> {
+pub fn install_module(py: Python, module_name: &str, source: &str) -> Result<i32, String> {
     clear_buffers();
 
     let types = py.import("types").map_err(|e| format!("Failed to import types: {}", e))?;
@@ -127,16 +122,93 @@ pub fn install_module(py: Python, module_name: &str, source: &str) -> Result<(),
     module_dict.set_item("__file__", format!("<memory>/{}.py", module_name)).map_err(|e| format!("Failed to set __file__: {}", e))?;
 
     let source_cstr = CString::new(source).map_err(|e| format!("Invalid source: {}", e))?;
-    py.run(&source_cstr, Some(module_dict), Some(module_dict)).map_err(|e| {
-        e.print_and_set_sys_last_vars(py);
-        format!("Module execution error: {}", e)
-    })?;
+    if let Err(e) = py.run(&source_cstr, Some(module_dict), Some(module_dict)) {
+        return exit_status_or_print(py, e, "Module execution error");
+    }
 
     let sys = py.import("sys").map_err(|e| format!("Failed to import sys: {}", e))?;
     let sys_modules = sys.getattr("modules").map_err(|e| format!("Failed to get sys.modules: {}", e))?;
     sys_modules.set_item(module_name, module).map_err(|e| format!("Failed to register module: {}", e))?;
 
-    Ok(())
+    Ok(0)
+}
+
+/// Turns an error raised by user code into an exit status, the way CPython's
+/// `_Py_HandleSystemExitAndKeyboardInterrupt` does for a `python` process, but without calling
+/// `Py_Exit`. Printing a `SystemExit` through `PyErr_PrintEx` would finalize the interpreter and
+/// issue WASI `proc_exit`, so the host would see a trap instead of the script's output.
+///
+/// `SystemExit` yields `Ok(status)`: `None` is 0, an int is masked to 0..=255 like a POSIX exit
+/// status (ints outside the C `int` range become -1, as in CPython), and any other code is
+/// written to `sys.stderr` followed by a newline and yields 1. Every other exception is printed
+/// to `sys.stderr` and yields `Err`.
+fn exit_status_or_print(py: Python, err: PyErr, context: &str) -> Result<i32, String> {
+    if !err.is_instance_of::<PySystemExit>(py) {
+        err.print_and_set_sys_last_vars(py);
+        return Err(format!("{}: {}", context, err));
+    }
+
+    // site.Quitter (the exit()/quit() builtins) closes sys.stdin before raising SystemExit.
+    reopen_closed_stdin(py);
+
+    let value = err.value(py);
+    let message = match value.getattr("code") {
+        Ok(code) if code.is_none() => return Ok(0),
+        Ok(code) if code.is_instance_of::<PyInt>() => {
+            let status = code
+                .extract::<i64>()
+                .ok()
+                .and_then(|n| i32::try_from(n).ok())
+                .unwrap_or(-1);
+            return Ok(status & 0xFF);
+        }
+        Ok(code) => code,
+        Err(_) => value.clone().into_any(),
+    };
+
+    write_exit_message(py, &message);
+    Ok(1)
+}
+
+fn write_exit_message(py: Python, message: &Bound<PyAny>) {
+    let Ok(text) = message.str() else { return };
+    let Ok(stderr) = py.import("sys").and_then(|sys| sys.getattr("stderr")) else { return };
+    if stderr.is_none() {
+        return;
+    }
+    let _ = stderr.call_method1("write", (text,));
+    let _ = stderr.call_method1("write", ("\n",));
+}
+
+fn reopen_closed_stdin(py: Python) {
+    let Ok(sys) = py.import("sys") else { return };
+    let Ok(stdin) = sys.getattr("stdin") else { return };
+    if stdin.is_none() {
+        return;
+    }
+    let closed = stdin
+        .getattr("closed")
+        .and_then(|closed| closed.is_truthy())
+        .unwrap_or(false);
+    if !closed {
+        return;
+    }
+
+    let kwargs = PyDict::new(py);
+    let _ = kwargs.set_item("closefd", false);
+    if let Ok(encoding) = stdin.getattr("encoding") {
+        let _ = kwargs.set_item("encoding", encoding);
+    }
+    if let Ok(errors) = stdin.getattr("errors") {
+        let _ = kwargs.set_item("errors", errors);
+    }
+    let reopened = py
+        .import("builtins")
+        .and_then(|builtins| builtins.getattr("open"))
+        .and_then(|open| open.call((0, "r"), Some(&kwargs)));
+    if let Ok(reopened) = reopened {
+        let _ = sys.setattr("stdin", reopened);
+    }
 }
 
 pub fn reset_main_namespace(py: Python) {

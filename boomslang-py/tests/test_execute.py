@@ -62,3 +62,28 @@ def test_no_stdin(sandbox):
 def test_unicode_roundtrip(sandbox):
     result = sandbox.execute("print('héllo wörld 🐍')")
     assert result.stdout == "héllo wörld 🐍\n"
+
+
+def test_system_exit_zero_keeps_stdout(sandbox):
+    result = sandbox.execute("print('a')\nraise SystemExit(0)")
+    assert result.stdout == "a\n"
+    assert result.exit_code == 0
+
+
+def test_sys_exit_status_is_reported(sandbox):
+    result = sandbox.execute("import sys\nprint('b')\nsys.exit(3)")
+    assert result.stdout == "b\n"
+    assert result.exit_code == 3
+
+
+def test_sys_exit_message_goes_to_stderr(sandbox):
+    result = sandbox.execute("import sys\nsys.exit('bad')")
+    assert result.stderr == "bad\n"
+    assert result.exit_code == 1
+
+
+def test_sandbox_usable_after_sys_exit(sandbox):
+    sandbox.execute("x = 41\nraise SystemExit(2)")
+    result = sandbox.execute("print(x + 1)")
+    assert result.stdout == "42\n"
+    assert result.exit_code == 0

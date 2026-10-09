@@ -57,7 +57,7 @@ pub extern "C" fn load_bytecode(bytecode_ptr: *const u8, bytecode_len: i32) -> i
     let bytecode = unsafe { slice::from_raw_parts(bytecode_ptr, bytecode_len as usize) };
 
     Python::attach(|py| match api::load_bytecode(py, bytecode) {
-        Ok(()) => 0,
+        Ok(status) => status,
         Err(_) => 1,
     })
 }
@@ -92,7 +92,7 @@ pub extern "C" fn execute_function(
     };
 
     Python::attach(|py| match api::execute_function(py, name, args) {
-        Ok(()) => 0,
+        Ok(status) => status,
         Err(_) => 1,
     })
 }
@@ -110,7 +110,7 @@ pub extern "C" fn execute(script_ptr: *const u8, script_len: i32) -> i32 {
     };
 
     Python::attach(|py| match api::execute_legacy(py, script) {
-        Ok(()) => 0,
+        Ok(status) => status,
         Err(_) => 1,
     })
 }
@@ -175,7 +175,7 @@ pub extern "C" fn install_module(
     };
 
     Python::attach(|py| match api::install_module(py, name, source) {
-        Ok(()) => 0,
+        Ok(status) => status,
         Err(_) => 1,
     })
 }

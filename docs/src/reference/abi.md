@@ -13,6 +13,7 @@ Source of truth: `python-host-core/src/export.rs` (guest) and `core/src/main/jav
 - All strings are UTF-8. Passing invalid UTF-8 where a string is expected returns `-1`.
 - Every execution-family export (`compile_source`, `load_bytecode`, `execute`, `execute_function`, `install_module`, `uninstall_module`) **clears the captured stdout/stderr buffers on entry**. Read outputs after each call, before the next one.
 - Error reporting is two-channel: a coarse return code, plus the Python traceback captured in the stderr buffer. Detailed error strings only exist in stderr.
+- Exports that run user code (`load_bytecode`, `execute`, `execute_function`, `install_module`) return a process-style **exit status** in `0..=255`: `0` when the code completes, `1` for an uncaught exception, and the `SystemExit` status when the code calls `sys.exit()` / `exit()` / `raise SystemExit`. `SystemExit` follows CPython: `None` is `0`, an int is masked to `0..=255`, and any other value is written to stderr and yields `1`. The guest handles `SystemExit` itself, so the interpreter stays usable and output written before the exit stays in the capture buffers. (`os._exit()` still calls WASI `proc_exit`, which hosts see as a trap.)
 
 ## Exports
 
@@ -21,12 +22,12 @@ Source of truth: `python-host-core/src/export.rs` (guest) and `core/src/main/jav
 | `alloc` | `(size: i32) -> i32` | Allocate `size` bytes in guest memory (mimalloc); returns pointer. |
 | `dealloc` | `(ptr: i32, size: i32)` | Free an `alloc`'d buffer. `size` is currently ignored but pass the allocated size. |
 | `compile_source` | `(source_ptr: i32, source_len: i32, output_ptr: i32, output_max_len: i32) -> i32` | Compile Python source to marshal bytecode, written to the caller-provided output buffer. Returns the bytecode length, `-1` on invalid UTF-8 or compile error (traceback in stderr), `-3` if the bytecode exceeds `output_max_len`. |
-| `load_bytecode` | `(ptr: i32, len: i32) -> i32` | Unmarshal and execute bytecode from `compile_source`. `0` ok; `1` Python error (traceback in stderr). |
-| `execute` | `(script_ptr: i32, script_len: i32) -> i32` | Execute Python source in `__main__`. `0` ok; `1` Python error; `-1` invalid UTF-8. |
-| `execute_function` | `(name_ptr: i32, name_len: i32, args_ptr: i32, args_len: i32) -> i32` | Call a named function from previously loaded code with one string argument (`args_len` 0 → empty string). `0` / `1` / `-1` as above. |
+| `load_bytecode` | `(ptr: i32, len: i32) -> i32` | Unmarshal and execute bytecode from `compile_source`. Exit status (see Conventions); `1` for a Python error (traceback in stderr). |
+| `execute` | `(script_ptr: i32, script_len: i32) -> i32` | Execute Python source in `__main__`. Exit status; `-1` invalid UTF-8. |
+| `execute_function` | `(name_ptr: i32, name_len: i32, args_ptr: i32, args_len: i32) -> i32` | Call a named function from previously loaded code with one string argument (`args_len` 0 → empty string). Exit status / `-1` as above. |
 | `get_stdout_len` / `get_stderr_len` | `() -> i32` | Byte length of the captured stream. |
 | `get_stdout` / `get_stderr` | `(ptr: i32, max_len: i32) -> i32` | Copy up to `max_len` bytes of the captured stream into the caller's buffer; returns bytes written. |
-| `install_module` | `(name_ptr: i32, name_len: i32, source_ptr: i32, source_len: i32) -> i32` | Install a pure-Python module under `name` (dotted names allowed). `0` / `1` / `-1`. |
+| `install_module` | `(name_ptr: i32, name_len: i32, source_ptr: i32, source_len: i32) -> i32` | Install a pure-Python module under `name` (dotted names allowed). Exit status / `-1`; the module is registered only on `0`. |
 | `uninstall_module` | `(name_ptr: i32, name_len: i32) -> i32` | Remove an installed module. `0` / `1` / `-1`. |
 | `reset_state` | `()` | Clear capture buffers and reset the `__main__` namespace. Note: the Java host does not call this — it resets by restoring the copy-on-write memory snapshot, which is stricter. |
 | `get_heap_pages` | `() -> i32` | Current guest memory size in 64 KiB pages. Used by hosts to size snapshots. |
@@ -46,7 +47,7 @@ Instantiation fails on any missing import.
 
 ```text
 ptr = alloc(len(script))          # write script bytes at ptr
-rc  = execute(ptr, len(script))   # 0 ok, 1 python error, -1 bad utf-8
+rc  = execute(ptr, len(script))   # exit status (0 ok, 1 python error, n from SystemExit), -1 bad utf-8
 dealloc(ptr, len(script))
 n   = get_stdout_len()
 buf = alloc(n); get_stdout(buf, n)   # read n bytes from memory at buf
@@ -61,7 +62,7 @@ n   = compile_source(src, len, out, MAX)           # n = bytecode length, or -1 
 bytecode = memory[out .. out+n]; dealloc(out, MAX)
 ...
 ptr = alloc(len(bytecode))                          # later, possibly many times
-rc  = load_bytecode(ptr, len(bytecode))             # 0 / 1
+rc  = load_bytecode(ptr, len(bytecode))             # exit status
 ```
 
 The bytecode is CPython marshal data — valid only for the exact runtime build that produced it.

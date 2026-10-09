@@ -240,7 +240,8 @@ public class PythonInstance implements AutoCloseable {
    * String)} calls.
    *
    * @return the result of running the bytecode; a non-zero {@link PythonResult#exitCode()} means a
-   *     Python exception was raised, with the traceback in {@link PythonResult#stderr()}
+   *     Python exception was raised (traceback in {@link PythonResult#stderr()}) or the code exited
+   *     via {@code SystemExit}
    * @throws PythonExecutionException if the runtime traps while loading
    */
   public synchronized PythonResult loadCode(byte[] bytecode) {
@@ -291,7 +292,8 @@ public class PythonInstance implements AutoCloseable {
    * @param functionName name of the function in {@code __main__}
    * @param argsJson JSON-encoded arguments, or null for none
    * @return the result; a non-zero {@link PythonResult#exitCode()} means a Python exception was
-   *     raised, with the traceback in {@link PythonResult#stderr()}
+   *     raised (traceback in {@link PythonResult#stderr()}) or the code exited via {@code
+   *     SystemExit}
    */
   public synchronized PythonResult executeFunction(String functionName, String argsJson) {
     checkNotClosed();
@@ -346,8 +348,9 @@ public class PythonInstance implements AutoCloseable {
   /**
    * Executes a Python script in this instance's {@code __main__} module. Python exceptions do not
    * throw: they yield a {@link PythonResult} with a non-zero exit code and the traceback in {@link
-   * PythonResult#stderr()}. State created by the script persists in the instance until {@link
-   * #reset()}.
+   * PythonResult#stderr()}. {@code sys.exit()} does not throw either: it yields the exit status
+   * with the output captured up to the exit, and the instance stays usable. State created by the
+   * script persists in the instance until {@link #reset()}.
    *
    * @return the captured stdout/stderr, exit code, and timing
    * @throws PythonExecutionException if the WASM runtime itself traps (not for ordinary Python
