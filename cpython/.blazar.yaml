@@ -45,10 +45,10 @@ before:
         cp -r ../boomslang-hostgen vendor/boomslang-hostgen
 
         # Download pip packages
-        pip_packages="pydantic==2.12.5 typing-inspection>=0.4.2"
+        pip_packages="pydantic==2.13.5 typing-inspection>=0.4.2"
         pip_tmp="/tmp/pip-packages"
         rm -rf "$pip_tmp" && mkdir -p "$pip_tmp"
-        python3 -m pip download $pip_packages --no-deps -d "$pip_tmp" --quiet
+        PIP_CONSTRAINT= python3 -m pip download $pip_packages --python-version 3.15 --only-binary=:all: --no-deps -d "$pip_tmp" --quiet
         for whl in "$pip_tmp"/*.whl; do
           [ -f "$whl" ] || continue
           python3 -m zipfile -e "$whl" "$pip_tmp/extracted"

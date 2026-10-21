@@ -115,7 +115,7 @@ else
 fi
 
 # Stage freetype + libpng static archives so cpython-wasi's ar -M merge pulls
-# them into the final libpython3.14.a. ft2font references libfreetype; Agg
+# them into the final libpython3.15.a. ft2font references libfreetype; Agg
 # references libpng for PNG I/O. libz is already supplied by cpython-wasi's
 # own deps download so we don't re-ship it (would cause duplicate symbols).
 log "Staging freetype + libpng support archives..."
@@ -282,7 +282,7 @@ PYPATCH
 
 # matplotlib's python tree lives at lib/matplotlib/. Copy it under the final
 # python/matplotlib/ directory so cpython-wasi's consumer step can drop it
-# straight into usr/local/lib/python3.14/.
+# straight into usr/local/lib/python3.15/.
 if [ -d "lib/matplotlib" ]; then
     cp -r lib/matplotlib "${OUTPUT_DIR}/python/matplotlib"
     # mpl_toolkits is a sibling top-level package under lib/
@@ -377,9 +377,8 @@ log "  downloaded wheels:"
 ls -1 "${WHEELS_DIR}" | sed 's/^/    /'
 # mpld3 0.5.10 is pinned because 0.5.12 (the current release) calls
 # `axis.get_converter()` — a method added in matplotlib 3.10. We ship
-# matplotlib 3.9.3 (3.10 requires pybind11>=2.13 which pulls <thread>,
-# unusable with wasi-sdk 20's libc++). 0.5.10 uses the `.converter`
-# attribute directly, which works with 3.9.
+# matplotlib 3.9.3 to retain the existing plotting API pairing. 0.5.10
+# uses the `.converter` attribute directly, which works with 3.9.
 #
 # kiwisolver + Pillow are skipped: both ship C-extension wheels that won't
 # run on wasm32-wasi. cpython-wasi provides pure-Python stubs alongside;

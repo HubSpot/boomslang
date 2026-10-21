@@ -20,6 +20,12 @@ A container engine still needs to be installed and running on the host for the f
 
 First runs take about an hour: CPython and the native libraries build inside containers.
 
+The runtime currently targets CPython 3.15.0a7. Its native extensions use the
+matching WASI headers and sysconfig data. Custom Rust guest builds should set
+`CPYTHON_WASI_DIR` to the local `cpython/build/cpython-wasi` output; the older
+`cpython-wasi-v0.1.0` release does not contain the Python 3.15 archive.
+
+
 ## Skipping the pipeline: `fetch-main-wasm`
 
 For Java-only work you don't need to build the runtime at all:

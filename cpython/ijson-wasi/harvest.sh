@@ -6,7 +6,7 @@ AR="${WASI_SDK_PATH}/bin/llvm-ar"
 NM="${WASI_SDK_PATH}/bin/llvm-nm"
 
 OUTPUT_DIR="/build/output"
-IJSON_TAG="${IJSON_TAG:-v3.3.0}"
+IJSON_TAG="${IJSON_TAG:-v3.5.1}"
 
 log() { echo "==> $*"; }
 die() { echo "!!! $*" >&2; exit 1; }
@@ -30,12 +30,12 @@ else
 fi
 
 log "Copying ijson Python sources..."
-cp -r /build/ijson/ijson "${OUTPUT_DIR}/python/ijson"
+cp -r /build/ijson/src/ijson "${OUTPUT_DIR}/python/ijson"
 
 find "${OUTPUT_DIR}/python/ijson" -type f \( \
         -name '*.c' -o -name '*.h' -o -name '*.so' -o -name '*.o' \
     \) -delete
-rm -rf "${OUTPUT_DIR}/python/ijson/backends/yajl2_c" 2>/dev/null || true
+rm -rf "${OUTPUT_DIR}/python/ijson/backends/ext" 2>/dev/null || true
 
 log "Writing version and manifest..."
 echo "${IJSON_TAG}" > "${OUTPUT_DIR}/version.txt"

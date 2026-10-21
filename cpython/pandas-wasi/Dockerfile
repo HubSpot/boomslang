@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM ubuntu:22.04 AS builder
+FROM ubuntu:24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -14,26 +14,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
+# Keep build tooling isolated from Ubuntu's externally managed Python.
+RUN python3 -m venv /opt/build-venv
+ENV PATH="/opt/build-venv/bin:${PATH}"
+
 # Blazar mounts an HS-internal pip.conf as a build secret (see the
 # --secret id=pipconf flag in its `docker build` invocation). Without
 # consuming it here, pip hits pypi.org directly and gets connection-refused
 # from inside the build container.
 #
-# Pandas 3.0.2 pyproject.toml requires Cython>3.1.0 for the `_cyutility`
-# shared-utility extension. numpy is needed at meson-configure time so
-# `pandas/meson.build` can resolve `numpy.get_include()` for the host.
-# versioneer is invoked by pandas' `generate_version.py` at meson setup.
+# Cython 3.3 includes Python 3.15 C API fixes. versioneer generates the
+# source version during Meson setup; NumPy supplies the build-time headers.
 RUN --mount=type=secret,id=pipconf,target=/etc/pip.conf \
     pip3 install --no-cache-dir --prefer-binary \
-        'cython>3.1.0,<4.0.0a0' 'meson>=1.2.1,<2' 'meson-python>=0.17.1,<1' \
+        'cython==3.3.0' 'meson==1.12.0' 'meson-python==0.20.0' \
         'versioneer[toml]'
-# Build-time numpy only supplies headers (via `numpy.get_include()`); pandas'
-# meson sets NPY_TARGET_VERSION=NPY_1_21_API_VERSION for runtime compat.
-# 2.3.3+ would need Python 3.11 which Ubuntu 22.04 doesn't carry, so we pin
-# to pandas' build-system floor (numpy>=2.0.0) instead.
+# Match the NumPy headers published by numpy-wasi. Ubuntu 24.04's Python
+# 3.12 satisfies NumPy 2.5's build interpreter requirement.
 RUN --mount=type=secret,id=pipconf,target=/etc/pip.conf \
     pip3 install --no-cache-dir --prefer-binary --no-build-isolation \
-        'numpy>=2.0.0'
+        'numpy==2.5.2'
 
 # ---- Layer: patch Cython's stdint.pxd for ILP32 wasm32 targets.
 # Cython's shipped Cython/Includes/libc/stdint.pxd declares int64_t as
@@ -90,7 +90,7 @@ WORKDIR /build
 # Don't use --depth 1 alone — pandas' generate_version.py uses git describe,
 # which needs the tag object reachable. --depth 1 --branch <tag> fetches only
 # that tagged commit and the tag ref, which is enough.
-ARG PANDAS_TAG=v3.0.2
+ARG PANDAS_TAG=v3.0.5
 RUN git clone --depth 1 --branch ${PANDAS_TAG} https://github.com/pandas-dev/pandas /build/staging/pandas \
     && cd /build/staging/pandas \
     && git submodule update --init --recursive \
@@ -103,14 +103,20 @@ RUN git clone --depth 1 --branch ${PANDAS_TAG} https://github.com/pandas-dev/pan
 # and we only need headers anyway — we compile pandas extensions but never link.
 COPY _sysconfigdata__wasi_wasm32-wasi.py /build/_sysconfigdata__wasi_wasm32-wasi.py
 COPY pyconfig-wasi.h /build/pyconfig-wasi.h
-RUN mkdir -p /tmp/cpython-wasi/include/python3.14 /tmp/cpython-wasi/usr/local/lib/python3.14 \
-    && curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.5.tar.gz | tar xz -C /tmp \
-    && cp -r /tmp/cpython-3.14.5/Include/* /tmp/cpython-wasi/include/python3.14/ \
-    && cp /build/pyconfig-wasi.h /tmp/cpython-wasi/include/python3.14/pyconfig.h \
-    && cp /build/_sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/usr/local/lib/python3.14/ \
-    && rm -rf /tmp/cpython-3.14.5 \
-    && test -f /tmp/cpython-wasi/include/python3.14/pyconfig.h \
-    && test -f /tmp/cpython-wasi/usr/local/lib/python3.14/_sysconfigdata__wasi_wasm32-wasi.py
+RUN mkdir -p /tmp/cpython-wasi/include/python3.15 /tmp/cpython-wasi/usr/local/lib/python3.15 \
+    && curl -sL https://github.com/python/cpython/archive/refs/tags/v3.15.0a7.tar.gz | tar xz -C /tmp \
+    && cp -r /tmp/cpython-3.15.0a7/Include/* /tmp/cpython-wasi/include/python3.15/ \
+    && cp /build/pyconfig-wasi.h /tmp/cpython-wasi/include/python3.15/pyconfig.h \
+    && cp /build/_sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/usr/local/lib/python3.15/ \
+    && rm -rf /tmp/cpython-3.15.0a7 \
+    && test -f /tmp/cpython-wasi/include/python3.15/pyconfig.h \
+    && test -f /tmp/cpython-wasi/usr/local/lib/python3.15/_sysconfigdata__wasi_wasm32-wasi.py
+
+# Run build scripts with host Python while exposing the WASI target's ABI
+# to Meson/sysconfig. Python's extension loader still uses its native suffix,
+# so build-time NumPy/Cython remain host executables.
+ENV _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata__wasi_wasm32-wasi
+ENV PYTHONPATH=/tmp/cpython-wasi/usr/local/lib/python3.15
 
 # ---- Layer: overlay numpy-wasi's patched headers onto host numpy.
 # Pandas' meson.build resolves `numpy.get_include()` against the host
@@ -156,7 +162,10 @@ RUN cd /build/staging/pandas; \
     ninja -C build -k 0 > /build/ninja.log 2>&1; ninja_exit=$?; \
     tail -n 200 /build/ninja.log; \
     echo "ninja exit $ninja_exit"; \
-    test "$ninja_exit" -eq 0 -o "$ninja_exit" -eq 1
+    test "$ninja_exit" -eq 0 -o "$ninja_exit" -eq 1 || exit "$ninja_exit"; \
+    if grep '^FAILED:' /build/ninja.log | grep -vE '^FAILED: [^ ]+\.so[[:space:]]*$'; then \
+        echo "Non-link build failures are not allowed"; exit 1; \
+    fi
 
 # ---- Layer: harvest + verify + package (cheap; iterates fast)
 COPY harvest.sh /build/harvest.sh

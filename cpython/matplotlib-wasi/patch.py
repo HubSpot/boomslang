@@ -112,12 +112,38 @@ def patch_extern_meson_build():
         print(f"{path}: qhull block replaced with disabler()")
 
 
+
+def patch_numpy_api_scope():
+    """Share NumPy API storage across statically linked extension modules.
+
+    PathIterator::set is an inline C++ helper emitted in multiple extensions.
+    The linker can select a copy from a module whose NumPy API pointer has
+    not been initialized yet. All copies must refer
+    to the table initialized by any importing module. The cross file makes
+    the module-level definitions weak so they coalesce, while helper files
+    using NO_IMPORT_ARRAY keep external references to the shared table.
+    """
+    path = Path("src/meson.build")
+    src = path.read_text()
+    marker = "# boomslang: shared NumPy API for static extension linking"
+    if marker in src:
+        return
+    old = "  unique_array_api = '-DPY_ARRAY_UNIQUE_SYMBOL=MPL_@0@_ARRAY_API'.format(ext.replace('.', '_'))"
+    new = (f"  {marker}\n"
+           "  unique_array_api = '-DPY_ARRAY_UNIQUE_SYMBOL=BOOMSLANG_MATPLOTLIB_ARRAY_API'")
+    if src.count(old) != 1:
+        sys.exit("PATCH FAIL: expected one per-extension NumPy API symbol definition")
+    path.write_text(src.replace(old, new))
+    print(f"{path}: sharing the NumPy API across static extensions")
+
+
 def main():
     if not Path("src/meson.build").exists():
         print("error: run from matplotlib repo root", file=sys.stderr)
         sys.exit(2)
     patch_src_meson_build()
     patch_extern_meson_build()
+    patch_numpy_api_scope()
 
 
 if __name__ == "__main__":

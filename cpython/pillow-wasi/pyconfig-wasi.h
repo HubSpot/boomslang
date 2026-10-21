@@ -142,6 +142,9 @@
 /* Define if you have the 'chroot' function. */
 /* #undef HAVE_CHROOT */
 
+/* Define to 1 if you have the 'clearenv' function. */
+#define HAVE_CLEARENV 1
+
 /* Define to 1 if you have the 'clock' function. */
 #define HAVE_CLOCK 1
 
@@ -226,21 +229,25 @@
 /* Define to 1 if you have the <db.h> header file. */
 /* #undef HAVE_DB_H */
 
+/* Define to 1 if you have the declaration of 'PR_SET_VMA_ANON_NAME', and to 0
+   if you don't. */
+#define HAVE_DECL_PR_SET_VMA_ANON_NAME 0
+
 /* Define to 1 if you have the declaration of 'RTLD_DEEPBIND', and to 0 if you
    don't. */
 #define HAVE_DECL_RTLD_DEEPBIND 0
 
 /* Define to 1 if you have the declaration of 'RTLD_GLOBAL', and to 0 if you
    don't. */
-#define HAVE_DECL_RTLD_GLOBAL 0
+#define HAVE_DECL_RTLD_GLOBAL 1
 
 /* Define to 1 if you have the declaration of 'RTLD_LAZY', and to 0 if you
    don't. */
-#define HAVE_DECL_RTLD_LAZY 0
+#define HAVE_DECL_RTLD_LAZY 1
 
 /* Define to 1 if you have the declaration of 'RTLD_LOCAL', and to 0 if you
    don't. */
-#define HAVE_DECL_RTLD_LOCAL 0
+#define HAVE_DECL_RTLD_LOCAL 1
 
 /* Define to 1 if you have the declaration of 'RTLD_MEMBER', and to 0 if you
    don't. */
@@ -248,15 +255,15 @@
 
 /* Define to 1 if you have the declaration of 'RTLD_NODELETE', and to 0 if you
    don't. */
-#define HAVE_DECL_RTLD_NODELETE 0
+#define HAVE_DECL_RTLD_NODELETE 1
 
 /* Define to 1 if you have the declaration of 'RTLD_NOLOAD', and to 0 if you
    don't. */
-#define HAVE_DECL_RTLD_NOLOAD 0
+#define HAVE_DECL_RTLD_NOLOAD 1
 
 /* Define to 1 if you have the declaration of 'RTLD_NOW', and to 0 if you
    don't. */
-#define HAVE_DECL_RTLD_NOW 0
+#define HAVE_DECL_RTLD_NOW 1
 
 /* Define to 1 if you have the declaration of 'tzname', and to 0 if you don't.
    */
@@ -295,10 +302,10 @@
 /* #undef HAVE_DLADDR1 */
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
-/* #undef HAVE_DLFCN_H */
+#define HAVE_DLFCN_H 1
 
 /* Define to 1 if you have the 'dlopen' function. */
-/* #undef HAVE_DLOPEN */
+#define HAVE_DLOPEN 1
 
 /* Define to 1 if you have the 'dup' function. */
 /* #undef HAVE_DUP */
@@ -313,10 +320,14 @@
 /* #undef HAVE_DYLD_SHARED_CACHE_CONTAINS_PATH */
 
 /* Defined when any dynamic module loading is enabled. */
-/* #undef HAVE_DYNAMIC_LOADING */
+#define HAVE_DYNAMIC_LOADING 1
 
 /* Define to 1 if you have the <editline/readline.h> header file. */
 /* #undef HAVE_EDITLINE_READLINE_H */
+
+/* Define if compiler supports __builtin_shufflevector with 128-bit vectors
+   AND the target architecture has native SIMD (not just API availability) */
+/* #undef HAVE_EFFICIENT_BUILTIN_SHUFFLEVECTOR */
 
 /* Define to 1 if you have the <endian.h> header file. */
 #define HAVE_ENDIAN_H 1
@@ -690,7 +701,7 @@
 /* #undef HAVE_LIBDB */
 
 /* Define to 1 if you have the 'dl' library (-ldl). */
-/* #undef HAVE_LIBDL */
+#define HAVE_LIBDL 1
 
 /* Define to 1 if you have the 'dld' library (-ldld). */
 /* #undef HAVE_LIBDLD */
@@ -727,6 +738,9 @@
 
 /* Define to 1 if you have the <linux/can.h> header file. */
 /* #undef HAVE_LINUX_CAN_H */
+
+/* Define to 1 if you have the <linux/can/isotp.h> header file. */
+/* #undef HAVE_LINUX_CAN_ISOTP_H */
 
 /* Define to 1 if you have the <linux/can/j1939.h> header file. */
 /* #undef HAVE_LINUX_CAN_J1939_H */
@@ -970,6 +984,9 @@
    function. */
 /* #undef HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCLOSEFROM_NP */
 
+/* Define to 1 if you have the 'ppoll' function. */
+/* #undef HAVE_PPOLL */
+
 /* Define to 1 if you have the 'pread' function. */
 #define HAVE_PREAD 1
 
@@ -991,8 +1008,11 @@
 /* Define if your compiler supports function prototype */
 #define HAVE_PROTOTYPES 1
 
+/* Define if you have the 'PR_SET_VMA_ANON_NAME' constant. */
+/* #undef HAVE_PR_SET_VMA_ANON_NAME */
+
 /* Define to 1 if you have the 'pthread_condattr_setclock' function. */
-/* #undef HAVE_PTHREAD_CONDATTR_SETCLOCK */
+#define HAVE_PTHREAD_CONDATTR_SETCLOCK 1
 
 /* Define to 1 if you have the 'pthread_cond_timedwait_relative_np' function.
    */
@@ -1065,7 +1085,7 @@
 /* #undef HAVE_READV */
 
 /* Define to 1 if you have the 'realpath' function. */
-/* #undef HAVE_REALPATH */
+#define HAVE_REALPATH 1
 
 /* Define if you have the 'recvfrom' function. */
 /* #undef HAVE_RECVFROM */
@@ -1280,6 +1300,9 @@
 /* Define to 1 if you have the 'statvfs' function. */
 /* #undef HAVE_STATVFS */
 
+/* Define to 1 if you have the 'statx' function. */
+/* #undef HAVE_STATX */
+
 /* Define if you have struct stat.st_mtim.tv_nsec */
 #define HAVE_STAT_TV_NSEC 1
 
@@ -1321,6 +1344,27 @@
 
 /* Define to 1 if 'pw_passwd' is a member of 'struct passwd'. */
 /* #undef HAVE_STRUCT_PASSWD_PW_PASSWD */
+
+/* Define to 1 if 'stx_atomic_write_unit_max_opt' is a member of 'struct
+   statx'. */
+/* #undef HAVE_STRUCT_STATX_STX_ATOMIC_WRITE_UNIT_MAX_OPT */
+
+/* Define to 1 if 'stx_atomic_write_unit_min' is a member of 'struct statx'.
+   */
+/* #undef HAVE_STRUCT_STATX_STX_ATOMIC_WRITE_UNIT_MIN */
+
+/* Define to 1 if 'stx_dio_mem_align' is a member of 'struct statx'. */
+/* #undef HAVE_STRUCT_STATX_STX_DIO_MEM_ALIGN */
+
+/* Define to 1 if 'stx_dio_read_offset_align' is a member of 'struct statx'.
+   */
+/* #undef HAVE_STRUCT_STATX_STX_DIO_READ_OFFSET_ALIGN */
+
+/* Define to 1 if 'stx_mnt_id' is a member of 'struct statx'. */
+/* #undef HAVE_STRUCT_STATX_STX_MNT_ID */
+
+/* Define to 1 if 'stx_subvol' is a member of 'struct statx'. */
+/* #undef HAVE_STRUCT_STATX_STX_SUBVOL */
 
 /* Define to 1 if 'st_birthtime' is a member of 'struct stat'. */
 /* #undef HAVE_STRUCT_STAT_ST_BIRTHTIME */
@@ -1451,7 +1495,7 @@
 /* #undef HAVE_SYS_SOUNDCARD_H */
 
 /* Define to 1 if you have the <sys/statvfs.h> header file. */
-/* #undef HAVE_SYS_STATVFS_H */
+#define HAVE_SYS_STATVFS_H 1
 
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #define HAVE_SYS_STAT_H 1
@@ -1700,6 +1744,9 @@
 /* Define as the preferred size in bits of long digits */
 /* #undef PYLONG_BITS_IN_DIGIT */
 
+/* Define to use huge pages for pymalloc arenas */
+/* #undef PYMALLOC_USE_HUGEPAGES */
+
 /* enabled builtin hash modules */
 #define PY_BUILTIN_HASHLIB_HASHES "md5,sha1,sha2,sha3,blake2"
 
@@ -1749,9 +1796,6 @@
 
 /* The version of SunOS/Solaris as reported by `uname -r' without the dot. */
 /* #undef Py_SUNOS_VERSION */
-
-/* Define if you want to use tail-calling interpreters in CPython. */
-/* #undef Py_TAIL_CALL_INTERP */
 
 /* Define if you want to enable tracing references for debugging purpose */
 /* #undef Py_TRACE_REFS */
@@ -1926,7 +1970,7 @@
 /* Enable X/Open extensions.  Define to 500 only if necessary
    to make mbstate_t available.  */
 #ifndef _XOPEN_SOURCE
-# define _XOPEN_SOURCE 700
+# define _XOPEN_SOURCE 800
 #endif
 
 
@@ -1938,7 +1982,7 @@
 #define WITH_DECIMAL_CONTEXTVAR 1
 
 /* Define if you want documentation strings in extension modules */
-#define WITH_DOC_STRINGS 1
+/* #undef WITH_DOC_STRINGS */
 
 /* Define if you want to compile in DTrace support */
 /* #undef WITH_DTRACE */
@@ -2003,8 +2047,8 @@
 /* Define on NetBSD to activate all library features */
 #define _NETBSD_SOURCE 1
 
-/* Define to activate features from IEEE Stds 1003.1-2008 */
-#define _POSIX_C_SOURCE 200809L
+/* Define to activate features from IEEE Std 1003.1-2024 */
+#define _POSIX_C_SOURCE 202405L
 
 /* Define if you have POSIX threads, and your system does not define that. */
 /* #undef _POSIX_THREADS */
@@ -2024,8 +2068,11 @@
 /* HACL* library can compile SIMD256 implementations */
 /* #undef _Py_HACL_CAN_COMPILE_VEC256 */
 
-/* Define if year with century should be normalized for strftime. */
-#define _Py_NORMALIZE_CENTURY 1
+/* Define to 1 if the machine stack grows down (default); 0 if it grows up. */
+#define _Py_STACK_GROWS_DOWN 1
+
+/* Define if you want to use tail-calling interpreters in CPython. */
+#define _Py_TAIL_CALL_INTERP 1
 
 /* Define to force use of thread-safe errno, h_errno, and other functions */
 #define _REENTRANT 1
@@ -2040,7 +2087,7 @@
 #define _WASI_EMULATED_SIGNAL 1
 
 /* Define to the level of X/Open that your system supports */
-#define _XOPEN_SOURCE 700
+#define _XOPEN_SOURCE 800
 
 /* Define to activate Unix95-and-earlier features */
 #define _XOPEN_SOURCE_EXTENDED 1

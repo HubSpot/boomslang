@@ -4,7 +4,7 @@ How a `print('hello')` gets executed, from the bottom up. Terms used precisely h
 
 ## The guest: CPython on WASI
 
-CPython 3.14 is compiled to `wasm32-wasip1` with native extension modules (NumPy, Pandas, Matplotlib, Pillow, ijson, pydantic-core) **statically linked** — WASI has no dynamic linking. A thin Rust layer (`python-host-core/`, composed into the stock guest by `python-host/`) wraps the interpreter with PyO3 and exposes the [base ABI](../reference/abi.md): `execute`, `compile_source`, the output-buffer protocol, and friends.
+CPython 3.15 is compiled to `wasm32-wasip1` with native extension modules (NumPy, Pandas, Matplotlib, Pillow, ijson, pydantic-core) **statically linked** — WASI has no dynamic linking. A thin Rust layer (`python-host-core/`, composed into the stock guest by `python-host/`) wraps the interpreter with PyO3 and exposes the [base ABI](../reference/abi.md): `execute`, `compile_source`, the output-buffer protocol, and friends.
 
 Extensions add typed WASM imports: each is declared with the [hostgen DSL](../reference/hostgen-dsl.md), which generates the guest-side Rust (a Python module backed by WASM imports) and the host-side adapters from a shared [ABI JSON](../reference/extension-abi.md).
 

@@ -1,7 +1,7 @@
 # boomslang (Python)
 
 Run sandboxed Python code from Python. This package bundles boomslang's
-CPython 3.14 runtime compiled to WebAssembly (with numpy, pandas, pydantic,
+CPython 3.15 runtime compiled to WebAssembly (with numpy, pandas, pydantic,
 matplotlib, Pillow, and ijson preloaded) and executes it with
 [wasmtime](https://pypi.org/project/wasmtime/). Guest code has no network
 access and can only touch the directories you mount.

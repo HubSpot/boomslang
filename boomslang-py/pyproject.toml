@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "boomslang"
 dynamic = ["version"]
-description = "Sandboxed CPython 3.14 execution via WebAssembly (wasmtime)"
+description = "Sandboxed CPython 3.15 execution via WebAssembly (wasmtime)"
 readme = "README.md"
 requires-python = ">=3.10"
 # Upper bound is deliberate: wasmtime 47.x aborts while compiling boomslang.wasm

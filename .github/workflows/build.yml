@@ -86,7 +86,7 @@ jobs:
           from pathlib import Path
 
           wasm = Path("core/src/main/resources/python/bin/boomslang.wasm")
-          stdlib = Path("core/src/main/resources/python/usr/local/lib/python3.14")
+          stdlib = Path("core/src/main/resources/python/usr/local/lib/python3.15")
 
           if not wasm.is_file():
               raise SystemExit("boomslang.wasm was not generated")
@@ -187,6 +187,19 @@ jobs:
           /tmp/wheel-venv/bin/pip install boomslang-py/dist/*.whl pytest
           cd /tmp
           /tmp/wheel-venv/bin/pytest "$GITHUB_WORKSPACE/boomslang-py/tests"
+
+      - name: Set up Python 3.15.0a7 host
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.15.0-alpha.7"
+          allow-prereleases: true
+
+      - name: Test installed wheel on Python 3.15.0a7
+        run: |
+          python -m venv /tmp/wheel-venv-315
+          /tmp/wheel-venv-315/bin/pip install boomslang-py/dist/*.whl pytest
+          cd /tmp
+          /tmp/wheel-venv-315/bin/pytest "$GITHUB_WORKSPACE/boomslang-py/tests"
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v7

@@ -1,6 +1,6 @@
 # Python Host (boomslang-py)
 
-Run sandboxed Python *from Python*. The `boomslang-py/` package bundles the same WASM runtime as the Java artifact — CPython 3.14 with NumPy, Pandas, Matplotlib, Pillow, Pydantic, and ijson — and executes it with [wasmtime](https://pypi.org/project/wasmtime/). Guest code has no network access and can only touch the directories you mount.
+Run sandboxed Python *from Python*. The `boomslang-py/` package bundles the same WASM runtime as the Java artifact — CPython 3.15 with NumPy, Pandas, Matplotlib, Pillow, Pydantic, and ijson — and executes it with [wasmtime](https://pypi.org/project/wasmtime/). Guest code has no network access and can only touch the directories you mount.
 
 Wheels are published as [GitHub release assets](https://github.com/HubSpot/boomslang/releases) (not PyPI):
 

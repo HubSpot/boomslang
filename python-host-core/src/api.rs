@@ -40,7 +40,7 @@ pub fn load_bytecode(py: Python, bytecode: &[u8]) -> Result<i32, String> {
         format!("Unmarshal error: {}", e)
     })?;
 
-    let code: &Bound<PyCode> = unmarshalled.downcast().map_err(|_| {
+    let code: &Bound<PyCode> = unmarshalled.cast().map_err(|_| {
         "Expected code object from bytecode".to_string()
     })?;
 
@@ -80,7 +80,7 @@ pub fn execute_function(py: Python, func_name: &str, args_json: &str) -> Result<
             format!("Failed to parse args JSON: {}", e)
         })?;
 
-        if let Ok(list) = args_list.downcast::<pyo3::types::PyList>() {
+        if let Ok(list) = args_list.cast::<pyo3::types::PyList>() {
             PyTuple::new(py, list.iter()).map_err(|e| format!("Failed to create tuple: {}", e))?
         } else {
             return Err("Args must be a JSON array".to_string());
@@ -116,7 +116,7 @@ pub fn install_module(py: Python, module_name: &str, source: &str) -> Result<i32
     let module = module_type.call1((module_name,)).map_err(|e| format!("Failed to create module: {}", e))?;
 
     let module_dict = module.getattr("__dict__").map_err(|e| format!("Failed to get module dict: {}", e))?;
-    let module_dict = module_dict.downcast::<pyo3::types::PyDict>().map_err(|_| "Module dict is not a dict")?;
+    let module_dict = module_dict.cast::<pyo3::types::PyDict>().map_err(|_| "Module dict is not a dict")?;
 
     module_dict.set_item("__name__", module_name).map_err(|e| format!("Failed to set __name__: {}", e))?;
     module_dict.set_item("__file__", format!("<memory>/{}.py", module_name)).map_err(|e| format!("Failed to set __file__: {}", e))?;
@@ -241,7 +241,7 @@ pub fn reset_main_namespace(py: Python) {
 pub fn uninstall_module(py: Python, module_name: &str) -> Result<(), String> {
     let sys = py.import("sys").map_err(|e| format!("Failed to import sys: {}", e))?;
     let sys_modules = sys.getattr("modules").map_err(|e| format!("Failed to get sys.modules: {}", e))?;
-    let sys_modules = sys_modules.downcast::<pyo3::types::PyDict>().map_err(|_| "sys.modules is not a dict")?;
+    let sys_modules = sys_modules.cast::<pyo3::types::PyDict>().map_err(|_| "sys.modules is not a dict")?;
 
     if sys_modules.contains(module_name).unwrap_or(false) {
         sys_modules.del_item(module_name).map_err(|e| format!("Failed to remove module: {}", e))?;
