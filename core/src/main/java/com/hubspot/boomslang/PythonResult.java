@@ -2,12 +2,13 @@ package com.hubspot.boomslang;
 
 /**
  * Result of running Python code in a {@link PythonInstance}. Python exceptions are reported here
- * rather than thrown: a non-zero {@link #exitCode()} means the code raised, and the traceback is in
- * {@link #stderr()}.
+ * rather than thrown: a non-zero {@link #exitCode()} means the code raised or exited via {@code
+ * SystemExit}, and any traceback or exit message is in {@link #stderr()}.
  *
  * @param stdout captured standard output
  * @param stderr captured standard error, including the traceback when a Python exception was raised
- * @param exitCode 0 on success; non-zero means a Python exception was raised
+ * @param exitCode process-style exit status: 0 on success, 1 when a Python exception was raised,
+ *     or the {@code SystemExit} status (masked to 0..255) when the code called {@code sys.exit()}
  * @param executionTimeMs wall-clock execution time in milliseconds
  */
 public record PythonResult(
