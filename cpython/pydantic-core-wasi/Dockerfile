@@ -15,7 +15,8 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "x86_64") \
 ENV WASI_SDK_PATH=/opt/wasi-sdk
 
 # Rust wasm32-wasip1 target
-RUN rustup target add wasm32-wasip1
+RUN --mount=type=secret,id=cargo,target=/usr/local/cargo/config.toml \
+    rustup target add wasm32-wasip1
 
 WORKDIR /build
 

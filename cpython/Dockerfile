@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.2
+# syntax=docker/dockerfile:1.4
 #
 # Build the final boomslang WASM binary: Rust host linked against libpython3.14.a
 # Self-contained — includes toolchain setup (no external builder image needed).
@@ -45,7 +45,8 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64-linux" || echo "linux-x6
     && ln -s /opt/wabt-${WABT_VERSION}/bin/wasm-strip /usr/local/bin/wasm-strip
 
 # Rust WASM target
-RUN rustup target add wasm32-wasip1
+RUN --mount=type=secret,id=cargo,target=/usr/local/cargo/config.toml \
+    rustup target add wasm32-wasip1
 
 # ── Stage 2: Build ────────────────────────────────────────────
 WORKDIR /build
@@ -71,7 +72,8 @@ COPY scripts/ cpython/scripts/
 COPY lib/pydantic_core/ cpython/lib/pydantic_core/
 
 # Build: compile Rust host against upstream libpython, apply Wizer, optimize
-RUN chmod +x cpython/scripts/build.sh \
+RUN --mount=type=secret,id=cargo,target=/usr/local/cargo/config.toml \
+    chmod +x cpython/scripts/build.sh \
     && cd python-host \
     && ./build-wasm.sh all
 
