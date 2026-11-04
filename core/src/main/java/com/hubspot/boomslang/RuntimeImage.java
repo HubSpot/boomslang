@@ -28,20 +28,20 @@ public class RuntimeImage {
   private final WasmModule module;
   private final Function<Instance, Machine> machineFactory;
   private final Path extractedPythonPath;
-  private final byte[] goldenMemory;
+  private final CopyOnWriteMemory.Golden golden;
   private final int goldenMemoryPages;
 
   private RuntimeImage(
     WasmModule module,
     Function<Instance, Machine> machineFactory,
     Path extractedPythonPath,
-    byte[] goldenMemory,
+    CopyOnWriteMemory.Golden golden,
     int goldenMemoryPages
   ) {
     this.module = module;
     this.machineFactory = machineFactory;
     this.extractedPythonPath = extractedPythonPath;
-    this.goldenMemory = goldenMemory;
+    this.golden = golden;
     this.goldenMemoryPages = goldenMemoryPages;
   }
 
@@ -98,7 +98,10 @@ public class RuntimeImage {
     );
 
     int pages = getMemoryPages(initInstance);
-    byte[] goldenMemory = initInstance.memory().readBytes(0, pages * 65536);
+    CopyOnWriteMemory.Golden golden = CopyOnWriteMemory.Golden.capture(
+      initInstance.memory(),
+      pages
+    );
 
     long elapsedNanos = System.nanoTime() - startTime;
     LOG.info(
@@ -108,13 +111,7 @@ public class RuntimeImage {
       (pages * 65536) / (1024 * 1024)
     );
 
-    return new RuntimeImage(
-      module,
-      machineFactory,
-      extractedPythonPath,
-      goldenMemory,
-      pages
-    );
+    return new RuntimeImage(module, machineFactory, extractedPythonPath, golden, pages);
   }
 
   /** Returns the parsed Python runtime WASM module. */
@@ -133,11 +130,16 @@ public class RuntimeImage {
   }
 
   /**
-   * Returns the golden memory snapshot. The returned array is shared, not copied — treat it as
-   * read-only.
+   * Returns a copy of the golden memory snapshot. This materializes the whole snapshot; prefer
+   * {@link #getGolden()} to share it.
    */
   public byte[] getGoldenMemory() {
-    return goldenMemory;
+    return golden.toBytes();
+  }
+
+  /** Returns the shared golden memory snapshot. */
+  public CopyOnWriteMemory.Golden getGolden() {
+    return golden;
   }
 
   /** Returns the size of the golden snapshot in 64 KiB WASM pages. */
