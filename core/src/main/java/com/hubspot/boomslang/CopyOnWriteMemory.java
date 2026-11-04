@@ -6,7 +6,10 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import run.endive.runtime.Instance;
 import run.endive.runtime.Memory;
 import run.endive.runtime.WasmRuntimeException;
@@ -15,22 +18,23 @@ import run.endive.wasm.types.MemoryLimits;
 import run.endive.wasm.types.PassiveDataSegment;
 
 /**
- * Copy-on-write WASM linear memory backed by the {@link RuntimeImage} golden snapshot. Reads are
- * served from the shared golden pages until written; a write materializes a private 4 KiB copy of
- * the touched region within its 64 KiB WASM page, so many {@link PythonInstance}s can share one
- * snapshot while only paying for the pages they actually modify. {@code reset()} drops all private
- * pages, restoring the pristine snapshot view.
+ * Copy-on-write WASM linear memory backed by a shared {@link Golden} snapshot. The golden snapshot
+ * is a set of immutable 4 KiB chunks plus a flat read table (entry {@code i} backs bytes {@code
+ * [i * 4096, (i + 1) * 4096)}); all-zero chunks share one zero chunk. An instance reads through the
+ * shared table until its first write, which clones the table and materializes a private copy of the
+ * touched chunk; an ownership bitmap records which chunks are already private. {@code reset()}
+ * drops all private state and points back at the shared table.
  */
 public final class CopyOnWriteMemory implements Memory {
 
   public static final int WASM_PAGE_SIZE = 65536;
   public static final int COW_PAGE_SIZE = 4096;
   private static final int COW_PAGE_SHIFT = 12;
-  private static final int COW_PAGE_MASK = 0xFFF;
+  private static final int COW_PAGE_MASK = COW_PAGE_SIZE - 1;
   private static final int COW_PAGES_PER_WASM_PAGE = WASM_PAGE_SIZE / COW_PAGE_SIZE;
-  private static final long WASM_PAGE_SIZE_LONG = WASM_PAGE_SIZE;
-
-  private boolean initialized = false;
+  private static final long[] ZERO_OWNERSHIP = new long[ownershipWords(
+    RUNTIME_MAX_PAGES * COW_PAGES_PER_WASM_PAGE
+  )];
 
   private static final VarHandle SHORT_HANDLE = MethodHandles.byteArrayViewVarHandle(
     short[].class,
@@ -53,23 +57,117 @@ public final class CopyOnWriteMemory implements Memory {
     ByteOrder.LITTLE_ENDIAN
   );
 
-  private final byte[] goldenSnapshot;
+  /**
+   * Immutable golden memory snapshot shared by every {@link CopyOnWriteMemory} created from it.
+   * Capture it once (for example in {@link RuntimeImage}) and reuse it.
+   */
+  public static final class Golden {
+
+    private final Map<Integer, byte[]> chunks;
+    private final byte[] zero = new byte[COW_PAGE_SIZE];
+    private final int byteLength;
+    private final Map<Integer, byte[][]> views = new ConcurrentHashMap<>();
+
+    private Golden(Map<Integer, byte[]> chunks, int byteLength) {
+      this.chunks = Map.copyOf(chunks);
+      this.byteLength = byteLength;
+    }
+
+    /** Captures a snapshot from raw bytes. The array is copied; it is not retained. */
+    public static Golden capture(byte[] bytes) {
+      Objects.requireNonNull(bytes);
+      Map<Integer, byte[]> chunks = new HashMap<>();
+      for (int address = 0; address < bytes.length;) {
+        int length = Math.min(COW_PAGE_SIZE, bytes.length - address);
+        if (!isZero(bytes, address, length)) {
+          byte[] chunk = new byte[COW_PAGE_SIZE];
+          System.arraycopy(bytes, address, chunk, 0, length);
+          chunks.put(address >>> COW_PAGE_SHIFT, chunk);
+        }
+        address += length;
+      }
+      return new Golden(chunks, bytes.length);
+    }
+
+    /** Captures the first {@code pages} WASM pages of {@code memory}, 4 KiB at a time. */
+    static Golden capture(Memory memory, int pages) {
+      int byteLength = Math.multiplyExact(pages, WASM_PAGE_SIZE);
+      Map<Integer, byte[]> chunks = new HashMap<>();
+      for (int address = 0; address < byteLength; address += COW_PAGE_SIZE) {
+        byte[] chunk = memory.readBytes(address, COW_PAGE_SIZE);
+        if (!isZero(chunk, 0, chunk.length)) {
+          chunks.put(address >>> COW_PAGE_SHIFT, chunk);
+        }
+      }
+      return new Golden(chunks, byteLength);
+    }
+
+    /** Returns the snapshot size in bytes. */
+    public int sizeInBytes() {
+      return byteLength;
+    }
+
+    /** Materializes the snapshot as a new byte array. */
+    public byte[] toBytes() {
+      byte[] bytes = new byte[byteLength];
+      chunks.forEach((index, chunk) -> {
+        int address = index << COW_PAGE_SHIFT;
+        System.arraycopy(
+          chunk,
+          0,
+          bytes,
+          address,
+          Math.min(COW_PAGE_SIZE, byteLength - address)
+        );
+      });
+      return bytes;
+    }
+
+    private static boolean isZero(byte[] bytes, int offset, int length) {
+      for (int index = offset; index < offset + length; index++) {
+        if (bytes[index] != 0) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    private byte[] chunk(int index) {
+      return chunks.getOrDefault(index, zero);
+    }
+
+    private byte[][] sharedReads(int pages) {
+      return views.computeIfAbsent(pages, this::createSharedReads);
+    }
+
+    private byte[][] createSharedReads(int pages) {
+      int capacity = pages * COW_PAGES_PER_WASM_PAGE;
+      byte[][] reads = new byte[capacity][];
+      for (int index = 0; index < capacity; index++) {
+        reads[index] = chunk(index);
+      }
+      return reads;
+    }
+  }
+
+  private final Golden golden;
+  private final byte[][] pristine;
   private final int goldenPages;
   private final MemoryLimits limits;
   private final int callerMaxPages;
-
-  private final int maxCowPages;
-  private byte[][] privatePages;
+  private byte[][] reads;
+  private long[] ownership = ZERO_OWNERSHIP;
+  private boolean ownsOwnership;
+  private Map<Integer, byte[]> hiddenRestores = Map.of();
+  private boolean privateReads;
   private int totalPages;
-  private long sizeBytes;
-  private int cowPageLimit;
+  private boolean initialized;
   private DataSegment[] dataSegments;
-
-  private int newPageCount = 0;
-  private int copiedPageCount = 0;
+  private int newPageCount;
+  private int copiedPageCount;
 
   public CopyOnWriteMemory(byte[] goldenSnapshot, MemoryLimits limits) {
-    this(goldenSnapshot, limits, -1, null);
+    this(Golden.capture(goldenSnapshot), limits, -1, null);
   }
 
   public CopyOnWriteMemory(
@@ -77,7 +175,7 @@ public final class CopyOnWriteMemory implements Memory {
     MemoryLimits limits,
     int callerMaxPages
   ) {
-    this(goldenSnapshot, limits, callerMaxPages, null);
+    this(Golden.capture(goldenSnapshot), limits, callerMaxPages, null);
   }
 
   public CopyOnWriteMemory(
@@ -86,27 +184,49 @@ public final class CopyOnWriteMemory implements Memory {
     int callerMaxPages,
     Map<Integer, byte[]> initialPrivatePages
   ) {
-    this.goldenSnapshot = goldenSnapshot;
-    this.goldenPages = goldenSnapshot.length / WASM_PAGE_SIZE;
+    this(Golden.capture(goldenSnapshot), limits, callerMaxPages, initialPrivatePages);
+  }
+
+  public CopyOnWriteMemory(Golden golden, MemoryLimits limits) {
+    this(golden, limits, -1, null);
+  }
+
+  public CopyOnWriteMemory(Golden golden, MemoryLimits limits, int callerMaxPages) {
+    this(golden, limits, callerMaxPages, null);
+  }
+
+  public CopyOnWriteMemory(
+    Golden golden,
+    MemoryLimits limits,
+    int callerMaxPages,
+    Map<Integer, byte[]> initialPrivatePages
+  ) {
+    this.golden = Objects.requireNonNull(golden);
+    this.goldenPages = golden.byteLength / WASM_PAGE_SIZE;
     this.limits = limits;
     this.callerMaxPages = callerMaxPages;
     this.totalPages = Math.max(goldenPages, limits.initialPages());
-    this.sizeBytes = totalPages * WASM_PAGE_SIZE_LONG;
-    this.cowPageLimit = totalPages * COW_PAGES_PER_WASM_PAGE;
-
-    int maxWasmPages = maximumPages();
-    this.maxCowPages = maxWasmPages * COW_PAGES_PER_WASM_PAGE;
-    this.privatePages = new byte[cowPageLimit][];
+    this.pristine = golden.sharedReads(totalPages);
+    this.reads = pristine;
 
     if (initialPrivatePages == null || initialPrivatePages.isEmpty()) {
       return;
     }
 
-    validateInitialPrivatePages(initialPrivatePages, maxWasmPages);
-    initialPrivatePages.forEach((globalCowIndex, pageData) -> {
-      ensurePageTableCapacity(globalCowIndex + 1);
-      this.privatePages[globalCowIndex] = pageData.clone();
-      this.newPageCount++;
+    validateInitialPrivatePages(initialPrivatePages, maximumPages());
+    initialPrivatePages.forEach((index, bytes) -> {
+      byte[] page = bytes.clone();
+      if (index < visibleChunkCount()) {
+        ensurePrivateReads();
+        reads[index] = page;
+        setOwned(index);
+      } else {
+        if (hiddenRestores.isEmpty()) {
+          hiddenRestores = new HashMap<>();
+        }
+        hiddenRestores.put(index, page);
+      }
+      newPageCount++;
     });
   }
 
@@ -117,18 +237,19 @@ public final class CopyOnWriteMemory implements Memory {
 
   @Override
   public int grow(int delta) {
-    int currentPages = totalPages;
-    int newPages = currentPages + delta;
-
-    if (newPages > maximumPages() || newPages < currentPages) {
+    if (delta == 0) {
+      return totalPages > maximumPages() ? -1 : totalPages;
+    }
+    long next = (long) totalPages + delta;
+    if (delta < 0 || next > maximumPages()) {
       return -1;
     }
-
-    totalPages = newPages;
-    sizeBytes = newPages * WASM_PAGE_SIZE_LONG;
-    cowPageLimit = newPages * COW_PAGES_PER_WASM_PAGE;
-    ensurePageTableCapacity(cowPageLimit);
-    return currentPages;
+    int previous = totalPages;
+    int required = chunkCount((int) next);
+    ensureCapacity(required);
+    initializeReads(chunkCount(previous), required);
+    totalPages = (int) next;
+    return previous;
   }
 
   @Override
@@ -145,18 +266,16 @@ public final class CopyOnWriteMemory implements Memory {
   @Override
   public void initialize(Instance instance, DataSegment[] dataSegments) {
     this.dataSegments = dataSegments;
-    if (dataSegments == null) {
-      return;
+    if (dataSegments != null) {
+      initialized = true;
     }
-    initialized = true;
   }
 
   @Override
   public void zero() {
-    if (!initialized) {
-      return;
+    if (initialized) {
+      fill((byte) 0, 0, sizeInBytes());
     }
-    fill((byte) 0, 0, sizeInBytes());
   }
 
   @Override
@@ -164,243 +283,286 @@ public final class CopyOnWriteMemory implements Memory {
     if (!initialized) {
       return;
     }
-    checkBounds(fromIndex, toIndex - fromIndex);
-
-    int currentAddr = fromIndex;
-    while (currentAddr < toIndex) {
-      int cowPageIndex = currentAddr >>> COW_PAGE_SHIFT;
-      int offsetInCowPage = currentAddr & COW_PAGE_MASK;
-      int bytesInCowPage = Math.min(
-        COW_PAGE_SIZE - offsetInCowPage,
-        toIndex - currentAddr
+    long size = (long) toIndex - fromIndex;
+    if (size < 0 || size > Integer.MAX_VALUE) {
+      throw trap(fromIndex, toIndex - fromIndex);
+    }
+    bounds(fromIndex, (int) size);
+    for (int current = fromIndex; current < toIndex;) {
+      int length = Math.min(COW_PAGE_SIZE - (current & COW_PAGE_MASK), toIndex - current);
+      Arrays.fill(
+        writable(current),
+        current & COW_PAGE_MASK,
+        (current & COW_PAGE_MASK) + length,
+        value
       );
-
-      byte[] page = ensurePrivatePage(cowPageIndex);
-      Arrays.fill(page, offsetInCowPage, offsetInCowPage + bytesInCowPage, value);
-
-      currentAddr += bytesInCowPage;
+      current += length;
     }
   }
 
   @Override
   public void initPassiveSegment(int segmentId, int dest, int offset, int size) {
     DataSegment segment = dataSegments[segmentId];
-    write(dest, segment.data(), offset, size);
+    byte[] data = segment.data();
+    if (offset < 0 || size < 0 || (long) offset + size > data.length) {
+      throw new WasmRuntimeException(
+        "out of bounds memory access: attempted to access address: " +
+        offset +
+        " but limit is: " +
+        data.length +
+        " and size: " +
+        size
+      );
+    }
+    write(dest, data, offset, size);
   }
 
   @Override
   public byte read(int addr) {
-    int cowPageIndex = addr >>> COW_PAGE_SHIFT;
-    if (cowPageIndex >= cowPageLimit) {
-      checkBounds(addr, 1);
-    }
-
-    byte[] page = privatePages[cowPageIndex];
-    if (page != null) {
-      return page[addr & COW_PAGE_MASK];
-    }
-
-    if (addr < goldenSnapshot.length) {
-      return goldenSnapshot[addr];
-    }
-
-    return 0;
-  }
-
-  @Override
-  public byte[] readBytes(int addr, int len) {
-    checkBounds(addr, len);
-
-    byte[] result = new byte[len];
-    int currentAddr = addr;
-    int resultOffset = 0;
-    int remaining = len;
-
-    while (remaining > 0) {
-      int cowPageIndex = currentAddr >>> COW_PAGE_SHIFT;
-      int offsetInCowPage = currentAddr & COW_PAGE_MASK;
-      int bytesInCowPage = Math.min(COW_PAGE_SIZE - offsetInCowPage, remaining);
-
-      byte[] page = privatePages[cowPageIndex];
-      if (page != null) {
-        System.arraycopy(page, offsetInCowPage, result, resultOffset, bytesInCowPage);
-      } else if (currentAddr < goldenSnapshot.length) {
-        int bytesToCopy = Math.min(bytesInCowPage, goldenSnapshot.length - currentAddr);
-        System.arraycopy(goldenSnapshot, currentAddr, result, resultOffset, bytesToCopy);
-      }
-
-      currentAddr += bytesInCowPage;
-      resultOffset += bytesInCowPage;
-      remaining -= bytesInCowPage;
-    }
-
-    return result;
-  }
-
-  @Override
-  public void writeByte(int addr, byte data) {
-    int cowPageIndex = addr >>> COW_PAGE_SHIFT;
-    if (cowPageIndex >= cowPageLimit) {
-      checkBounds(addr, 1);
-    }
-
-    byte[] page = ensurePrivatePage(cowPageIndex);
-    page[addr & COW_PAGE_MASK] = data;
-  }
-
-  @Override
-  public void write(int addr, byte[] data, int offset, int size) {
-    checkBounds(addr, size);
-
-    int currentAddr = addr;
-    int dataOffset = offset;
-    int remaining = size;
-
-    while (remaining > 0) {
-      int cowPageIndex = currentAddr >>> COW_PAGE_SHIFT;
-      int offsetInCowPage = currentAddr & COW_PAGE_MASK;
-      int bytesInCowPage = Math.min(COW_PAGE_SIZE - offsetInCowPage, remaining);
-
-      byte[] page = ensurePrivatePage(cowPageIndex);
-      System.arraycopy(data, dataOffset, page, offsetInCowPage, bytesInCowPage);
-
-      currentAddr += bytesInCowPage;
-      dataOffset += bytesInCowPage;
-      remaining -= bytesInCowPage;
-    }
-  }
-
-  @Override
-  public int readInt(int addr) {
-    int cowPageIndex = addr >>> COW_PAGE_SHIFT;
-    if (cowPageIndex < cowPageLimit && (addr & COW_PAGE_MASK) <= COW_PAGE_SIZE - 4) {
-      byte[] page = privatePages[cowPageIndex];
-      if (page != null) {
-        return (int) INT_HANDLE.get(page, addr & COW_PAGE_MASK);
-      } else if (addr <= goldenSnapshot.length - 4) {
-        return (int) INT_HANDLE.get(goldenSnapshot, addr);
-      }
-    }
-
-    checkBounds(addr, 4);
-
-    return (
-      (read(addr) & 0xFF) |
-      ((read(addr + 1) & 0xFF) << 8) |
-      ((read(addr + 2) & 0xFF) << 16) |
-      ((read(addr + 3) & 0xFF) << 24)
-    );
-  }
-
-  @Override
-  public void writeI32(int addr, int data) {
-    int cowPageIndex = addr >>> COW_PAGE_SHIFT;
-    if (cowPageIndex < cowPageLimit && (addr & COW_PAGE_MASK) <= COW_PAGE_SIZE - 4) {
-      byte[] page = ensurePrivatePage(cowPageIndex);
-      INT_HANDLE.set(page, addr & COW_PAGE_MASK, data);
-    } else {
-      checkBounds(addr, 4);
-      writeByte(addr, (byte) (data & 0xFF));
-      writeByte(addr + 1, (byte) ((data >> 8) & 0xFF));
-      writeByte(addr + 2, (byte) ((data >> 16) & 0xFF));
-      writeByte(addr + 3, (byte) ((data >> 24) & 0xFF));
-    }
-  }
-
-  @Override
-  public long readLong(int addr) {
-    int cowPageIndex = addr >>> COW_PAGE_SHIFT;
-    if (cowPageIndex < cowPageLimit && (addr & COW_PAGE_MASK) <= COW_PAGE_SIZE - 8) {
-      byte[] page = privatePages[cowPageIndex];
-      if (page != null) {
-        return (long) LONG_HANDLE.get(page, addr & COW_PAGE_MASK);
-      } else if (addr <= goldenSnapshot.length - 8) {
-        return (long) LONG_HANDLE.get(goldenSnapshot, addr);
-      }
-    }
-
-    checkBounds(addr, 8);
-
-    return (
-      ((long) readInt(addr) & 0xFFFFFFFFL) |
-      (((long) readInt(addr + 4) & 0xFFFFFFFFL) << 32)
-    );
-  }
-
-  @Override
-  public void writeLong(int addr, long data) {
-    int cowPageIndex = addr >>> COW_PAGE_SHIFT;
-    if (cowPageIndex < cowPageLimit && (addr & COW_PAGE_MASK) <= COW_PAGE_SIZE - 8) {
-      byte[] page = ensurePrivatePage(cowPageIndex);
-      LONG_HANDLE.set(page, addr & COW_PAGE_MASK, data);
-    } else {
-      checkBounds(addr, 8);
-      writeI32(addr, (int) (data & 0xFFFFFFFFL));
-      writeI32(addr + 4, (int) ((data >>> 32) & 0xFFFFFFFFL));
+    try {
+      return reads[addr >>> COW_PAGE_SHIFT][addr & COW_PAGE_MASK];
+    } catch (IndexOutOfBoundsException | NullPointerException e) {
+      throw trap(addr, 1);
     }
   }
 
   @Override
   public short readShort(int addr) {
-    int cowPageIndex = addr >>> COW_PAGE_SHIFT;
-    if (cowPageIndex < cowPageLimit && (addr & COW_PAGE_MASK) <= COW_PAGE_SIZE - 2) {
-      byte[] page = privatePages[cowPageIndex];
-      if (page != null) {
-        return (short) SHORT_HANDLE.get(page, addr & COW_PAGE_MASK);
-      } else if (addr <= goldenSnapshot.length - 2) {
-        return (short) SHORT_HANDLE.get(goldenSnapshot, addr);
-      }
+    if ((addr & COW_PAGE_MASK) > COW_PAGE_SIZE - 2) {
+      return (short) readAcross(addr, 2);
     }
-
-    checkBounds(addr, 2);
-
-    return (short) ((read(addr) & 0xFF) | ((read(addr + 1) & 0xFF) << 8));
+    try {
+      return (short) SHORT_HANDLE.get(
+        reads[addr >>> COW_PAGE_SHIFT],
+        addr & COW_PAGE_MASK
+      );
+    } catch (IndexOutOfBoundsException | NullPointerException e) {
+      return (short) readAcross(addr, 2);
+    }
   }
 
   @Override
-  public void writeShort(int addr, short data) {
-    int cowPageIndex = addr >>> COW_PAGE_SHIFT;
-    if (cowPageIndex < cowPageLimit && (addr & COW_PAGE_MASK) <= COW_PAGE_SIZE - 2) {
-      byte[] page = ensurePrivatePage(cowPageIndex);
-      SHORT_HANDLE.set(page, addr & COW_PAGE_MASK, data);
-    } else {
-      checkBounds(addr, 2);
-      writeByte(addr, (byte) (data & 0xFF));
-      writeByte(addr + 1, (byte) ((data >> 8) & 0xFF));
+  public int readInt(int addr) {
+    if ((addr & COW_PAGE_MASK) > COW_PAGE_SIZE - 4) {
+      return (int) readAcross(addr, 4);
+    }
+    try {
+      return (int) INT_HANDLE.get(reads[addr >>> COW_PAGE_SHIFT], addr & COW_PAGE_MASK);
+    } catch (IndexOutOfBoundsException | NullPointerException e) {
+      return (int) readAcross(addr, 4);
+    }
+  }
+
+  @Override
+  public long readLong(int addr) {
+    if ((addr & COW_PAGE_MASK) > COW_PAGE_SIZE - 8) {
+      return readAcross(addr, 8);
+    }
+    try {
+      return (long) LONG_HANDLE.get(reads[addr >>> COW_PAGE_SHIFT], addr & COW_PAGE_MASK);
+    } catch (IndexOutOfBoundsException | NullPointerException e) {
+      return readAcross(addr, 8);
     }
   }
 
   @Override
   public float readFloat(int addr) {
-    int cowPageIndex = addr >>> COW_PAGE_SHIFT;
-    if (cowPageIndex < cowPageLimit && (addr & COW_PAGE_MASK) <= COW_PAGE_SIZE - 4) {
-      byte[] page = privatePages[cowPageIndex];
-      if (page != null) {
-        return (float) FLOAT_HANDLE.get(page, addr & COW_PAGE_MASK);
-      } else if (addr <= goldenSnapshot.length - 4) {
-        return (float) FLOAT_HANDLE.get(goldenSnapshot, addr);
-      }
+    if ((addr & COW_PAGE_MASK) > COW_PAGE_SIZE - 4) {
+      return Float.intBitsToFloat((int) readAcross(addr, 4));
     }
-
-    checkBounds(addr, 4);
-    return Float.intBitsToFloat(readInt(addr));
+    try {
+      return (float) FLOAT_HANDLE.get(
+        reads[addr >>> COW_PAGE_SHIFT],
+        addr & COW_PAGE_MASK
+      );
+    } catch (IndexOutOfBoundsException | NullPointerException e) {
+      return Float.intBitsToFloat((int) readAcross(addr, 4));
+    }
   }
 
   @Override
   public double readDouble(int addr) {
-    int cowPageIndex = addr >>> COW_PAGE_SHIFT;
-    if (cowPageIndex < cowPageLimit && (addr & COW_PAGE_MASK) <= COW_PAGE_SIZE - 8) {
-      byte[] page = privatePages[cowPageIndex];
-      if (page != null) {
-        return (double) DOUBLE_HANDLE.get(page, addr & COW_PAGE_MASK);
-      } else if (addr <= goldenSnapshot.length - 8) {
-        return (double) DOUBLE_HANDLE.get(goldenSnapshot, addr);
-      }
+    if ((addr & COW_PAGE_MASK) > COW_PAGE_SIZE - 8) {
+      return Double.longBitsToDouble(readAcross(addr, 8));
     }
+    try {
+      return (double) DOUBLE_HANDLE.get(
+        reads[addr >>> COW_PAGE_SHIFT],
+        addr & COW_PAGE_MASK
+      );
+    } catch (IndexOutOfBoundsException | NullPointerException e) {
+      return Double.longBitsToDouble(readAcross(addr, 8));
+    }
+  }
 
-    checkBounds(addr, 8);
+  @Override
+  public void writeByte(int addr, byte data) {
+    try {
+      writable(addr)[addr & COW_PAGE_MASK] = data;
+    } catch (IndexOutOfBoundsException | NullPointerException e) {
+      throw trap(addr, 1);
+    }
+  }
 
-    return Double.longBitsToDouble(readLong(addr));
+  @Override
+  public void writeShort(int addr, short data) {
+    if ((addr & COW_PAGE_MASK) > COW_PAGE_SIZE - 2) {
+      writeAcross(addr, data, 2);
+      return;
+    }
+    try {
+      SHORT_HANDLE.set(writable(addr), addr & COW_PAGE_MASK, data);
+    } catch (IndexOutOfBoundsException | NullPointerException e) {
+      throw trap(addr, 2);
+    }
+  }
+
+  @Override
+  public void writeI32(int addr, int data) {
+    if ((addr & COW_PAGE_MASK) > COW_PAGE_SIZE - 4) {
+      writeAcross(addr, data, 4);
+      return;
+    }
+    try {
+      INT_HANDLE.set(writable(addr), addr & COW_PAGE_MASK, data);
+    } catch (IndexOutOfBoundsException | NullPointerException e) {
+      throw trap(addr, 4);
+    }
+  }
+
+  @Override
+  public void writeLong(int addr, long data) {
+    if ((addr & COW_PAGE_MASK) > COW_PAGE_SIZE - 8) {
+      writeAcross(addr, data, 8);
+      return;
+    }
+    try {
+      LONG_HANDLE.set(writable(addr), addr & COW_PAGE_MASK, data);
+    } catch (IndexOutOfBoundsException | NullPointerException e) {
+      throw trap(addr, 8);
+    }
+  }
+
+  @Override
+  public byte[] readBytes(int addr, int len) {
+    bounds(addr, len);
+    byte[] result = new byte[len];
+    for (int done = 0; done < len;) {
+      int current = addr + done;
+      int length = Math.min(COW_PAGE_SIZE - (current & COW_PAGE_MASK), len - done);
+      System.arraycopy(
+        reads[current >>> COW_PAGE_SHIFT],
+        current & COW_PAGE_MASK,
+        result,
+        done,
+        length
+      );
+      done += length;
+    }
+    return result;
+  }
+
+  @Override
+  public void write(int addr, byte[] data, int offset, int size) {
+    bounds(addr, size);
+    for (int done = 0; done < size;) {
+      int current = addr + done;
+      int length = Math.min(COW_PAGE_SIZE - (current & COW_PAGE_MASK), size - done);
+      System.arraycopy(
+        data,
+        offset + done,
+        writable(current),
+        current & COW_PAGE_MASK,
+        length
+      );
+      done += length;
+    }
+  }
+
+  @Override
+  public void write(int addr, byte[] data) {
+    Memory.super.write(addr, data);
+  }
+
+  @Override
+  public void copy(int dest, int source, int size) {
+    bounds(source, size);
+    bounds(dest, size);
+    if (dest > source && dest - source < size) {
+      for (int remaining = size; remaining > 0;) {
+        int src = source + remaining;
+        int dst = dest + remaining;
+        int length = Math.min(
+          remaining,
+          Math.min(((src - 1) & COW_PAGE_MASK) + 1, ((dst - 1) & COW_PAGE_MASK) + 1)
+        );
+        byte[] target = writable(dst - length);
+        System.arraycopy(
+          reads[(src - 1) >>> COW_PAGE_SHIFT],
+          (src - length) & COW_PAGE_MASK,
+          target,
+          (dst - length) & COW_PAGE_MASK,
+          length
+        );
+        remaining -= length;
+      }
+      return;
+    }
+    for (int done = 0; done < size;) {
+      int src = source + done;
+      int dst = dest + done;
+      int length = Math.min(
+        size - done,
+        Math.min(
+          COW_PAGE_SIZE - (src & COW_PAGE_MASK),
+          COW_PAGE_SIZE - (dst & COW_PAGE_MASK)
+        )
+      );
+      byte[] target = writable(dst);
+      System.arraycopy(
+        reads[src >>> COW_PAGE_SHIFT],
+        src & COW_PAGE_MASK,
+        target,
+        dst & COW_PAGE_MASK,
+        length
+      );
+      done += length;
+    }
+  }
+
+  @Override
+  public long readU16(int addr) {
+    return readShort(addr) & 0xFFFF;
+  }
+
+  @Override
+  public void writeF32(int addr, float data) {
+    writeI32(addr, Float.floatToRawIntBits(data));
+  }
+
+  @Override
+  public long readF32(int addr) {
+    return readInt(addr);
+  }
+
+  @Override
+  public void writeF64(int addr, double data) {
+    writeLong(addr, Double.doubleToRawLongBits(data));
+  }
+
+  @Override
+  public long readF64(int addr) {
+    return readLong(addr);
+  }
+
+  @Override
+  public void drop(int segment) {
+    dataSegments[segment] = PassiveDataSegment.EMPTY;
+  }
+
+  @Override
+  public boolean shared() {
+    return false;
   }
 
   @Override
@@ -423,57 +585,156 @@ public final class CopyOnWriteMemory implements Memory {
     throw new UnsupportedOperationException("not a multi threaded impl");
   }
 
-  @Override
-  public boolean shared() {
-    return false;
+  /** Returns the shared golden snapshot this memory reads through. */
+  public Golden getGolden() {
+    return golden;
   }
 
-  private byte[] ensurePrivatePage(int cowPageIndex) {
-    byte[] cowPage = privatePages[cowPageIndex];
-    if (cowPage != null) {
-      return cowPage;
-    }
-    return materializePrivatePage(cowPageIndex);
+  public int getCopiedPageCount() {
+    return copiedPageCount;
   }
 
-  private byte[] materializePrivatePage(int cowPageIndex) {
-    byte[] cowPage = new byte[COW_PAGE_SIZE];
-    int cowPageStartAddr = cowPageIndex << COW_PAGE_SHIFT;
+  public int getNewPageCount() {
+    return newPageCount;
+  }
 
-    if (cowPageStartAddr < goldenSnapshot.length) {
-      int bytesToCopy = Math.min(COW_PAGE_SIZE, goldenSnapshot.length - cowPageStartAddr);
-      System.arraycopy(goldenSnapshot, cowPageStartAddr, cowPage, 0, bytesToCopy);
-    }
+  public long getPrivateMemoryBytes() {
+    return (long) (copiedPageCount + newPageCount) * COW_PAGE_SIZE;
+  }
 
-    if (cowPageIndex < goldenPages * COW_PAGES_PER_WASM_PAGE) {
-      this.copiedPageCount++;
+  /** Drops all private pages and growth, restoring the pristine snapshot view. */
+  public void reset() {
+    totalPages = Math.max(goldenPages, limits.initialPages());
+    reads = pristine;
+    ownership = ZERO_OWNERSHIP;
+    ownsOwnership = false;
+    hiddenRestores = Map.of();
+    privateReads = false;
+    newPageCount = 0;
+    copiedPageCount = 0;
+  }
+
+  private byte[] writable(int addr) {
+    int index = addr >>> COW_PAGE_SHIFT;
+    byte[] page = reads[index];
+    return isOwned(index) ? page : materialize(index);
+  }
+
+  private byte[] materialize(int index) {
+    byte[] page = reads[index].clone();
+    ensurePrivateReads();
+    reads[index] = page;
+    setOwned(index);
+    if (index / COW_PAGES_PER_WASM_PAGE < goldenPages) {
+      copiedPageCount++;
     } else {
-      this.newPageCount++;
+      newPageCount++;
     }
-
-    privatePages[cowPageIndex] = cowPage;
-    return cowPage;
+    return page;
   }
 
-  private void ensurePageTableCapacity(int cowPages) {
-    if (cowPages <= privatePages.length) {
+  private long readAcross(int addr, int width) {
+    bounds(addr, width);
+    long value = 0;
+    for (int offset = 0; offset < width; offset++) {
+      value |= (read(addr + offset) & 255L) << (offset * 8);
+    }
+    return value;
+  }
+
+  private void writeAcross(int addr, long data, int width) {
+    bounds(addr, width);
+    for (int offset = 0; offset < width; offset++) {
+      writeByte(addr + offset, (byte) (data >>> (offset * 8)));
+    }
+  }
+
+  private int chunkCount(int pages) {
+    return pages * COW_PAGES_PER_WASM_PAGE;
+  }
+
+  private int visibleChunkCount() {
+    return Math.max(sizeInBytes(), 0) >>> COW_PAGE_SHIFT;
+  }
+
+  private void ensureCapacity(int required) {
+    if (required <= reads.length) {
       return;
     }
-    int doubled = Math.min(Math.max(privatePages.length * 2, 1), maxCowPages);
-    privatePages = Arrays.copyOf(privatePages, Math.max(cowPages, doubled));
+    int capacity = Math.min(
+      chunkCount(maximumPages()),
+      Math.max(required, reads.length * 2)
+    );
+    reads = Arrays.copyOf(reads, capacity);
+    privateReads = true;
+    ownership =
+      ownsOwnership ? Arrays.copyOf(ownership, ownershipWords(capacity)) : ZERO_OWNERSHIP;
   }
 
-  private void checkBounds(int addr, int size) {
-    if (addr < 0 || size < 0 || addr > sizeBytes - size) {
-      throw new WasmRuntimeException(
-        "out of bounds memory access: attempted to access address: " +
-        addr +
-        " with size: " +
-        size +
-        " but memory size is: " +
-        sizeInBytes()
+  private void initializeReads(int from, int to) {
+    if (hiddenRestores.isEmpty()) {
+      int goldenEnd = min(
+        to,
+        (int) (((long) golden.byteLength + COW_PAGE_MASK) >>> COW_PAGE_SHIFT)
       );
+      for (int index = from; index < goldenEnd; index++) {
+        reads[index] = golden.chunk(index);
+      }
+      for (int index = Math.max(from, goldenEnd); index < to; index++) {
+        reads[index] = golden.zero;
+      }
+      return;
     }
+    for (int index = from; index < to; index++) {
+      byte[] restored = hiddenRestores.isEmpty() ? null : hiddenRestores.remove(index);
+      reads[index] = restored == null ? golden.chunk(index) : restored;
+      if (restored != null) {
+        setOwned(index);
+      }
+    }
+    if (hiddenRestores.isEmpty()) {
+      hiddenRestores = Map.of();
+    }
+  }
+
+  private void ensurePrivateReads() {
+    if (!privateReads) {
+      reads = reads.clone();
+      privateReads = true;
+    }
+  }
+
+  private static int ownershipWords(int capacity) {
+    return (capacity + Long.SIZE - 1) >>> 6;
+  }
+
+  private boolean isOwned(int index) {
+    return (ownership[index >>> 6] & (1L << (index & 63))) != 0;
+  }
+
+  private void setOwned(int index) {
+    if (!ownsOwnership) {
+      ownership = new long[ownershipWords(reads.length)];
+      ownsOwnership = true;
+    }
+    ownership[index >>> 6] |= 1L << (index & 63);
+  }
+
+  private void bounds(int addr, int size) {
+    if (addr < 0 || size < 0 || (long) addr + size > sizeInBytes()) {
+      throw trap(addr, size);
+    }
+  }
+
+  private WasmRuntimeException trap(int addr, int size) {
+    return new WasmRuntimeException(
+      "out of bounds memory access: attempted to access address: " +
+      addr +
+      " with size: " +
+      size +
+      " but memory size is: " +
+      sizeInBytes()
+    );
   }
 
   private int sizeInBytes() {
@@ -515,61 +776,5 @@ public final class CopyOnWriteMemory implements Memory {
         );
       }
     }
-  }
-
-  public int getCopiedPageCount() {
-    return copiedPageCount;
-  }
-
-  public int getNewPageCount() {
-    return newPageCount;
-  }
-
-  public long getPrivateMemoryBytes() {
-    return (long) (copiedPageCount + newPageCount) * COW_PAGE_SIZE;
-  }
-
-  public void reset() {
-    Arrays.fill(privatePages, null);
-    totalPages = Math.max(goldenPages, limits.initialPages());
-    sizeBytes = totalPages * WASM_PAGE_SIZE_LONG;
-    cowPageLimit = totalPages * COW_PAGES_PER_WASM_PAGE;
-    newPageCount = 0;
-    copiedPageCount = 0;
-  }
-
-  @Override
-  public void write(int addr, byte[] data) {
-    Memory.super.write(addr, data);
-  }
-
-  @Override
-  public long readU16(int addr) {
-    return readShort(addr) & 0xFFFF;
-  }
-
-  @Override
-  public void writeF32(int addr, float data) {
-    writeI32(addr, Float.floatToIntBits(data));
-  }
-
-  @Override
-  public long readF32(int addr) {
-    return readInt(addr);
-  }
-
-  @Override
-  public void writeF64(int addr, double data) {
-    writeLong(addr, Double.doubleToLongBits(data));
-  }
-
-  @Override
-  public long readF64(int addr) {
-    return readLong(addr);
-  }
-
-  @Override
-  public void drop(int segment) {
-    dataSegments[segment] = PassiveDataSegment.EMPTY;
   }
 }

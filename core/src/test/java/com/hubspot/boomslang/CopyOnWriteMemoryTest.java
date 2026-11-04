@@ -124,6 +124,35 @@ public class CopyOnWriteMemoryTest {
     assertThat(memory.getNewPageCount()).isEqualTo(1);
   }
 
+  @Test
+  public void itIsolatesWritesBetweenMemoriesSharingAGolden() {
+    byte[] bytes = golden();
+    CopyOnWriteMemory.Golden golden = CopyOnWriteMemory.Golden.capture(bytes);
+    CopyOnWriteMemory first = new CopyOnWriteMemory(
+      golden,
+      new MemoryLimits(GOLDEN_PAGES, MAX_PAGES)
+    );
+    CopyOnWriteMemory second = new CopyOnWriteMemory(
+      golden,
+      new MemoryLimits(GOLDEN_PAGES, MAX_PAGES)
+    );
+
+    first.writeI32(5_000, 123);
+
+    assertThat(first.readInt(5_000)).isEqualTo(123);
+    assertThat(second.readBytes(5_000, 4)).containsExactly(slice(bytes, 5_000, 4));
+    assertThat(golden.toBytes()).isEqualTo(bytes);
+  }
+
+  @Test
+  public void itMaterializesTheGoldenWithZeroPagesRestored() {
+    byte[] bytes = new byte[GOLDEN_PAGES * CopyOnWriteMemory.WASM_PAGE_SIZE];
+    bytes[10] = 1;
+    bytes[bytes.length - 1] = 2;
+
+    assertThat(CopyOnWriteMemory.Golden.capture(bytes).toBytes()).isEqualTo(bytes);
+  }
+
   private static CopyOnWriteMemory memory(byte[] golden) {
     return new CopyOnWriteMemory(golden, new MemoryLimits(GOLDEN_PAGES, MAX_PAGES));
   }

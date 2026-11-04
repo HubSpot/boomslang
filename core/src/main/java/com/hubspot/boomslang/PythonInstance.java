@@ -108,7 +108,7 @@ public class PythonInstance implements AutoCloseable {
       store.addFunction(hf);
     }
 
-    byte[] goldenMemory = image.getGoldenMemory();
+    CopyOnWriteMemory.Golden golden = image.getGolden();
     int goldenMemoryPages = image.getGoldenMemoryPages();
 
     int callerMaxPages = limits.maximumMemoryPages();
@@ -121,8 +121,7 @@ public class PythonInstance implements AutoCloseable {
           Math.max(memoryLimits.initialPages(), goldenMemoryPages),
           memoryLimits.maximumPages()
         );
-        memoryRef[0] =
-          new CopyOnWriteMemory(goldenMemory, adjustedLimits, callerMaxPages);
+        memoryRef[0] = new CopyOnWriteMemory(golden, adjustedLimits, callerMaxPages);
         return memoryRef[0];
       });
 
