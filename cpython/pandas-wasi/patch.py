@@ -11,7 +11,7 @@ from pathlib import Path
 # pandas/_libs/include/pandas/vendored/numpy/datetime/. Two of the functions
 # it exports -- add_minutes_to_datetimestruct and get_datetimestruct_days --
 # are also exported by numpy's multiarray. In aviator-cpython these end up in
-# the same libpython3.14.a (cpython-wasi merges numpy + pandas via `ar -M`),
+# the same libpython3.15.a (cpython-wasi merges numpy + pandas via `ar -M`),
 # and wasm-ld rejects them as duplicate symbols.
 #
 # Rename pandas's copies with a pandas_ prefix so they no longer collide. The

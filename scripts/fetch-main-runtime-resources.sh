@@ -248,8 +248,8 @@ if [ ! -f "$stage_dir/python/bin/boomslang.wasm" ]; then
   exit 1
 fi
 
-if [ ! -d "$stage_dir/python/usr/local/lib/python3.14" ]; then
-  echo "ERROR: Runtime artifact did not contain python/usr/local/lib/python3.14" >&2
+if [ ! -d "$stage_dir/python/usr/local/lib/python3.15" ]; then
+  echo "ERROR: Runtime artifact did not contain python/usr/local/lib/python3.15" >&2
   exit 1
 fi
 
@@ -265,7 +265,7 @@ import sys
 
 runtime_root = pathlib.Path(sys.argv[1])
 wasm = runtime_root / "bin" / "boomslang.wasm"
-stdlib = runtime_root / "usr" / "local" / "lib" / "python3.14"
+stdlib = runtime_root / "usr" / "local" / "lib" / "python3.15"
 
 if wasm.read_bytes()[:4] != b"\0asm":
     raise SystemExit("boomslang.wasm is not a WASM binary")
@@ -274,9 +274,9 @@ if not stdlib.is_dir():
 PY
 
 wasm_size="$(wc -c < "$runtime_root/bin/boomslang.wasm" | tr -d ' ')"
-stdlib_paths="$(find "$runtime_root/usr/local/lib/python3.14" | wc -l | tr -d ' ')"
+stdlib_paths="$(find "$runtime_root/usr/local/lib/python3.15" | wc -l | tr -d ' ')"
 
 echo "Installed runtime resources from GitHub release $release_tag"
 echo "  sha: $selected_sha"
 echo "  wasm: $runtime_root/bin/boomslang.wasm ($wasm_size bytes)"
-echo "  stdlib: $runtime_root/usr/local/lib/python3.14 ($stdlib_paths paths)"
+echo "  stdlib: $runtime_root/usr/local/lib/python3.15 ($stdlib_paths paths)"

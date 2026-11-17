@@ -36,7 +36,7 @@ def test_lib_dir_module_import(tmp_path):
 def test_stdlib_is_readonly(sandbox):
     result = sandbox.execute(
         "try:\n"
-        "    open('/usr/local/lib/python3.14/evil.py', 'w').write('x')\n"
+        "    open('/usr/local/lib/python3.15/evil.py', 'w').write('x')\n"
         "    print('wrote')\n"
         "except OSError:\n"
         "    print('blocked')"

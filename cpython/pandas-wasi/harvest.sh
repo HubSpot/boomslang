@@ -100,7 +100,7 @@ for entry in "${EXTENSIONS[@]}"; do
 
     # The build dir name is <ext>.cpython-<ver>-<triple>.so.p alongside a .so.
     # <so-prefix> is globally unique across pandas (verified by inspection of
-    # v3.0.2); if that ever changes, disambiguate on parent meson subdir.
+    # v3.0.5); if that ever changes, disambiguate on parent meson subdir.
     pattern="*/${so_name}.cpython-*.so.p"
     mapfile -t objs < <(find build -type d -path "${pattern}" -print0 2>/dev/null | \
         xargs -0 -I {} find {} -name '*.o' 2>/dev/null)
@@ -147,7 +147,7 @@ fi
 # duplicate symbols, and each one needs a rename in patch.py. Surface them
 # all at once instead of discovering them one rebuild at a time.
 #
-# We don't actually have libpython3.14.a here (cpython-wasi merges later), so
+# We don't actually have libpython3.15.a here (cpython-wasi merges later), so
 # we audit against numpy-wasi's own archives that we vendored. That catches
 # the same collisions (numpy's symbols end up in libpython via the same path).
 log "Auditing pandas <-> numpy symbol collisions..."

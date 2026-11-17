@@ -1,6 +1,6 @@
 [book]
 title = "Boomslang"
-description = "Python, but Java: CPython 3.14 on the JVM via WebAssembly"
+description = "Python, but Java: CPython 3.15 on the JVM via WebAssembly"
 authors = ["HubSpot"]
 language = "en"
 src = "src"

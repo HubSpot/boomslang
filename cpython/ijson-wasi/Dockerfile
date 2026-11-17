@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM python:3.14.5-bookworm AS builder
+FROM python:3.15.0a7-bookworm AS builder
 
 RUN set -eux; \
     for tool in gcc g++ make git curl xz tar python3 pip3; do \
@@ -25,7 +25,7 @@ ENV CC=/opt/wasi-sdk/bin/clang
 ENV AR=/opt/wasi-sdk/bin/llvm-ar
 ENV NM=/opt/wasi-sdk/bin/llvm-nm
 
-ARG CPYTHON_TAG=v3.14.5
+ARG CPYTHON_TAG=v3.15.0a7
 RUN git clone --depth 1 --branch ${CPYTHON_TAG} \
     https://github.com/python/cpython /build/cpython-src
 
@@ -52,7 +52,7 @@ RUN set -ex; \
         '#endif' \
         > /build/yajl/build/yajl/yajl_version.h
 
-ARG IJSON_TAG=v3.3.0
+ARG IJSON_TAG=v3.5.1
 RUN git clone --depth 1 --branch ${IJSON_TAG} \
     https://github.com/ICRAR/ijson /build/ijson
 
@@ -82,7 +82,7 @@ RUN set -ex; \
 
 RUN set -ex; \
     mkdir -p /build/obj/ijson; \
-    IJSON_EXT_DIR=/build/ijson/ijson/backends/yajl2_c; \
+    IJSON_EXT_DIR=/build/ijson/src/ijson/backends/ext/_yajl2; \
     for src in ${IJSON_EXT_DIR}/*.c; do \
         name=$(basename "$src"); \
         echo "Compiling ijson/$name"; \

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM ubuntu:22.04 AS builder
+FROM ubuntu:24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -14,11 +14,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
+# Keep build tooling isolated from Ubuntu's externally managed Python.
+RUN python3 -m venv /opt/build-venv
+ENV PATH="/opt/build-venv/bin:${PATH}"
+
 # Blazar mounts an HS-internal pip.conf as a build secret (see the
 # --secret id=pipconf flag in its `docker build` invocation). Without
 # consuming it here, pip hits pypi.org directly and gets connection-refused
 # from inside the build container.
 #
+# Cython 3.3 emits code compatible with Python 3.15.
 # Install in two passes with --prefer-binary:
 #   1. cython + meson + meson-python first, so they're on PATH before any
 #      PEP 517 build that needs them.
@@ -27,10 +32,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #      internal mirror couldn't find a cython wheel fast enough).
 RUN --mount=type=secret,id=pipconf,target=/etc/pip.conf \
     pip3 install --no-cache-dir --prefer-binary \
-        'cython>=3.0' 'meson==1.5.2' 'meson-python==0.17.1'
+        'cython==3.3.0' 'meson==1.12.0' 'meson-python==0.20.0'
 RUN --mount=type=secret,id=pipconf,target=/etc/pip.conf \
     pip3 install --no-cache-dir --prefer-binary --no-build-isolation \
-        'numpy>=2.0'
+        'numpy==2.5.2'
 
 ARG TARGETARCH
 RUN set -ex; \
@@ -56,7 +61,7 @@ ENV PATH="/opt/wasi-sdk/bin:${PATH}"
 WORKDIR /build
 
 # ---- Layer: clone numpy + submodules (cached by NUMPY_TAG arg)
-ARG NUMPY_TAG=v2.4.4
+ARG NUMPY_TAG=v2.5.2
 RUN git clone --depth 1 --branch ${NUMPY_TAG} https://github.com/numpy/numpy /build/staging/numpy \
     && cd /build/staging/numpy \
     && git submodule update --init --recursive \
@@ -71,14 +76,20 @@ RUN git clone --depth 1 --branch ${NUMPY_TAG} https://github.com/numpy/numpy /bu
 # compile numpy extensions but never link them.
 COPY _sysconfigdata__wasi_wasm32-wasi.py /build/_sysconfigdata__wasi_wasm32-wasi.py
 COPY pyconfig-wasi.h /build/pyconfig-wasi.h
-RUN mkdir -p /tmp/cpython-wasi/include/python3.14 /tmp/cpython-wasi/usr/local/lib/python3.14 \
-    && curl -sL https://github.com/python/cpython/archive/refs/tags/v3.14.5.tar.gz | tar xz -C /tmp \
-    && cp -r /tmp/cpython-3.14.5/Include/* /tmp/cpython-wasi/include/python3.14/ \
-    && cp /build/pyconfig-wasi.h /tmp/cpython-wasi/include/python3.14/pyconfig.h \
-    && cp /build/_sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/usr/local/lib/python3.14/ \
-    && rm -rf /tmp/cpython-3.14.5 \
-    && test -f /tmp/cpython-wasi/include/python3.14/pyconfig.h \
-    && test -f /tmp/cpython-wasi/usr/local/lib/python3.14/_sysconfigdata__wasi_wasm32-wasi.py
+RUN mkdir -p /tmp/cpython-wasi/include/python3.15 /tmp/cpython-wasi/usr/local/lib/python3.15 \
+    && curl -sL https://github.com/python/cpython/archive/refs/tags/v3.15.0a7.tar.gz | tar xz -C /tmp \
+    && cp -r /tmp/cpython-3.15.0a7/Include/* /tmp/cpython-wasi/include/python3.15/ \
+    && cp /build/pyconfig-wasi.h /tmp/cpython-wasi/include/python3.15/pyconfig.h \
+    && cp /build/_sysconfigdata__wasi_wasm32-wasi.py /tmp/cpython-wasi/usr/local/lib/python3.15/ \
+    && rm -rf /tmp/cpython-3.15.0a7 \
+    && test -f /tmp/cpython-wasi/include/python3.15/pyconfig.h \
+    && test -f /tmp/cpython-wasi/usr/local/lib/python3.15/_sysconfigdata__wasi_wasm32-wasi.py
+
+# Run build scripts with host Python while exposing the WASI target's ABI
+# to Meson/sysconfig. Python's extension loader still uses its native suffix,
+# so build-time NumPy/Cython remain host executables.
+ENV _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata__wasi_wasm32-wasi
+ENV PYTHONPATH=/tmp/cpython-wasi/usr/local/lib/python3.15
 
 # ---- Layer: shim headers for wasi-sdk-24's threadless libc++.
 # numpy's dispatching.cpp and npy_hashtable.cpp include <shared_mutex>
@@ -111,7 +122,10 @@ RUN cd /build/staging/numpy; \
     ninja -C build -k 0 > /build/ninja.log 2>&1; ninja_exit=$?; \
     tail -n 200 /build/ninja.log; \
     echo "ninja exit $ninja_exit"; \
-    test "$ninja_exit" -eq 0 -o "$ninja_exit" -eq 1
+    test "$ninja_exit" -eq 0 -o "$ninja_exit" -eq 1 || exit "$ninja_exit"; \
+    if grep '^FAILED:' /build/ninja.log | grep -vE '^FAILED: [^ ]+\.so[[:space:]]*$'; then \
+        echo "Non-link build failures are not allowed"; exit 1; \
+    fi
 
 # ---- Layer: harvest + verify + package (cheap; iterates fast)
 COPY harvest.sh /build/harvest.sh

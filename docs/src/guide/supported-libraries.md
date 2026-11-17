@@ -1,6 +1,6 @@
 # Supported Python Libraries
 
-The bundled runtime ships the CPython 3.14 standard library plus these third-party packages, including their native extensions compiled to WASI and statically linked:
+The bundled runtime ships the CPython 3.15.0a7 standard library plus these third-party packages, including their native extensions compiled to WASI and statically linked:
 
 ```python
 import ijson
