@@ -125,6 +125,33 @@ class PythonExecutorTest {
   }
 
   @Test
+  void itKeepsPythonPathAfterReset() throws Exception {
+    PythonExecutorFactory pathFactory = PythonExecutorFactory
+      .builder()
+      .withStdlibPath(SharedTestSetup.createRootPath())
+      .withPythonPath("/work/libs:/work/more")
+      .addHostFunctions(SharedTestSetup.defaultHostFunctions())
+      .build();
+    String countPaths = String.join(
+      "\n",
+      "import sys",
+      "print(sum(p in ('/work/libs', '/work/more') for p in sys.path))"
+    );
+
+    PythonResult result = pathFactory.runOnWasmThread(() -> {
+      PythonInstance instance = pathFactory.createInstance(
+        SharedTestSetup.createRootPath()
+      );
+      instance.reset();
+      instance.reset();
+      return instance.execute(countPaths);
+    });
+
+    assertThat(result.exitCode()).isEqualTo(0);
+    assertThat(result.stdout().trim()).isEqualTo("2");
+  }
+
+  @Test
   void itWritesAndReadsPngWithPillow() {
     PythonResult result = factory.runOnWasmThread(() -> {
       PythonInstance instance = factory.createInstance(SharedTestSetup.createRootPath());
