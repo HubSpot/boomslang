@@ -3,6 +3,7 @@ package com.hubspot.boomslang;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
@@ -34,6 +35,7 @@ public class PythonInstance implements AutoCloseable {
   private final Instance wasmInstance;
   private final CopyOnWriteMemory cowMemory;
   private final ResourceLimits limits;
+  private final Optional<String> pythonPath;
   private final AtomicBoolean codeLoaded = new AtomicBoolean(false);
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private final AtomicBoolean poisoned = new AtomicBoolean(false);
@@ -91,6 +93,7 @@ public class PythonInstance implements AutoCloseable {
     ResourceLimits limits
   ) {
     this.limits = limits;
+    this.pythonPath = Optional.ofNullable(pythonPath);
     this.instanceId = UUID.randomUUID().toString().substring(0, 8);
     this.stdinStream = new ResettableByteArrayInputStream();
 
@@ -150,9 +153,7 @@ public class PythonInstance implements AutoCloseable {
     this.getHeapPagesFunc = wasmInstance.export("get_heap_pages");
     this.goldenMemoryPages = image.getGoldenMemoryPages();
 
-    if (pythonPath != null) {
-      injectPythonPath(pythonPath);
-    }
+    this.pythonPath.ifPresent(this::injectPythonPath);
   }
 
   private void injectPythonPath(String pythonPath) {
@@ -411,6 +412,7 @@ public class PythonInstance implements AutoCloseable {
     codeLoaded.set(false);
     poisoned.set(false);
     clearStdin();
+    pythonPath.ifPresent(this::injectPythonPath);
   }
 
   /**
